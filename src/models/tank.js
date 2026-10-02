@@ -106,6 +106,14 @@ function turretSurfaceY(x, z) {
   return base;
 }
 
+// x of the turret's front surface at turret-local height y and side offset z.
+function turretFrontX(y, z) {
+  const { R0, R1, h1, D, p, sx, base } = TURRET;
+  const yp = y - base;
+  const rho = yp > h1 ? R1 * Math.pow(1 - Math.pow(Math.min(1, (yp - h1) / D), p), 1 / p) : R0 - (yp / h1) * (R0 - R1);
+  return sx * Math.sqrt(Math.max(0, rho * rho - z * z));
+}
+
 function turretGeometry() {
   const { R0, R1, h1, D, p } = TURRET;
   const pts = [new THREE.Vector2(R0 * 0.97, 0), new THREE.Vector2(R0, 0.03), new THREE.Vector2(R1, h1)];
@@ -304,9 +312,21 @@ export function createTank() {
   loaderLid.rotation.z = 0.7;
   seat(box(0.1, 0.07, 0.1, C.dark, { r: 0.015 }), 0.2, 0.46, 0.02); // loader's periscope
   seat(ellipsoid(0.11, 0.07, 0.11, C.oliveDark, { wseg: 10, hseg: 6 }), 0.42, 0.24, 0); // ventilator dome
-  // coax MG port right of the gun
-  put(turret, cyl(0.05, 0.04, C.dark, { axis: 'x', seg: 10 }), 0.95, GUN_Y, 0.22);
-  put(turret, cyl(0.025, 0.12, C.steel, { axis: 'x', seg: 6 }), 1.0, GUN_Y, 0.22);
+  // the T-55 "face": an oval cast boss either side of the gun. Left is the
+  // gunner's sight port (sights slot adds its glass), right is the coax MG port.
+  for (const side of [-1, 1]) {
+    const z = side * 0.32;
+    const y = GUN_Y + 0.08;
+    const boss = put(turret, ellipsoid(0.12, 0.17, 0.11, C.oliveLight, { wseg: 12, hseg: 8 }), turretFrontX(y, z) + 0.01, y, z);
+    boss.rotation.y = -side * 0.3; // follow the dome's curve
+  }
+  {
+    const z = 0.32;
+    const y = GUN_Y + 0.06;
+    const x = turretFrontX(y, z) + 0.11;
+    put(turret, cyl(0.032, 0.04, C.dark, { axis: 'x', seg: 8 }), x, y, z); // coax port
+    put(turret, cyl(0.018, 0.08, C.steel, { axis: 'x', seg: 6 }), x + 0.03, y, z);
+  }
   // whip antenna on the left rear of the roof
   seat(cyl(0.045, 0.08, C.dark, { seg: 8 }), -0.55, -0.6, 0.03);
   seat(cyl(0.012, 1.0, C.dark, { seg: 5 }), -0.55, -0.6, 0.55);
@@ -542,18 +562,24 @@ export function createTank() {
   }
 
   // ------------------------------------------------------------------- gun
-  // D-10T: canvas mantlet cover, long fat barrel, fume extractor near the muzzle.
+  // D-10T as one turned profile (no overlapping surfaces to z-fight): barrel,
+  // fume extractor near the muzzle, muzzle lip, hollow bore. Canvas cover at
+  // the root where it enters the turret.
   function buildGun() {
     gunPivot = new THREE.Group();
     gunPivot.position.set(GUN_BASE_X, GUN_Y, 0);
     gunSlot.add(gunPivot);
-    put(gunPivot, cyl(0.27, 0.32, C.canvas, { axis: 'x', seg: 12, radiusEnd: 0.15 }), 0.16, 0, 0); // canvas cover
-    put(gunPivot, cyl(0.115, 2.3, C.olive, { axis: 'x', seg: 12 }), 1.2, 0, 0);
-    put(gunPivot, cyl(0.12, 0.08, C.olive, { axis: 'x', seg: 12, radiusEnd: 0.18 }), 1.5, 0, 0);
-    put(gunPivot, cyl(0.18, 0.36, C.olive, { axis: 'x', seg: 12 }), 1.72, 0, 0); // fume extractor
-    put(gunPivot, cyl(0.18, 0.08, C.olive, { axis: 'x', seg: 12, radiusEnd: 0.12 }), 1.94, 0, 0);
-    put(gunPivot, cyl(0.13, 0.08, C.oliveDark, { axis: 'x', seg: 12 }), 2.33, 0, 0); // muzzle lip
-    put(gunPivot, cyl(0.075, 0.02, C.dark, { axis: 'x', seg: 10 }), 2.375, 0, 0); // bore
+    const profile = [
+      [0.0, 0.0], [0.115, 0.0], [0.115, 1.46], [0.18, 1.54], [0.18, 1.9], [0.12, 1.98],
+      [0.115, 2.0], [0.115, 2.29], [0.13, 2.3], [0.13, 2.37], [0.075, 2.37], [0.075, 2.2],
+    ].map(([r, y]) => new THREE.Vector2(r, y));
+    const barrel = new THREE.Mesh(new THREE.LatheGeometry(profile, 14), toon(C.olive));
+    barrel.rotation.z = -Math.PI / 2; // lathe axis (y) -> forward (x)
+    barrel.castShadow = barrel.receiveShadow = true;
+    gunPivot.add(barrel);
+    put(gunPivot, cyl(0.07, 0.12, C.dark, { axis: 'x', seg: 10 }), 2.26, 0, 0); // dark bore, seen through the muzzle
+    put(gunPivot, cyl(0.25, 0.34, C.canvas, { axis: 'x', seg: 12, radiusEnd: 0.15 }), 0.15, 0, 0); // canvas cover
+    put(gunPivot, cyl(0.16, 0.04, C.dark, { axis: 'x', seg: 12 }), 0.3, 0, 0); // cover strap
     gunFlash = new THREE.Group();
     put(gunFlash, box(0.34, 0.34, 0.34, 0xffb43a, { glow: true, r: 0.05 }), 0, 0, 0);
     put(gunFlash, box(0.2, 0.2, 0.2, 0xfff6c8, { glow: true, r: 0.04 }), 0.12, 0, 0);
@@ -582,8 +608,9 @@ export function createTank() {
   }
 
   // ----------------------------------------------------------------- sights
-  // L-2 IR searchlight right of the gun, up on the turret front; gunner's
-  // sight hood front-left; commander's small IR lamp on the cupola.
+  // L-2 IR searchlight right of the gun, up on the turret front, with its
+  // canvas pad on (stock). Gunner's sight glass in the left boss. Commander's
+  // small IR lamp on the cupola, also capped.
   function buildSights() {
     const lx = 0.6;
     const lz = 0.52;
@@ -592,18 +619,20 @@ export function createTank() {
     const light = new THREE.Group();
     light.position.set(lx + 0.24, ly + 0.15, lz);
     sights.add(light);
-    put(light, cyl(0.19, 0.3, C.oliveDark, { axis: 'x', seg: 16, radiusEnd: 0.21 }), 0, 0, 0); // housing
-    put(light, cyl(0.215, 0.04, C.steel, { axis: 'x', seg: 16 }), 0.16, 0, 0); // rim
-    put(light, cyl(0.16, 0.02, 0xd8e8f0, { axis: 'x', seg: 16, glow: true }), 0.17, 0, 0); // lens
-    put(light, box(0.04, 0.1, 0.04, C.dark), -0.05, -0.2, 0); // link to the mantlet
-    const gx = 0.5;
-    const gz = -0.32;
-    put(sights, box(0.22, 0.12, 0.18, C.oliveDark, { r: 0.03 }), gx, turretSurfaceY(gx, gz) + 0.04, gz); // gunner's sight hood
-    put(sights, box(0.02, 0.07, 0.13, C.dark), gx + 0.11, turretSurfaceY(gx, gz) + 0.05, gz);
+    put(light, cyl(0.16, 0.28, C.oliveDark, { axis: 'x', seg: 16, radiusEnd: 0.18 }), 0, 0, 0); // housing
+    put(light, cyl(0.2, 0.09, C.canvas, { axis: 'x', seg: 16 }), 0.155, 0, 0); // canvas pad over the lens
+    put(light, ellipsoid(0.045, 0.17, 0.17, C.canvas, { wseg: 14, hseg: 8 }), 0.2, 0, 0); // pad bulge
+    put(light, cyl(0.21, 0.025, C.dark, { axis: 'x', seg: 16 }), 0.13, 0, 0); // drawstring band
+    put(light, box(0.04, 0.1, 0.04, C.dark), -0.05, -0.18, 0); // link to the mantlet
+    {
+      const z = -0.32;
+      const y = GUN_Y + 0.1;
+      put(sights, box(0.04, 0.15, 0.06, C.dark, { r: 0.012 }), turretFrontX(y, z) + 0.11, y, z); // gunner's sight glass
+    }
     const { x, z } = COMMANDER;
     const cy = turretSurfaceY(x, z);
     put(sights, cyl(0.06, 0.1, C.oliveDark, { axis: 'x', seg: 10 }), x + 0.3, cy + 0.2, z);
-    put(sights, cyl(0.045, 0.02, 0xd8e8f0, { axis: 'x', seg: 10, glow: true }), x + 0.355, cy + 0.2, z);
+    put(sights, cyl(0.068, 0.04, C.canvas, { axis: 'x', seg: 10 }), x + 0.36, cy + 0.2, z); // cap
   }
 
   buildTracks();

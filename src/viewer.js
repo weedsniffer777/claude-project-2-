@@ -202,7 +202,10 @@ function frame() {
   target.visible = $('mg').checked;
   mgPoint.copy(target.position);
 
-  if (!hasAim && params.has('shot')) aimPoint.set(6, 0.6, -2.5);
+  if (!hasAim && params.has('shot')) {
+    if (params.get('aim') === 'front') aimPoint.set(30, 0.6, 0);
+    else aimPoint.set(6, 0.6, -2.5);
+  }
   tank.update(dt, t, {
     aimPoint: hasAim || params.has('shot') ? aimPoint : null,
     mgPoint: $('mg').checked ? mgPoint : null,
