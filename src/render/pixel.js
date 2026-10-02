@@ -33,12 +33,14 @@ const frag = /* glsl */ `
   void main() {
     vec3 c = texture2D(tColor, vUv).rgb;
     if (useOutline > 0.5) {
+      // Second derivative of depth: a steep but smooth slope (ground at a low
+      // camera angle) is not an edge; a depth jump is.
       float z = viewZ(vUv);
-      float hit = 0.0;
-      hit = max(hit, step(edge, z - viewZ(vUv + vec2(texel.x, 0.0))));
-      hit = max(hit, step(edge, z - viewZ(vUv - vec2(texel.x, 0.0))));
-      hit = max(hit, step(edge, z - viewZ(vUv + vec2(0.0, texel.y))));
-      hit = max(hit, step(edge, z - viewZ(vUv - vec2(0.0, texel.y))));
+      float zl = viewZ(vUv - vec2(texel.x, 0.0));
+      float zr = viewZ(vUv + vec2(texel.x, 0.0));
+      float zu = viewZ(vUv + vec2(0.0, texel.y));
+      float zd = viewZ(vUv - vec2(0.0, texel.y));
+      float hit = max(step(edge, 2.0 * z - zl - zr), step(edge, 2.0 * z - zu - zd));
       c = mix(c, outlineColor, hit);
     }
     gl_FragColor = vec4(c, 1.0);

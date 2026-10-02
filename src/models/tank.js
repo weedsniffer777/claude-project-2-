@@ -1,9 +1,19 @@
 // Starter tank: a patched-up, small-ized T-55. One version for now.
-// Forward is +X, up is +Y, right is +Z.
+// Forward is +X, up is +Y, right is +Z (so left is -Z).
 //
-// Proportions follow the T-55: wide and flat, hull top barely above the
-// fenders, a low egg-shaped dome turret. "Small-ized" = oversized wheels, a
-// fat short-ish gun, chunky details.
+// What makes a T-55 read as a "low rider", and what we keep from it:
+//  - long, flat hull; the deck sits only a hair above the fenders
+//  - one continuous track cover from front mudguard to rear mudguard
+//  - a low, smooth egg turret (no separate bustle bulge)
+//  - five road wheels with a wider gap after the first, a small raised idler
+//    at the front and a raised drive sprocket at the rear, so the track is a
+//    loose trapezoid, not a capsule
+//  - two fuel drums lying across the rear deck over a thick unditching beam
+// "Small-ized" = oversized gun, slightly chunky details. Nothing else.
+//
+// Crew layout (looking forward): driver front-left of the hull; commander and
+// gunner left of the gun, loader right. The roof DShK sits on the loader's
+// hatch, the IR searchlight left of the gun.
 //
 // Each of the seven loadout slots lives in its own group so variants can be
 // swapped in later without touching the rest of the model:
@@ -28,23 +38,100 @@ export const PALETTE = {
 };
 const C = PALETTE;
 
-// Layout constants (world units; the tank is ~2.9 long, ~2.7 wide over the fenders).
-const HULL_W = 0.78; // hull half-width
-const HULL_TOP = 0.89; // top of the hull plate; turret ring sits here
-const LINK_Z = 0.93; // track link centre line
-const WHEEL_Z = 1.05; // wheel centre line (faces stick out past the links)
-const WHEEL_R = 0.27;
-const TURRET_X = 0.32;
+// Layout (world units).
+const HULL_W = 0.72; // hull half-width (the tracks sit just outside it)
+const HULL_TOP = 0.8; // deck height; fenders top out at ~0.755
+const FENDER_Y = 0.73;
+const LINK_Z = 0.88;
+const WHEEL_Z = 0.94;
+const ROAD_WHEELS = [1.05, 0.4, -0.18, -0.76, -1.34]; // wider gap after the first, like the real thing
+const WHEEL_Y = 0.29;
+const TURRET_X = 0.0; // set back from the ring-forward T-55 stance for a relaxed, rear-weighted look
 const TURRET_SPEED = 3.2; // rad/s, gives the cannon some weight
 const MG_SPEED = 9;
-const GUN_BASE_X = 0.98;
-const GUN_Y = 0.27;
+const GUN_BASE_X = 1.06;
+const GUN_Y = 0.3;
 const MUZZLE_X = 1.94;
-const MG_X = -0.1;
-const MG_Z = 0.34;
-const MG_Y = 0.84;
+const MG_X = -0.08; // DShK sits on the loader's hatch (right side)
+const MG_Z = 0.4;
+const MG_Y = 0.8;
 
 export const SLOT_NAMES = ['tracks', 'armor', 'engine', 'gun', 'mg', 'sights', 'module'];
+
+// ----------------------------------------------------------------------
+// Track path: the outline of a set of circles, walked clockwise (top run goes
+// forward). Circles: rear sprocket, front idler, first and last road wheel.
+// Because the idler and sprocket sit higher than the wheels, the loop is a
+// trapezoid with rounded corners instead of a capsule.
+const TRACK_CIRCLES = [
+  { x: -1.9, y: 0.42, r: 0.27 },
+  { x: 1.62, y: 0.38, r: 0.2 },
+  { x: ROAD_WHEELS[0], y: WHEEL_Y, r: 0.28 },
+  { x: ROAD_WHEELS[4], y: WHEEL_Y, r: 0.28 },
+];
+const TOP_SAG = 0.03;
+
+function buildTrackPath(circles) {
+  const n = circles.length;
+  const nOut = [];
+  const nIn = [];
+  const segs = [];
+  for (let i = 0; i < n; i++) {
+    const a = circles[i];
+    const b = circles[(i + 1) % n];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const d = Math.hypot(dx, dy);
+    const nAng = Math.atan2(dy, dx) + Math.acos((a.r - b.r) / d); // outward normal of the tangent line
+    nOut[i] = nAng;
+    nIn[(i + 1) % n] = nAng;
+    const p1 = { x: a.x + a.r * Math.cos(nAng), y: a.y + a.r * Math.sin(nAng) };
+    const p2 = { x: b.x + b.r * Math.cos(nAng), y: b.y + b.r * Math.sin(nAng) };
+    segs.push({ p1, p2, len: Math.hypot(p2.x - p1.x, p2.y - p1.y), nAng });
+  }
+  const arcs = circles.map((c, i) => {
+    let sweep = (nIn[i] - nOut[i]) % (Math.PI * 2);
+    if (sweep < 0) sweep += Math.PI * 2;
+    return { c, nStart: nIn[i], sweep, len: sweep * c.r };
+  });
+  // order along the loop: arc0, seg0, arc1, seg1, ...
+  const parts = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    parts.push({ type: 'arc', start: total, ...arcs[i] });
+    total += arcs[i].len;
+    parts.push({ type: 'seg', start: total, index: i, ...segs[i] });
+    total += segs[i].len;
+  }
+  return { parts, total };
+}
+
+const TRACK_PATH = buildTrackPath(TRACK_CIRCLES);
+
+// out = { x, y, heading, normal } at arc-length s along the loop.
+function trackAt(sIn, out) {
+  const { parts, total } = TRACK_PATH;
+  const s = ((sIn % total) + total) % total;
+  let part = parts[parts.length - 1];
+  for (const p of parts) {
+    if (s >= p.start) part = p;
+    else break;
+  }
+  const local = s - part.start;
+  if (part.type === 'arc') {
+    const ang = part.nStart - local / part.c.r; // clockwise: angle decreases
+    out.x = part.c.x + part.c.r * Math.cos(ang);
+    out.y = part.c.y + part.c.r * Math.sin(ang);
+    out.normal = ang;
+  } else {
+    const u = local / part.len;
+    out.x = part.p1.x + (part.p2.x - part.p1.x) * u;
+    out.y = part.p1.y + (part.p2.y - part.p1.y) * u;
+    out.normal = part.nAng;
+    if (part.index === 0) out.y -= TOP_SAG * Math.sin(Math.PI * u); // loose top run
+  }
+  out.heading = out.normal - Math.PI / 2;
+}
 
 export function createTank() {
   const group = new THREE.Group();
@@ -68,187 +155,220 @@ export function createTank() {
   // ---------------------------------------------------------------- hull
   const hull = new THREE.Group();
   chassis.add(hull);
-  put(hull, box(2.5, 0.3, HULL_W * 1.95, C.dark, { r: 0.06 }), 0, 0.4, 0); // lower hull between the tracks
-  put(hull, box(2.7, 0.34, HULL_W * 2, C.olive, { r: 0.12 }), 0, 0.72, 0);
-  // sloped glacis
-  const glacis = put(hull, box(0.62, 0.1, HULL_W * 1.94, C.oliveLight, { r: 0.05 }), 1.2, 0.83, 0);
-  glacis.rotation.z = -0.5;
-  // headlamps and tow hooks
+  put(hull, box(3.2, 0.3, HULL_W * 1.92, C.dark, { r: 0.05 }), -0.1, 0.4, 0); // lower hull, visible between the wheels
+  put(hull, box(2.75, 0.24, HULL_W * 2, C.olive, { r: 0.08 }), -0.375, 0.68, 0); // upper hull
+  put(hull, box(0.12, 0.3, HULL_W * 1.94, C.oliveDark), -1.76, 0.64, 0); // rear plate
+  // long sloped glacis + steep nose
+  const glacis = put(hull, box(0.76, 0.08, HULL_W * 1.94, C.oliveLight, { r: 0.04 }), 1.34, 0.63, 0);
+  glacis.rotation.z = -0.464;
+  put(hull, box(0.12, 0.28, HULL_W * 1.9, C.oliveDark, { r: 0.04 }), 1.62, 0.33, 0);
+  // headlights at the glacis corners: left white, right IR (dark lens), both with guard bars
   for (const s of [-1, 1]) {
-    put(hull, box(0.1, 0.14, 0.18, C.dark), 1.34, 0.78, s * 0.56);
-    put(hull, box(0.03, 0.09, 0.12, 0xfff2b8, { glow: true }), 1.405, 0.78, s * 0.56);
-    put(hull, box(0.16, 0.1, 0.1, C.steel), 1.38, 0.6, s * 0.4);
+    put(hull, box(0.14, 0.12, 0.16, C.dark, { r: 0.03 }), 1.43, 0.66, s * 0.56);
+    if (s < 0) put(hull, box(0.03, 0.08, 0.1, 0xfff2b8, { glow: true }), 1.51, 0.66, s * 0.56);
+    else put(hull, box(0.03, 0.08, 0.1, 0x3a2626), 1.51, 0.66, s * 0.56);
+    put(hull, box(0.02, 0.14, 0.2, C.steel, { r: 0.008 }), 1.54, 0.66, s * 0.56);
+    put(hull, box(0.14, 0.09, 0.1, C.steel), 1.72, 0.38, s * 0.45); // tow hooks
   }
-  // driver hatch + periscope on the glacis
-  put(hull, cyl(0.15, 0.09, C.oliveDark), 0.78, HULL_TOP + 0.04, -0.3);
-  put(hull, box(0.12, 0.1, 0.18, C.dark), 0.92, HULL_TOP + 0.06, -0.3);
-  // rear plate
-  put(hull, box(0.1, 0.34, HULL_W * 1.94, C.oliveDark), -1.36, 0.72, 0);
+  // driver's hatch: front-left on the glacis, ahead of the turret, with periscopes in front of it
+  const driver = new THREE.Group();
+  driver.position.set(1.2, 0.735, -0.34);
+  driver.rotation.z = -0.464; // follows the glacis slope
+  hull.add(driver);
+  put(driver, cyl(0.17, 0.06, C.oliveDark, { seg: 12 }), 0, 0.03, 0);
+  const driverLid = put(driver, cyl(0.15, 0.03, C.olive, { seg: 12 }), -0.12, 0.13, 0);
+  driverLid.rotation.z = 0.7; // propped open
+  put(driver, box(0.08, 0.06, 0.15, C.dark), 0.2, 0.05, 0);
+  for (const dz of [-0.17, 0.17]) put(driver, box(0.05, 0.05, 0.07, C.dark), 0.18, 0.04, dz);
+  // turret ring lip
+  put(hull, cyl(0.86, 0.03, C.oliveDark, { seg: 20 }), TURRET_X, HULL_TOP + 0.01, 0);
 
   // -------------------------------------------------------------- turret
-  // Low, wide egg: the dome is wider than it is tall, which keeps the stout look.
-  put(turret, cyl(0.7, 0.1, C.dark, { seg: 18 }), 0, 0.05, 0);
-  put(turret, ellipsoid(1.0, 0.36, 0.95, C.olive), -0.05, 0.17, 0);
-  put(turret, ellipsoid(0.58, 0.26, 0.7, C.oliveDark), -0.58, 0.15, 0);
-  put(turret, cyl(0.29, 0.26, C.oliveDark, { axis: 'x', seg: 12 }), 0.9, GUN_Y, 0); // mantlet
-  // commander cupola (right) and loader hatch (left)
-  put(turret, cyl(0.2, 0.12, C.olive), MG_X, 0.54, MG_Z);
-  put(turret, cyl(0.2, 0.05, C.oliveDark), MG_X, 0.61, MG_Z);
-  put(turret, cyl(0.19, 0.08, C.oliveDark), -0.18, 0.52, -0.34);
-  const lid = put(turret, box(0.36, 0.05, 0.3, C.olive), -0.38, 0.65, -0.34);
-  lid.rotation.z = 0.7;
-  put(turret, box(0.1, 0.09, 0.14, C.dark), 0.18, 0.5, -0.12); // periscope
-  // tarp roll on the back of the bustle
-  put(turret, cyl(0.09, 0.9, C.canvas, { axis: 'z', seg: 8 }), -1.03, 0.25, 0);
-  // short whip antenna
-  put(turret, cyl(0.04, 0.07, C.dark), -0.6, 0.48, -0.55);
-  put(turret, cyl(0.012, 0.9, C.dark, { seg: 5 }), -0.6, 0.9, -0.55);
+  // One low, smooth egg that slopes down toward the rear. No bustle bulge.
+  put(turret, cyl(0.88, 0.06, C.dark, { seg: 20 }), 0, 0.03, 0);
+  const dome = put(turret, ellipsoid(1.05, 0.46, 0.98, C.olive, { wseg: 18, hseg: 10 }), -0.02, 0.18, 0);
+  dome.rotation.z = 0.04;
+  // mantlet and bolted collar
+  put(turret, cyl(0.3, 0.3, C.oliveDark, { axis: 'x', seg: 12 }), 0.97, GUN_Y, 0);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    put(turret, box(0.04, 0.045, 0.045, C.dark, { r: 0.008 }), 1.13, GUN_Y + Math.sin(a) * 0.285, Math.cos(a) * 0.285);
+  }
+  // commander's cupola (left, rear), with an open lid and a periscope block
+  put(turret, cyl(0.22, 0.14, C.olive, { seg: 14 }), -0.28, 0.55, -0.4);
+  put(turret, cyl(0.235, 0.04, C.oliveDark, { seg: 14 }), -0.28, 0.63, -0.4);
+  const cupolaLid = put(turret, cyl(0.19, 0.03, C.olive, { seg: 12 }), -0.42, 0.74, -0.4);
+  cupolaLid.rotation.z = 0.9;
+  put(turret, box(0.09, 0.08, 0.2, C.dark, { r: 0.02 }), -0.12, 0.66, -0.4);
+  // loader's hatch (right): flat round lid; the DShK ring mounts around it
+  put(turret, cyl(0.2, 0.05, C.oliveDark, { seg: 14 }), MG_X, 0.57, MG_Z);
+  const loaderLid = put(turret, cyl(0.17, 0.03, C.olive, { seg: 12 }), MG_X - 0.12, 0.67, MG_Z);
+  loaderLid.rotation.z = 0.6;
+  put(turret, box(0.1, 0.07, 0.09, C.dark), MG_X + 0.2, 0.58, MG_Z - 0.04); // loader's periscope
+  // tarp roll on the rear of the turret, stowage box on the left side
+  put(turret, cyl(0.08, 0.62, C.canvas, { axis: 'z', seg: 8 }), -1.0, 0.25, 0);
+  put(turret, box(0.4, 0.16, 0.2, C.oliveDark), -0.5, 0.22, -0.94);
+  // whip antenna, left rear
+  put(turret, cyl(0.04, 0.07, C.dark), -0.75, 0.5, -0.62);
+  put(turret, cyl(0.012, 0.9, C.dark, { seg: 5 }), -0.75, 0.96, -0.62);
 
   // ---------------------------------------------------------------- tracks
-  // Individual links follow the real path: along the top (with a little sag),
-  // around the idler, back along the ground, around the drive sprocket.
-  const TRACK = { x0: -1.3, x1: 1.3, yc: 0.3, R: 0.285, sag: 0.045, links: 56 };
-  const straight = TRACK.x1 - TRACK.x0;
-  const arc = Math.PI * TRACK.R;
-  const loop = 2 * straight + 2 * arc;
+  const linkGeo = new RoundedBoxGeometry(0.09, 0.04, 0.3, 1, 0.012);
+  const hornGeo = new RoundedBoxGeometry(0.035, 0.075, 0.05, 1, 0.01);
+  const linkCount = Math.round(TRACK_PATH.total / 0.125);
+  const linkSpacing = TRACK_PATH.total / linkCount;
   const trackSets = [];
   let trackOffset = 0;
-  const linkGeo = new RoundedBoxGeometry(0.115, 0.05, 0.34, 1, 0.015);
   const dummy = new THREE.Object3D();
-  const pt = { x: 0, y: 0, a: 0 };
-
-  function pathAt(sIn, out) {
-    let s = ((sIn % loop) + loop) % loop;
-    const { x0, x1, yc, R, sag } = TRACK;
-    if (s < straight) {
-      const u = s / straight;
-      out.x = x0 + s;
-      out.y = yc + R - sag * Math.sin(Math.PI * u);
-      out.a = Math.atan(-sag * (Math.PI / straight) * Math.cos(Math.PI * u));
-      return;
-    }
-    s -= straight;
-    if (s < arc) {
-      const phi = s / R;
-      out.x = x1 + R * Math.sin(phi);
-      out.y = yc + R * Math.cos(phi);
-      out.a = -phi;
-      return;
-    }
-    s -= arc;
-    if (s < straight) {
-      out.x = x1 - s;
-      out.y = yc - R;
-      out.a = -Math.PI;
-      return;
-    }
-    s -= straight;
-    const phi = s / R;
-    out.x = x0 - R * Math.sin(phi);
-    out.y = yc - R * Math.cos(phi);
-    out.a = -Math.PI - phi;
-  }
+  const pt = { x: 0, y: 0, heading: 0, normal: 0 };
 
   function addTrackLinks(zc) {
-    const mesh = new THREE.InstancedMesh(linkGeo, toon(0xffffff), TRACK.links);
-    mesh.castShadow = mesh.receiveShadow = true;
-    mesh.frustumCulled = false;
+    const links = new THREE.InstancedMesh(linkGeo, toon(0xffffff), linkCount);
+    const horns = new THREE.InstancedMesh(hornGeo, toon(C.dark), Math.ceil(linkCount / 2));
+    for (const m of [links, horns]) {
+      m.castShadow = m.receiveShadow = true;
+      m.frustumCulled = false;
+      slots.tracks.add(m);
+    }
     const a = new THREE.Color(C.trackA);
     const b = new THREE.Color(C.trackB);
-    for (let i = 0; i < TRACK.links; i++) mesh.setColorAt(i, i % 2 ? a : b);
-    slots.tracks.add(mesh);
-    trackSets.push({ mesh, zc });
+    for (let i = 0; i < linkCount; i++) links.setColorAt(i, i % 2 ? a : b);
+    trackSets.push({ links, horns, zc });
   }
 
   function updateTracks() {
-    const spacing = loop / TRACK.links;
-    for (const { mesh, zc } of trackSets) {
-      for (let i = 0; i < TRACK.links; i++) {
-        pathAt(i * spacing + trackOffset, pt);
+    for (const { links, horns, zc } of trackSets) {
+      let h = 0;
+      for (let i = 0; i < linkCount; i++) {
+        trackAt(i * linkSpacing + trackOffset, pt);
         dummy.position.set(pt.x, pt.y, zc);
-        dummy.rotation.set(0, 0, pt.a);
+        dummy.rotation.set(0, 0, pt.heading);
         dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
+        links.setMatrixAt(i, dummy.matrix);
+        if (i % 2 === 0 && h < horns.count) {
+          // guide horn pokes inward from every other link
+          dummy.position.set(pt.x - Math.cos(pt.normal) * 0.05, pt.y - Math.sin(pt.normal) * 0.05, zc);
+          dummy.updateMatrix();
+          horns.setMatrixAt(h++, dummy.matrix);
+        }
       }
-      mesh.instanceMatrix.needsUpdate = true;
+      links.instanceMatrix.needsUpdate = true;
+      horns.instanceMatrix.needsUpdate = true;
     }
+  }
+
+  function spinner(x, y, z, radius) {
+    const pivot = new THREE.Group();
+    pivot.position.set(x, y, z);
+    pivot.userData.radius = radius;
+    slots.tracks.add(pivot);
+    spinners.push(pivot);
+    return pivot;
+  }
+
+  function roadWheel(x, z) {
+    const p = spinner(x, WHEEL_Y, z, 0.25);
+    put(p, cyl(0.25, 0.14, C.dark, { axis: 'z', seg: 16 })); // tyre
+    put(p, cyl(0.2, 0.17, C.olive, { axis: 'z', seg: 16 })); // disc
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      const hole = put(p, box(0.07, 0.085, 0.2, C.dark, { r: 0.015 }), Math.cos(a) * 0.125, Math.sin(a) * 0.125, 0);
+      hole.rotation.z = a;
+    }
+    put(p, cyl(0.075, 0.22, C.steel, { axis: 'z', seg: 8 })); // hub
+  }
+
+  function idler(x, y, z) {
+    const p = spinner(x, y, z, 0.17);
+    put(p, cyl(0.17, 0.12, C.dark, { axis: 'z', seg: 12 }));
+    put(p, cyl(0.12, 0.15, C.oliveDark, { axis: 'z', seg: 12 }));
+    put(p, cyl(0.05, 0.19, C.steel, { axis: 'z', seg: 8 }));
+  }
+
+  function sprocket(x, y, z) {
+    const p = spinner(x, y, z, 0.25);
+    put(p, cyl(0.2, 0.1, C.steel, { axis: 'z', seg: 14 }));
+    put(p, cyl(0.14, 0.14, C.olive, { axis: 'z', seg: 12 }));
+    put(p, cyl(0.06, 0.18, C.dark, { axis: 'z', seg: 8 }));
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2;
+      const tooth = put(p, box(0.07, 0.07, 0.15, C.dark, { r: 0.015 }), Math.cos(a) * 0.235, Math.sin(a) * 0.235, 0);
+      tooth.rotation.z = a;
+    }
+  }
+
+  // One continuous track cover: front mudguard, flat middle, rear mudguard.
+  function trackCover(s) {
+    const z = s * 1.0;
+    put(slots.tracks, box(2.75, 0.05, 0.62, C.oliveDark, { r: 0.02 }), -0.175, FENDER_Y, z);
+    // front mudguard slopes down and forward, with ribs
+    const front = new THREE.Group();
+    front.position.set(1.55, FENDER_Y - 0.03, z);
+    front.rotation.z = -0.3;
+    slots.tracks.add(front);
+    put(front, box(0.8, 0.05, 0.62, C.oliveDark, { r: 0.02 }));
+    for (const dz of [-0.19, 0, 0.19]) put(front, box(0.7, 0.03, 0.04, C.oliveLight, { r: 0.008 }), 0, 0.04, dz);
+    // rear mudguard slopes down and back
+    const rear = new THREE.Group();
+    rear.position.set(-1.82, FENDER_Y - 0.03, z);
+    rear.rotation.z = 0.28;
+    slots.tracks.add(rear);
+    put(rear, box(0.6, 0.05, 0.62, C.oliveDark, { r: 0.02 }));
+    for (const dz of [-0.19, 0, 0.19]) put(rear, box(0.5, 0.03, 0.04, C.oliveLight, { r: 0.008 }), 0, 0.04, dz);
   }
 
   function buildTracks() {
     for (const s of [-1, 1]) {
       addTrackLinks(s * LINK_Z);
-      // road wheels, idler (front), drive sprocket (rear)
-      const spots = [-1.0, -0.5, 0, 0.5, 1.0].map((x) => [x, false]);
-      spots.push([1.3, false], [-1.3, true]);
-      for (const [x, sprocket] of spots) {
-        const pivot = new THREE.Group();
-        pivot.position.set(x, 0.3, s * WHEEL_Z);
-        slots.tracks.add(pivot);
-        spinners.push(pivot);
-        const rad = sprocket ? 0.3 : WHEEL_R;
-        put(pivot, cyl(rad, 0.16, C.dark, { axis: 'z', seg: 14 }));
-        put(pivot, cyl(rad * 0.78, 0.2, sprocket ? C.steel : C.olive, { axis: 'z', seg: 14 }));
-        put(pivot, cyl(rad * 0.56, 0.22, C.oliveDark, { axis: 'z', seg: 12 }));
-        put(pivot, cyl(rad * 0.3, 0.26, C.steel, { axis: 'z', seg: 8 }));
-        for (let k = 0; k < 4; k++) {
-          const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-          put(pivot, box(0.05, 0.05, 0.3, C.dark, { r: 0.01 }), Math.cos(a) * rad * 0.62, Math.sin(a) * rad * 0.62, 0);
-        }
-        if (sprocket) {
-          for (let k = 0; k < 10; k++) {
-            const a = (k / 10) * Math.PI * 2;
-            const tooth = put(pivot, box(0.1, 0.09, 0.2, C.dark, { r: 0.02 }), Math.cos(a) * 0.32, Math.sin(a) * 0.32, 0);
-            tooth.rotation.z = a;
-          }
-        }
-      }
-      // fenders (just above the wheels) with tool clamps; sloped front mudguards
-      put(slots.tracks, box(2.5, 0.06, 0.62, C.oliveDark, { r: 0.03 }), -0.15, 0.68, s * 1.02);
-      const mud = put(slots.tracks, box(0.55, 0.06, 0.62, C.oliveDark, { r: 0.03 }), 1.38, 0.64, s * 1.02);
-      mud.rotation.z = -0.35;
-      put(slots.tracks, box(0.7, 0.05, 0.1, C.tan, { r: 0.015 }), 0.5, 0.73, s * 1.2); // shovel
-      put(slots.tracks, box(0.4, 0.05, 0.08, C.steel, { r: 0.015 }), -0.1, 0.73, s * 1.22); // axe/saw
+      for (const x of ROAD_WHEELS) roadWheel(x, s * WHEEL_Z);
+      idler(1.62, 0.38, s * WHEEL_Z);
+      sprocket(-1.9, 0.42, s * WHEEL_Z);
+      trackCover(s);
     }
+    // stowage on the covers: shovel + saw (right), toolbox (left)
+    put(slots.tracks, box(0.8, 0.035, 0.12, C.tan, { r: 0.012 }), 0.45, 0.775, 1.12);
+    put(slots.tracks, box(0.5, 0.035, 0.07, C.steel, { r: 0.012 }), -0.2, 0.775, 1.2);
+    put(slots.tracks, box(0.6, 0.14, 0.26, C.oliveDark, { r: 0.03 }), 0.45, 0.83, -1.08);
+    put(slots.tracks, box(0.2, 0.03, 0.03, C.steel), 0.45, 0.91, -1.08);
   }
 
   // ----------------------------------------------------------------- armor
   // Starter kit: mismatched scrap plates welded over the original cast armor.
   function buildArmor() {
     const a = slots.armor;
-    plate(a, [TURRET_X + 0.65, HULL_TOP + 0.3, 0.6], [0.5, 0.3, 0.06], C.tan, '+z'); // turret cheeks
-    plate(a, [TURRET_X + 0.55, HULL_TOP + 0.28, -0.62], [0.45, 0.26, 0.06], C.rust, '-z');
-    plate(a, [-0.25, 0.78, HULL_W + 0.02], [0.8, 0.2, 0.05], C.rust, '+z'); // hull sides
-    plate(a, [0.35, 0.78, -HULL_W - 0.02], [0.7, 0.2, 0.05], C.tan, '-z');
-    plate(a, [1.03, 0.93, 0.3], [0.34, 0.06, 0.45], C.steel, '+y'); // glacis patch
+    plate(a, [TURRET_X + 0.6, HULL_TOP + 0.24, 0.8], [0.5, 0.22, 0.05], C.tan, '+z'); // turret cheeks
+    plate(a, [TURRET_X + 0.55, HULL_TOP + 0.24, -0.81], [0.45, 0.2, 0.05], C.rust, '-z');
+    plate(a, [-1.0, HULL_TOP + 0.03, 0.35], [0.5, 0.04, 0.4], C.tan, '+y'); // rear deck patch
+    plate(a, [0.3, FENDER_Y + 0.045, 1.0], [0.7, 0.04, 0.35], C.rust, '+y'); // fender patch
+    plate(a, [1.3, 0.72, 0.28], [0.36, 0.04, 0.45], C.steel, '+y'); // glacis patch (sits on the slope)
   }
 
   // ---------------------------------------------------------------- engine
-  // Rear deck, exhaust, and the two fuel barrels that make it feel heavy.
+  // Rear deck, exhaust, the thick unditching beam and two fuel drums.
   function buildEngine() {
     const e = slots.engine;
-    put(e, box(0.95, 0.08, HULL_W * 1.8, C.dark, { r: 0.03 }), -0.85, HULL_TOP + 0.04, 0);
-    for (let i = 0; i < 5; i++) put(e, box(0.05, 0.04, 1.2, C.steel, { r: 0.01 }), -1.1 + i * 0.12, HULL_TOP + 0.1, 0);
-    // exhaust stack (left rear corner, clear of the barrels)
-    put(e, cyl(0.07, 0.3, C.dark, { seg: 8 }), -1.2, 1.02, -0.72);
-    put(e, cyl(0.09, 0.05, C.steel, { seg: 8 }), -1.2, 1.18, -0.72);
-    // two green barrels lying across the rear deck, one behind the other, strapped down
-    for (const x of [-0.97, -1.3]) {
-      const barrel = new THREE.Group();
-      put(barrel, cyl(0.165, 1.25, C.drumGreen, { axis: 'z', seg: 12 }));
+    for (let i = 0; i < 4; i++) put(e, box(0.05, 0.03, 1.1, C.steel, { r: 0.008 }), -0.98 - i * 0.07, HULL_TOP + 0.02, 0); // louvres
+    // unditching beam: thick tube across the rear plate
+    put(e, cyl(0.1, 1.5, C.oliveDark, { axis: 'z', seg: 12 }), -1.9, 0.62, 0);
+    for (const z of [-0.5, 0.5]) put(e, box(0.08, 0.18, 0.06, C.steel), -1.86, 0.62, z);
+    // two short drums lying across the deck, side by side, strapped down
+    for (const z of [-0.37, 0.37]) {
+      const drum = new THREE.Group();
+      put(drum, cyl(0.17, 0.6, C.drumGreen, { axis: 'z', seg: 12 }));
       for (const off of [-1, 1]) {
-        const rim = cyl(0.18, 0.05, C.dark, { axis: 'z', seg: 12 });
-        rim.position.z = off * 0.38;
-        barrel.add(rim);
-        const strap = cyl(0.178, 0.04, C.dark, { axis: 'z', seg: 12 });
-        strap.position.z = off * 0.18;
-        barrel.add(strap);
+        const rim = cyl(0.182, 0.04, C.dark, { axis: 'z', seg: 12 });
+        rim.position.z = off * 0.28;
+        drum.add(rim);
+        const strap = cyl(0.178, 0.03, C.dark, { axis: 'z', seg: 12 });
+        strap.position.z = off * 0.14;
+        drum.add(strap);
+        put(drum, box(0.05, 0.06, 0.05, C.steel, { r: 0.01 }), -0.19, 0, off * 0.14); // buckle
       }
-      barrel.position.set(x, 1.14, 0);
-      e.add(barrel);
+      drum.position.set(-1.45, HULL_TOP + 0.19, z);
+      e.add(drum);
     }
-    // unditching beam on the rear plate
-    put(e, box(0.14, 0.14, 1.2, C.wood), -1.46, 0.68, 0);
-    for (const z of [-0.45, 0.45]) put(e, box(0.1, 0.2, 0.06, C.steel), -1.44, 0.68, z);
+    // exhaust outlet, left rear corner
+    put(e, cyl(0.07, 0.2, C.dark, { seg: 8 }), -1.7, HULL_TOP + 0.1, -0.62);
   }
 
   // ------------------------------------------------------------------- gun
@@ -271,10 +391,10 @@ export function createTank() {
   }
 
   // ---------------------------------------------------------------- roof MG
-  // DShK-style gun on the commander's cupola. Tracks targets on its own.
+  // DShK on the loader's hatch ring. Tracks targets on its own.
   function buildMG() {
-    put(slots.mg, cyl(0.17, 0.04, C.dark, { seg: 10 }), MG_X, 0.66, MG_Z);
-    put(slots.mg, cyl(0.05, 0.14, C.steel, { seg: 8 }), MG_X, 0.74, MG_Z);
+    put(slots.mg, cyl(0.2, 0.035, C.dark, { seg: 12 }), MG_X, 0.64, MG_Z); // ring mount
+    put(slots.mg, cyl(0.05, 0.12, C.steel, { seg: 8 }), MG_X, 0.7, MG_Z);
     mgPivot = new THREE.Group();
     mgPivot.position.set(MG_X, MG_Y, MG_Z);
     slots.mg.add(mgPivot);
@@ -289,14 +409,16 @@ export function createTank() {
   }
 
   // ----------------------------------------------------------------- sights
-  // IR searchlight beside the gun, plus commander's periscopes.
+  // IR searchlight left of the gun on its own bracket, gunner's sight slit,
+  // and the commander's periscope block.
   function buildSights() {
     const s = slots.sights;
-    put(s, box(0.12, 0.12, 0.16, C.dark), 0.72, GUN_Y, -0.46);
-    put(s, cyl(0.14, 0.22, C.oliveDark, { axis: 'x', seg: 10 }), 0.87, GUN_Y + 0.03, -0.46);
-    put(s, cyl(0.105, 0.03, 0xd8f4ff, { axis: 'x', seg: 10, glow: true }), 0.99, GUN_Y + 0.03, -0.46);
-    put(s, box(0.12, 0.09, 0.1, C.dark), 0.08, 0.6, 0.5);
-    put(s, box(0.12, 0.09, 0.1, C.dark), -0.3, 0.6, 0.5);
+    put(s, box(0.16, 0.12, 0.2, C.dark, { r: 0.03 }), 0.82, GUN_Y - 0.02, -0.47); // bracket
+    put(s, cyl(0.17, 0.26, C.oliveDark, { axis: 'x', seg: 12 }), 0.97, GUN_Y + 0.05, -0.5); // housing
+    put(s, cyl(0.185, 0.05, C.steel, { axis: 'x', seg: 12 }), 1.12, GUN_Y + 0.05, -0.5); // hood ring
+    put(s, cyl(0.125, 0.03, 0xd8f4ff, { axis: 'x', seg: 12, glow: true }), 1.12, GUN_Y + 0.05, -0.5); // lens
+    put(s, box(0.08, 0.06, 0.16, C.dark), 1.1, GUN_Y + 0.12, -0.22); // gunner's sight
+    put(s, box(0.1, 0.07, 0.12, C.dark), 0.4, 0.5, -0.7); // side periscope
   }
 
   buildTracks();
@@ -336,7 +458,7 @@ export function createTank() {
     }
 
     const speed = ctx.speed || 0;
-    for (const w of spinners) w.rotation.z -= (speed * dt) / WHEEL_R;
+    for (const w of spinners) w.rotation.z -= (speed * dt) / w.userData.radius;
     if (speed) {
       trackOffset += speed * dt;
       updateTracks();

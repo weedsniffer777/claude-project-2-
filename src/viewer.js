@@ -79,10 +79,10 @@ const target = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), glowMat(0xff
 scene.add(target);
 
 // -------------------------------------------------------------- camera
-const VIEW_H = 4.6;
+const VIEW_H = 6.2;
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 80);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.9, 0);
+controls.target.set(0.5, 0.6, 0);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minZoom = 0.6;
@@ -94,7 +94,7 @@ controls.maxPolarAngle = THREE.MathUtils.degToRad(85);
 function resetCamera() {
   camera.position.set(-10, 11.5, 10);
   camera.zoom = 1;
-  controls.target.set(0, 0.9, 0);
+  controls.target.set(0.5, 0.6, 0);
   camera.updateProjectionMatrix();
   controls.update();
 }
