@@ -48,11 +48,11 @@ function groundTexture() {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = tex.minFilter = THREE.NearestFilter;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(8, 8);
+  tex.repeat.set(10, 10);
   return tex;
 }
 const ground = new THREE.Mesh(
-  new THREE.CylinderGeometry(5.5, 5.5, 0.4, 40),
+  new THREE.CylinderGeometry(7, 7, 0.4, 48),
   [new THREE.MeshToonMaterial({ color: 0x59606b }), new THREE.MeshToonMaterial({ map: groundTexture() }), new THREE.MeshToonMaterial({ color: 0x59606b })],
 );
 ground.position.y = -0.2;
@@ -69,7 +69,7 @@ for (const name of SLOT_NAMES) {
   const cb = document.createElement('input');
   cb.type = 'checkbox';
   cb.checked = true;
-  cb.addEventListener('change', () => (tank.slots[name].visible = cb.checked));
+  cb.addEventListener('change', () => tank.setSlotVisible(name, cb.checked));
   label.append(cb, name);
   partsEl.append(label);
 }
@@ -79,10 +79,10 @@ const target = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), glowMat(0xff
 scene.add(target);
 
 // -------------------------------------------------------------- camera
-const VIEW_H = 6.2;
+const VIEW_H = 7.2;
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 80);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0.5, 0.6, 0);
+controls.target.set(0.2, 0.8, 0);
 controls.enableDamping = true;
 controls.enablePan = false;
 controls.minZoom = 0.6;
@@ -94,7 +94,7 @@ controls.maxPolarAngle = THREE.MathUtils.degToRad(85);
 function resetCamera() {
   camera.position.set(-10, 11.5, 10);
   camera.zoom = 1;
-  controls.target.set(0.5, 0.6, 0);
+  controls.target.set(0.2, 0.8, 0);
   camera.updateProjectionMatrix();
   controls.update();
 }
@@ -128,6 +128,7 @@ pxSlider.addEventListener('input', () => {
 $('outline').addEventListener('change', (e) => pixel.setOutline(e.target.checked));
 $('turntable').checked = params.get('turntable') === '1';
 $('drive').checked = params.get('drive') === '1';
+$('mg').checked = params.get('mg') !== '0';
 $('reset').addEventListener('click', resetCamera);
 
 // --------------------------------------------------------- aiming & fire
@@ -196,7 +197,7 @@ function frame() {
   }
 
   const a = t * 0.9;
-  target.position.set(Math.cos(a) * 4.2, 0.4 + Math.sin(t * 3) * 0.08, -Math.sin(a * 1.3) * 4.2);
+  target.position.set(Math.cos(a) * 5.5, 0.4 + Math.sin(t * 3) * 0.08, -Math.sin(a * 1.3) * 5.5);
   target.rotation.y = t * 2;
   target.visible = $('mg').checked;
   mgPoint.copy(target.position);
