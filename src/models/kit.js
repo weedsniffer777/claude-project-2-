@@ -100,3 +100,14 @@ export function plate(parent, pos, size, color, face) {
   rivets(parent, pos, size, face);
   return m;
 }
+
+const sphereGeoCache = new Map();
+
+// Squashed low-poly sphere, for dome turrets and bustles.
+export function ellipsoid(rx, ry, rz, color, { wseg = 14, hseg = 9 } = {}) {
+  const key = `${wseg}|${hseg}`;
+  if (!sphereGeoCache.has(key)) sphereGeoCache.set(key, new THREE.SphereGeometry(1, wseg, hseg));
+  const mesh = new THREE.Mesh(sphereGeoCache.get(key), toon(color));
+  mesh.scale.set(rx, ry, rz);
+  return shadowed(mesh);
+}
