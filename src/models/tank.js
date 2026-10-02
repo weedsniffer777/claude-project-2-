@@ -83,10 +83,10 @@ const FENDER_PROFILE = [
   }),
 ];
 
-const TURRET_X = 0.25;
+const TURRET_X = 0.08;
 // Revolved turret profile: skirt from R0 (at the ring) tapering to R1 at h1,
 // then a superellipse dome of height D. sx stretches it front-to-back.
-const TURRET = { R0: 1.0, R1: 0.9, h1: 0.28, D: 0.45, p: 2.4, sx: 1.08, base: 0.06 };
+const TURRET = { R0: 1.0, R1: 0.9, h1: 0.28, D: 0.4, p: 2.4, sx: 1.08, base: 0.06 };
 const TURRET_SPEED = 3.2; // rad/s, gives the cannon some weight
 const MG_SPEED = 9;
 const GUN_Y = 0.36; // turret-local
@@ -269,10 +269,10 @@ export function createTank() {
   }
   put(hull, box(0.04, 0.08, 0.12, C.dark), -2.13, 0.88, -0.62); // tail light
   // engine deck: radiator louvres at the back, access plate, air intake left
-  for (let i = 0; i < 6; i++) put(hull, box(0.05, 0.03, 1.3, C.oliveDark, { r: 0.008 }), -1.98 + i * 0.09, DECK_Y + 0.015, 0);
-  put(hull, box(0.5, 0.03, 0.75, C.oliveLight, { r: 0.01 }), -1.2, DECK_Y + 0.015, 0);
-  for (const [dx, dz] of [[-0.2, -0.32], [0.2, -0.32], [-0.2, 0.32], [0.2, 0.32]]) put(hull, box(0.04, 0.03, 0.04, C.dark), -1.2 + dx, DECK_Y + 0.035, dz);
-  put(hull, box(0.36, 0.07, 0.3, C.oliveDark, { r: 0.02 }), -0.98, DECK_Y + 0.035, -0.52);
+  for (let i = 0; i < 5; i++) put(hull, box(0.05, 0.03, 1.3, C.oliveDark, { r: 0.008 }), -2.0 + i * 0.09, DECK_Y + 0.015, 0);
+  put(hull, box(0.42, 0.03, 0.75, C.oliveLight, { r: 0.01 }), -1.38, DECK_Y + 0.015, 0);
+  for (const [dx, dz] of [[-0.2, -0.32], [0.2, -0.32], [-0.2, 0.32], [0.2, 0.32]]) put(hull, box(0.04, 0.03, 0.04, C.dark), -1.38 + dx * 0.8, DECK_Y + 0.035, dz);
+  put(hull, box(0.3, 0.07, 0.28, C.oliveDark, { r: 0.02 }), -1.3, DECK_Y + 0.035, -0.62);
 
   // ------------------------------------------------------------- turret
   {
@@ -447,6 +447,31 @@ export function createTank() {
     }
   }
 
+  // Inner vertical plates under the front guards (between the guard and the
+  // glacis) and the rear guards, so you can't see through the covers.
+  function guardPanels(s) {
+    const tan = Math.tan(GLACIS_ANGLE);
+    const glacisY = (x) => HULL_TOP - (x - 1.3) * tan;
+    const under = FENDER_Y - 0.02;
+    const xStart = 1.3 + (HULL_TOP - under) / tan; // where the glacis drops below the cover
+    const front = [[xStart, under], [2.05, under]];
+    for (const deg of [72, 54]) {
+      const a = (deg * Math.PI) / 180;
+      front.push([2.05 + 0.26 * Math.cos(a), FENDER_Y - 0.28 + 0.26 * Math.sin(a)]);
+    }
+    front.push([2.25, glacisY(2.25) + 0.22], [2.25, glacisY(2.25)]);
+    const rear = [[-2.1, under], [-2.44, 0.69], [-2.1, 0.56]];
+    for (const pts of [front, rear]) {
+      const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.04, bevelEnabled: false });
+      geo.translate(0, 0, -0.02);
+      const mesh = new THREE.Mesh(geo, toon(C.dusty));
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.position.z = s * (HULL_W + 0.02);
+      tracks.add(mesh);
+    }
+  }
+
   // Suspension arms, final drive and idler crank, seen between the wheels.
   function runningGearDetail(s) {
     const z = s * (HULL_W + 0.05);
@@ -466,6 +491,7 @@ export function createTank() {
       idler(s);
       sprocket(s);
       trackCover(s);
+      guardPanels(s);
       runningGearDetail(s);
     }
     // stowage on the left cover (front)
@@ -479,12 +505,12 @@ export function createTank() {
   // exhaust outlet on the left, drums hung off the rear above the beam.
   function buildEngine() {
     const top = FENDER_Y + 0.025;
-    for (const x of [-1.62, -1.02, -0.42]) {
+    for (const x of [-1.85, -1.29, -0.73]) {
       put(engine, box(0.56, 0.28, 0.46, C.olive, { r: 0.05 }), x, top + 0.14, 1.07);
       for (const dx of [-0.16, 0.16]) put(engine, box(0.035, 0.29, 0.475, C.dark, { r: 0.008 }), x + dx, top + 0.14, 1.07);
     }
-    put(engine, cyl(0.03, 1.75, C.steel, { axis: 'x', seg: 6 }), -1.02, top + 0.3, 1.2); // feed pipe
-    put(engine, box(0.6, 0.26, 0.46, C.olive, { r: 0.05 }), -0.4, top + 0.13, -1.07); // oil tank
+    put(engine, cyl(0.03, 1.6, C.steel, { axis: 'x', seg: 6 }), -1.29, top + 0.3, 1.2); // feed pipe
+    put(engine, box(0.6, 0.26, 0.44, C.olive, { r: 0.05 }), -0.95, top + 0.13, -1.09); // oil tank
     // exhaust outlet on the left cover, sooty
     put(engine, box(0.46, 0.12, 0.3, C.dark, { r: 0.03 }), -1.68, top + 0.06, -0.98);
     for (let i = 0; i < 4; i++) put(engine, box(0.03, 0.02, 0.3, C.steel), -1.85 + i * 0.11, top + 0.13, -0.98);
