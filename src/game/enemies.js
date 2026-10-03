@@ -22,8 +22,9 @@ const DOG = {
   scrap: 3,
 };
 
-// The zone's heavy machine: a hound twice a dog's size that walks in slowly
-// and hoses the tank with long bursts.
+// The large quadruped: the zone's boss, a walker twice the size that comes
+// in slowly and hoses the tank with long bursts. (Small ones in the game's
+// text are "quadruped walkers"; in code they're dogs.)
 const HOUND = {
   ...DOG,
   hp: 600,

@@ -1,252 +1,243 @@
-// The depot: a safe stop between sectors, inside an abandoned trolleybus
-// garage. No machines, no red. Drive in over the repair pit (it patches the
-// hull), pick one of the parts laid out on pallets (an overhead crane bolts it
-// on), then the roller door opens onto the next sector.
+// The depot: a corrugated garage shack built right across the street at the
+// border between two sectors, walled in on both sides so it's the only way
+// through. Closed until the sector is clear; then the front roller door goes
+// up, the tank rolls in onto the repair plate, a part can be fitted by the
+// overhead crane, and it drives out the back door into the next sector.
 //
-// Built once, far from the street in the same scene, and reused for every
-// stop. Cutaway like a dollhouse: tall walls at the back and the far end, low
-// walls toward the camera; the roof is gone apart from its beams, and the
-// low sun comes in through the hole.
+// While the tank is inside, the roof and the two walls facing the camera
+// are hidden, dollhouse-style, so you can see in.
 import * as THREE from 'three';
-import { DUSK_SUN } from '../render/setup.js';
 import { box, cyl, put, toon, glowMat, gradientMap } from '../models/kit.js';
-import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
+import { canvas, tex, speckle } from './builder.js';
 import { partModel } from '../game/parts.js';
-import * as P from './props.js';
 
-export const DEPOT = { x: 0, z: 240 }; // origin, far from everything
-const W = 26; // inside length (x)
-const D = 9; // half depth (z)
-const H = 6.4;
+const H = 3.4; // wall height
 const SODIUM = 0xffa245;
-const SUN = 0xffc98a;
 const COLD = 0xcfe8ff;
 
-function floorTexture(rand) {
-  const S = 10;
-  const [c, g] = canvas(70 * S, 50 * S);
-  g.fillStyle = '#5d5b57';
-  g.fillRect(0, 0, c.width, c.height);
-  speckle(g, c.width, c.height, ['#55534f', '#66645f', '#4d4b48', '#6b6863'], c.width * c.height * 0.05, rand);
-  // slab joints
-  g.fillStyle = '#4a4845';
-  for (let x = 0; x < c.width; x += 4 * S) g.fillRect(x, 0, 1, c.height);
-  for (let y = 0; y < c.height; y += 4 * S) g.fillRect(0, y, c.width, 1);
-  // oil stains
-  for (let i = 0; i < 40; i++) {
-    g.fillStyle = rand() < 0.5 ? '#3c3a38' : '#45423f';
-    blob(g, rand() * c.width, rand() * c.height, 8 + rand() * 30, 6 + rand() * 20, rand, 11);
-  }
-  // painted bay lines (faded yellow)
-  const X = (x) => (x + 22) * S; // texture spans x -22..48 of the room
-  const Z = (z) => (z + 25) * S; // and z -25..25
-  g.fillStyle = '#a58a3e';
-  for (const z of [-3.2, 3.2]) for (let x = 2; x < 24; x += 1.4) if (rand() > 0.2) g.fillRect(X(x), Z(z), 0.8 * S, 0.15 * S);
-  for (const z of [-5.6, 0, 5.6]) {
-    g.strokeStyle = '#b39443';
-    g.lineWidth = 2;
-    g.strokeRect(X(15.3), Z(z - 1.2), 2.4 * S, 2.4 * S);
-  }
-  // outside the garage: dark slush
-  g.fillStyle = '#2a2a2e';
-  g.fillRect(0, 0, X(-0.3), c.height);
-  g.fillRect(X(W + 0.3), 0, c.width, c.height);
-  g.fillRect(0, 0, c.width, Z(-D - 0.3));
-  g.fillRect(0, Z(D + 0.3), c.width, c.height);
-  return tex(c);
-}
-
-function hazardTexture() {
+let tinTex = null;
+// Corrugated sheet: vertical ribs, a few rust runs.
+function tinTexture() {
+  if (tinTex) return tinTex;
   const [c, g] = canvas(32, 32);
-  g.fillStyle = '#2a2b2d';
+  g.fillStyle = '#ffffff';
   g.fillRect(0, 0, 32, 32);
-  g.fillStyle = '#c99a2e';
-  for (let i = -32; i < 64; i += 16) {
-    g.beginPath();
-    g.moveTo(i, 32);
-    g.lineTo(i + 8, 32);
-    g.lineTo(i + 40, 0);
-    g.lineTo(i + 32, 0);
-    g.fill();
+  for (let x = 0; x < 32; x += 4) {
+    g.fillStyle = '#c7c7c7';
+    g.fillRect(x, 0, 2, 32);
+    g.fillStyle = '#e6e6e6';
+    g.fillRect(x + 2, 0, 1, 32);
   }
-  const t = tex(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return t;
+  let s = 7;
+  const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#a0805f';
+  for (let i = 0; i < 6; i++) g.fillRect((r() * 32) | 0, (r() * 10) | 0, 1, 6 + r() * 16);
+  speckle(g, 32, 32, ['#00000020', '#ffffff30'], 60, r);
+  tinTex = tex(c);
+  tinTex.wrapS = tinTex.wrapT = THREE.RepeatWrapping;
+  return tinTex;
+}
+function tin(w, h, color) {
+  const t = tinTexture().clone();
+  t.needsUpdate = true;
+  t.repeat.set(w / 1.6, h / 1.6);
+  return new THREE.MeshToonMaterial({ map: t, color, gradientMap });
 }
 
-function wallTexture(w, h, rand, windows) {
-  const S = 12;
-  const [c, g] = canvas(w * S, h * S);
-  const [ce, ge] = canvas(w * S, h * S);
-  ge.fillStyle = '#000';
-  ge.fillRect(0, 0, ce.width, ce.height);
-  g.fillStyle = '#86837c';
-  g.fillRect(0, 0, c.width, c.height);
-  speckle(g, c.width, c.height, ['#00000018', '#ffffff10'], c.width * c.height * 0.06, rand);
-  // lower half painted a tired green, grime above it
-  g.fillStyle = '#5f7066';
-  g.fillRect(0, c.height - 1.6 * S, c.width, 1.6 * S);
-  g.fillStyle = '#4c5a52';
-  g.fillRect(0, c.height - 1.65 * S, c.width, 2);
-  g.fillStyle = '#00000022';
-  for (let i = 0; i < 30; i++) g.fillRect((rand() * c.width) | 0, (c.height - 1.6 * S) | 0, 2, (rand() * 1.2 * S) | 0);
-  // panel joints
-  g.fillStyle = '#00000030';
-  for (let x = 0; x < c.width; x += 3 * S) g.fillRect(x, 0, 1, c.height);
-  if (windows) {
-    // a band of high windows: cold dusk outside, some panes gone
-    for (let x = 1; x < w - 2; x += 2.6) {
-      const wx = x * S;
-      const wy = 1.0 * S;
-      g.fillStyle = ge.fillStyle = rand() < 0.3 ? '#9fb6cf' : '#6d7f99';
-      g.fillRect(wx, wy, 2.0 * S, 1.3 * S);
-      ge.fillRect(wx, wy, 2.0 * S, 1.3 * S);
-      g.fillStyle = ge.fillStyle = '#1d1e22';
-      for (let k = 1; k < 4; k++) {
-        g.fillRect(wx + (k * 2.0 * S) / 4, wy, 2, 1.3 * S);
-        ge.fillRect(wx + (k * 2.0 * S) / 4, wy, 2, 1.3 * S);
-      }
-      g.fillRect(wx, wy + 0.65 * S, 2.0 * S, 2);
-      ge.fillRect(wx, wy + 0.65 * S, 2.0 * S, 2);
+let hazTex = null;
+function hazard(w) {
+  if (!hazTex) {
+    const [c, g] = canvas(32, 32);
+    g.fillStyle = '#2a2b2d';
+    g.fillRect(0, 0, 32, 32);
+    g.fillStyle = '#c99a2e';
+    for (let i = -32; i < 64; i += 16) {
+      g.beginPath();
+      g.moveTo(i, 32);
+      g.lineTo(i + 8, 32);
+      g.lineTo(i + 40, 0);
+      g.lineTo(i + 32, 0);
+      g.fill();
     }
+    hazTex = tex(c);
+    hazTex.wrapS = hazTex.wrapT = THREE.RepeatWrapping;
   }
-  return { map: tex(c), emissiveMap: tex(ce) };
+  const t = hazTex.clone();
+  t.needsUpdate = true;
+  t.repeat.set(w / 0.7, 1);
+  return new THREE.MeshToonMaterial({ map: t, gradientMap });
 }
 
-export function buildDepot(scene) {
-  const B = new LevelBuilder(scene, 5150);
-  const rand = B.rand;
-  B.root.position.set(DEPOT.x, 0, DEPOT.z);
-  const O = new THREE.Vector3(DEPOT.x, 0, DEPOT.z);
-  const at = (x, y, z) => new THREE.Vector3(x, y, z).add(O);
-  const hazard = hazardTexture();
+// A roller door hanging in an opening of width w, facing along x.
+function rollerDoor(B, x, z, w) {
+  const door = new THREE.Group();
+  const slats = new THREE.Mesh(new THREE.BoxGeometry(0.12, H - 0.5, w), toon(0x56606a));
+  slats.position.y = (H - 0.5) / 2;
+  slats.castShadow = true;
+  door.add(slats);
+  for (let y = 0.25; y < H - 0.6; y += 0.3) put(door, box(0.16, 0.04, w - 0.05, 0x434b54), 0, y, 0);
+  const band = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.32), hazard(w));
+  band.rotation.y = -Math.PI / 2;
+  band.position.set(-0.09, 0.3, 0);
+  door.add(band);
+  door.position.set(x, 0, z);
+  B.add(door);
+  B.keep(door);
+  return door;
+}
 
-  // floor (inside and a margin of dark slush round it)
-  {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(70, 50), new THREE.MeshToonMaterial({ map: floorTexture(rand), gradientMap }));
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(13, 0, 0);
-    m.receiveShadow = true;
-    B.add(m);
-    B.solid(m);
-  }
-  // walls: tall at the back (north) and far end (east), low toward the camera
-  const wall = (x, z, w, h, d, map) => {
-    const mat = map ? new THREE.MeshToonMaterial({ map: map.map, emissiveMap: map.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1, gradientMap }) : toon(0x7f7c75);
-    const plain = toon(0x7f7c75);
-    const top = toon(0xc6c9ce);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), map ? [plain, plain, top, plain, mat, plain] : mat);
+// x0..x1 along the street, z0..z1 across it (the roadway). fill: how far
+// the side walls run out to seal the sidewalks ({ n, s } world z).
+export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  const L = x1 - x0;
+  const Wd = z1 - z0;
+  const DOOR = 5; // door opening width
+  const near = []; // hidden while the tank is inside: west wall, south wall, roof
+  const wall = (x, z, w, d, h, color, list) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), tin(Math.max(w, d), h, color));
     m.position.set(x, h / 2, z);
     m.castShadow = m.receiveShadow = true;
     B.add(m);
     B.solid(m);
-    B.block(x, z, w / 2, d / 2);
+    if (list) {
+      B.keep(m);
+      list.push(m);
+    }
     return m;
   };
-  wall(W / 2, -D - 0.3, W + 1.2, H, 0.6, wallTexture(W + 1.2, H, rand, true));
-  // east end: the exit door opening in the middle (z -3..3)
-  for (const s of [-1, 1]) {
-    const m = wall(W + 0.3, s * 6.1, 0.6, H, 5.8, null);
-    m.rotation.y = 0;
-  }
-  B.add(put(new THREE.Group(), box(0.6, H - 4.2, 6.6, 0x7f7c75), W + 0.3, 4.2 + (H - 4.2) / 2, 0));
-  // low walls on the near side and the west end (the way in)
-  wall(W / 2, D + 0.3, W + 1.2, 1.0, 0.6, null);
-  for (const s of [-1, 1]) wall(-0.3, s * 6.1, 0.6, 1.0, 5.8, null);
-  // tunnel mouth west: dark walls framing the way in
-  for (const s of [-1, 1]) {
-    B.chunk(6, 1.0, 0.6, 0x4a4845, -3.3, 0.5, s * 3.3);
-    B.block(-3.3, s * 3.3, 3, 0.3);
-  }
-  // pillars along the back, stubs of the lost roof's beams on them
-  for (let x = 0; x <= W; x += 6.5) {
-    B.chunk(0.6, H + 0.4, 0.6, 0x8d8b86, x, (H + 0.4) / 2, -D + 0.1);
-    B.block(x, -D + 0.1, 0.3, 0.3);
-    B.chunk(0.22, 0.4, 2.2, 0x45484c, x, H + 0.2, -D + 1.2);
-  }
-  // crane runway rail along the back wall
-  B.chunk(W, 0.25, 0.3, 0x3c3e42, W / 2, H - 0.35, -D + 0.5);
+  const WALL = 0x8a9a8e;
+  const DARK = 0x6d7a72;
 
-  // ------------------------------------------------------ repair pit
-  const PIT = { x0: 5, x1: 10.5, z0: -1.6, z1: 1.6 };
+  // floor slab inside
   {
-    const pit = new THREE.Mesh(new THREE.PlaneGeometry(PIT.x1 - PIT.x0, PIT.z1 - PIT.z0), toon(0x141416));
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(L, Wd), toon(0x5d5b57));
+    f.rotation.x = -Math.PI / 2;
+    f.position.set(cx, 0.02, cz);
+    f.receiveShadow = true;
+    B.add(f);
+  }
+  // back (north) wall: always shown
+  wall(cx, z0 - 0.15, L + 0.3, 0.3, H, DARK);
+  B.block(cx, z0 - 0.15, L / 2 + 0.15, 0.2);
+  // south wall: hidden while inside
+  wall(cx, z1 + 0.15, L + 0.3, 0.3, H, WALL, near);
+  B.block(cx, z1 + 0.15, L / 2 + 0.15, 0.2);
+  // end walls with the door openings
+  const side = (Wd - DOOR) / 2;
+  for (const [x, list] of [[x0 - 0.15, near], [x1 + 0.15, null]]) {
+    wall(x, z0 + side / 2, 0.3, side, H, list ? WALL : DARK, list);
+    wall(x, z1 - side / 2, 0.3, side, H, list ? WALL : DARK, list);
+    wall(x, cz, 0.3, DOOR, 0.6, list ? WALL : DARK, list).position.y = H - 0.3;
+    B.block(x, z0 + side / 2, 0.2, side / 2);
+    B.block(x, z1 - side / 2, 0.2, side / 2);
+  }
+  // roof: a shallow pitch of corrugated sheet on a frame
+  {
+    const roof = new THREE.Group();
+    for (const s of [-1, 1]) {
+      const sheet = new THREE.Mesh(new THREE.BoxGeometry(L + 0.8, 0.08, Wd / 2 + 0.5), tin(L, Wd / 2, 0x7c7368));
+      sheet.position.set(0, 0.3, (s * (Wd / 2 + 0.5)) / 2);
+      sheet.rotation.x = s * 0.12;
+      sheet.castShadow = sheet.receiveShadow = true;
+      roof.add(sheet);
+    }
+    put(roof, box(L + 0.9, 0.12, 0.3, 0x45484c), 0, 0.58, 0);
+    // a snow crust, and a hole where a sheet blew off
+    put(roof, box(L * 0.6, 0.05, 1.6, 0xd3d6db), -L * 0.15, 0.48, -Wd * 0.22).rotation.x = -0.12;
+    roof.position.set(cx, H, cz);
+    B.add(roof);
+    B.keep(roof);
+    near.push(roof);
+  }
+  // the walls running out to seal the sidewalks either side
+  for (const [za, zb] of [[fill.n, z0 - 0.3], [z1 + 0.3, fill.s]]) {
+    if (zb - za < 0.1) continue;
+    const zc = (za + zb) / 2;
+    const y = heightAt(cx, zc);
+    const m = wall(cx, zc, 1.2, zb - za, 2.6, 0x7b7a76);
+    m.material = toon(0x85827b);
+    m.position.y = y + 1.3;
+    B.block(cx, zc, 0.6, (zb - za) / 2);
+    // razor wire on top
+    for (let z = za + 0.2; z < zb; z += 0.5) B.piece(0.05, 0.3, 0.05, 0x3a3c3f, cx, y + 2.75, z, 0.4, 0, 0.3);
+  }
+
+  // what makes it read from down the street: a lit sign, a beacon, work lights
+  {
+    const sign = new THREE.Group();
+    put(sign, box(0.1, 0.9, 3.4, 0x2c3034), 0, 0, 0);
+    // a wrench glyph in cold tube
+    const tube = (w, h, y, z, rz = 0) => (put(sign, box(0.06, h, w, COLD, { glow: true }), -0.07, y, z).rotation.x = rz);
+    tube(1.8, 0.08, 0, -0.5);
+    tube(0.08, 0.5, 0, -1.4);
+    tube(0.08, 0.5, 0, 0.4);
+    tube(0.6, 0.08, 0.2, 0.9);
+    tube(0.6, 0.08, -0.2, 0.9);
+    sign.position.set(x0 - 0.35, H + 0.75, cz);
+    B.add(sign);
+    B.emit(new THREE.Vector3(x0 - 1.5, H, cz), COLD, 10, 8);
+  }
+  const beacon = B.keep(put(B.root, box(0.26, 0.2, 0.26, 0xffb02a, { glow: true }), cx, H + 0.95, cz));
+  const beaconE = B.emit(new THREE.Vector3(cx, H + 1.4, cz), 0xffa21f, 10, 9);
+  // green "go" lamps over both doors (lit once a door opens)
+  const goLamps = [x0 - 0.35, x1 + 0.35].map((x) => B.keep(put(B.root, box(0.12, 0.2, 0.5, 0x1d2a20), x, H - 0.75, cz)));
+  // floodlight pool on the apron in front
+  B.pool(x0 - 2.2, cz, 3, SODIUM, 0.18, { sx: 0.9, sz: 1.3 });
+
+  // ------------------------------------------------------ inside
+  // repair plate in the middle
+  const plate = new THREE.Vector3(cx, 0, cz);
+  {
+    const pit = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 2.6), toon(0x161618));
     pit.rotation.x = -Math.PI / 2;
-    pit.position.set((PIT.x0 + PIT.x1) / 2, 0.015, 0);
+    pit.position.set(cx, 0.03, cz);
     B.add(pit);
-    for (const z of [PIT.z0 - 0.15, PIT.z1 + 0.15]) {
-      const t = hazard.clone();
-      t.needsUpdate = true;
-      t.repeat.set((PIT.x1 - PIT.x0) / 0.6, 1);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(PIT.x1 - PIT.x0, 0.3), new THREE.MeshToonMaterial({ map: t, gradientMap }));
+    for (const z of [cz - 1.45, cz + 1.45]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 0.3), hazard(4.6));
       m.rotation.x = -Math.PI / 2;
-      m.position.set((PIT.x0 + PIT.x1) / 2, 0.02, z);
+      m.position.set(cx, 0.035, z);
       B.add(m);
     }
-    // work lamps at the pit
-    for (const [x, z] of [[PIT.x0 - 0.6, PIT.z1 + 1.2], [PIT.x1 + 0.6, PIT.z0 - 1.2]]) {
-      for (let k = 0; k < 3; k++) B.piece(0.04, 1.4, 0.04, 0x3a3c3f, x + Math.cos(k * 2.1) * 0.25, 0.7, z + Math.sin(k * 2.1) * 0.25, Math.sin(k * 2.1) * 0.2, 0, -Math.cos(k * 2.1) * 0.2);
-      put(B.root, box(0.4, 0.3, 0.2, 0x2e3034, { r: 0.03 }), x, 1.45, z);
-      put(B.root, box(0.3, 0.22, 0.04, COLD, { glow: true }), x, 1.45, z + (z > 0 ? -0.11 : 0.11));
-    }
-    B.emit(new THREE.Vector3((PIT.x0 + PIT.x1) / 2, 2.2, 0), COLD, 14, 7);
-    B.pool((PIT.x0 + PIT.x1) / 2, 0, 3.2, COLD, 0.16, { sx: 1.3 });
   }
-
-  // ---------------------------------------------------------- pallets
-  const PAD_X = 16.5;
-  const pads = [-5.6, 0, 5.6].map((z) => {
-    for (let i = 0; i < 3; i++) B.piece(1.7, 0.08, 0.32, 0x7a5f3e, PAD_X, 0.16, z - 0.6 + i * 0.6);
-    for (const dz of [-0.7, 0, 0.7]) B.piece(1.7, 0.12, 0.14, 0x5c472e, PAD_X, 0.06, z + dz);
-    // hanging lamp over each pallet
-    B.line([at(PAD_X, H, z).sub(O), new THREE.Vector3(PAD_X, 3.4, z)]);
-    put(B.root, cyl(0.3, 0.18, 0x2e3034, { seg: 8, radiusEnd: 0.12 }), PAD_X, 3.3, z);
-    put(B.root, cyl(0.18, 0.05, SODIUM, { seg: 8, glow: true }), PAD_X, 3.2, z);
-    const e = B.emit(new THREE.Vector3(PAD_X, 2.4, z), SODIUM, 14, 6);
-    const p = B.pool(PAD_X, z, 1.8, SODIUM, 0.26);
+  // hanging lamps
+  for (const x of [cx - L * 0.28, cx + L * 0.28]) {
+    put(B.root, cyl(0.26, 0.15, 0x2e3034, { seg: 8, radiusEnd: 0.1 }), x, H - 0.5, cz);
+    put(B.root, cyl(0.15, 0.05, SODIUM, { seg: 8, glow: true }), x, H - 0.59, cz);
+    B.emit(new THREE.Vector3(x, H - 1.2, cz), SODIUM, 13, 7);
+    B.pool(x, cz, 2.2, SODIUM, 0.2);
+  }
+  // pallets along the back wall, a part on each
+  const pads = [-1, 0, 1].map((k) => {
+    const x = cx + k * (L / 3.3);
+    const z = z0 + 1.0;
+    for (let i = 0; i < 3; i++) B.piece(1.6, 0.08, 0.3, 0x7a5f3e, x, 0.16, z - 0.5 + i * 0.5);
+    for (const dz of [-0.6, 0, 0.6]) B.piece(1.6, 0.12, 0.14, 0x5c472e, x, 0.06, z + dz);
     const holder = new THREE.Group();
-    holder.position.set(PAD_X, 0.24, z);
+    holder.position.set(x, 0.22, z);
     B.add(holder);
     B.keep(holder);
-    return { x: PAD_X + O.x, z: z + O.z, local: new THREE.Vector3(PAD_X, 0.24, z), holder, light: e, pool: p, offer: null, model: null };
+    return { x, z, local: new THREE.Vector3(x, 0.22, z), holder, offer: null, model: null };
   });
+  // a workbench, tool rack, oil drums in the corners
+  B.piece(1.8, 0.1, 0.7, 0x6b5640, x1 - 1.3, 0.9, z1 - 0.6);
+  for (const dx of [-0.8, 0.8]) B.piece(0.08, 0.9, 0.6, 0x45484c, x1 - 1.3 + dx, 0.45, z1 - 0.6);
+  for (let i = 0; i < 3; i++) put(B.root, cyl(0.28, 0.8, [0x6b5843, 0x56606a, 0x5f6f47][i], { seg: 10 }), x0 + 0.6 + i * 0.62, 0.4, z1 - 0.5);
 
-  // ---------------------------------------------------------- exit door
-  const door = new THREE.Group();
-  {
-    const t = hazard.clone();
-    t.needsUpdate = true;
-    t.repeat.set(4, 0.4);
-    const slats = new THREE.Mesh(new THREE.BoxGeometry(0.16, 4.2, 6.4), toon(0x56606a));
-    slats.position.y = 2.1;
-    slats.castShadow = true;
-    door.add(slats);
-    for (let y = 0.3; y < 4.1; y += 0.35) put(door, box(0.04, 0.05, 6.3, 0x434b54), -0.09, y, 0);
-    const band = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 0.4), new THREE.MeshToonMaterial({ map: t, gradientMap }));
-    band.position.set(-0.09, 0.4, 0);
-    band.rotation.y = -Math.PI / 2;
-    door.add(band);
-    door.position.set(W + 0.15, 0, 0);
-    B.add(door);
-    B.keep(door);
-  }
-  const doorBlock = B.block(W + 0.15, 0, 0.3, 3.3);
-  // amber beacon over the door
-  const beacon = B.keep(put(B.root, box(0.24, 0.2, 0.24, 0xffb02a, { glow: true }), W - 0.2, 4.6, -3.6));
-  const beaconE = B.emit(new THREE.Vector3(W - 1, 4.4, -3.6), 0xffa21f, 10, 7);
-  // light spilling in once it's open: cold dusk
-  const outside = B.pool(W - 2, 0, 4.2, COLD, 0, { sx: 1.1, sz: 0.9 });
-  const outsideE = B.emit(new THREE.Vector3(W - 1.5, 2.5, 0), COLD, 18, 9, { level: 0 });
+  // entry and exit roller doors (in the game's block list while shut)
+  const doorIn = rollerDoor(B, x0 - 0.15, cz, DOOR);
+  const doorOut = rollerDoor(B, x1 + 0.15, cz, DOOR);
+  const blockIn = B.block(x0 - 0.15, cz, 0.25, DOOR / 2);
+  const blockOut = B.block(x1 + 0.15, cz, 0.25, DOOR / 2);
 
-  // ------------------------------------------------------------ crane
-  // A bridge crane on the runway rails: the bridge rides along x, the trolley
-  // across it, the hook up and down on its cable.
-  // (the bridge and trolley run high above, out of the picture: only the
-  // cable and hook come down into view)
-  const crane = { x: PAD_X, z: 0, y: 4.6 };
+  // ------------------------------------------------------ crane hook
+  // (the crane itself runs high in the roof space; the cable and hook come
+  // down into view)
+  const crane = { x: cx, z: z0 + 1.0, y: H + 4 };
   const hook = new THREE.Group();
-  put(hook, box(0.5, 0.32, 0.36, 0xc99a2e, { r: 0.04 }), 0, 0.1, 0);
-  put(hook, box(0.12, 0.3, 0.08, 0x2b2c2e), 0, -0.2, 0);
+  put(hook, box(0.45, 0.3, 0.34, 0xc99a2e, { r: 0.04 }), 0, 0.1, 0);
+  put(hook, box(0.1, 0.28, 0.08, 0x2b2c2e), 0, -0.18, 0);
   B.add(hook);
   B.keep(hook);
   const cableGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]);
@@ -257,129 +248,33 @@ export function buildDepot(scene) {
   const placeCrane = () => {
     hook.position.set(crane.x, crane.y, crane.z);
     const a = cableGeo.attributes.position;
-    a.setXYZ(0, crane.x, 16, crane.z);
+    a.setXYZ(0, crane.x, 20, crane.z);
     a.setXYZ(1, crane.x, crane.y + 0.25, crane.z);
     a.needsUpdate = true;
+    hook.visible = cable.visible = state.inside;
   };
+
+  // ------------------------------------------------------ behaviour
+  const state = { inDoor: 0, outDoor: 0, openIn: false, openOut: false, inside: false, crane: null };
+  let blocksRef = B.blocks;
+  const drop = (b) => {
+    const i = blocksRef.indexOf(b);
+    if (i >= 0) blocksRef.splice(i, 1);
+  };
+  const keepBlock = (b) => blocksRef.includes(b) || blocksRef.push(b);
   placeCrane();
 
-  // ------------------------------------------------------------ props
-  P.bus(B, 9, -6.6, 0.02);
-  for (const x of [7, 11]) for (const z of [-5.8, -7.4]) B.piece(0.4, 0.5, 0.4, 0xc99a2e, x, 0.25, z);
-  // workbench and tool racks along the back
-  B.chunk(2.6, 0.12, 0.9, 0x6b5640, 20.5, 1.0, -8.2);
-  for (const x of [19.4, 21.6]) B.piece(0.1, 1.0, 0.8, 0x45484c, x, 0.5, -8.2);
-  B.block(20.5, -8.2, 1.3, 0.45);
-  for (let i = 0; i < 6; i++) B.piece(0.3 + rand() * 0.4, 0.2 + rand() * 0.3, 0.3, [0x3c5a7a, 0x6b6f72, 0xc99a2e][i % 3], 19.8 + i * 0.3, 1.2, -8.3);
-  for (const x of [23.5, 24.8]) {
-    B.chunk(1.1, 2.8, 0.5, 0x4f5a55, x, 1.4, -8.5);
-    for (let k = 0; k < 4; k++) B.piece(1.0, 0.05, 0.5, 0x3a3c3f, x, 0.5 + k * 0.7, -8.4);
-    for (let k = 0; k < 6; k++) B.piece(0.25, 0.22, 0.3, [0x6b5a3e, 0x56606a, 0x7a7f62][k % 3], x - 0.35 + (k % 3) * 0.35, 0.65 + Math.floor(k / 3) * 0.7, -8.4);
-  }
-  B.block(24.15, -8.5, 1.3, 0.3);
-  // scrap heaps in the corners, tires, a burning barrel by the way in
-  for (const [x, z, r] of [[2, -7.2, 1.4], [24, 7.4, 1.2], [1.6, 7.2, 1.0]]) {
-    for (let i = 0; i < 26; i++) {
-      const a = rand() * Math.PI * 2;
-      const d = Math.sqrt(rand()) * r;
-      const s = 0.2 + rand() * 0.4;
-      B.piece(s * (1 + rand()), s * 0.6, s, [0x6d5a48, 0x56606a, 0x4a4c50, 0x7a6a52][(rand() * 4) | 0], x + Math.cos(a) * d, (1 - d / r) * 0.8 + 0.1, z + Math.sin(a) * d, rand() * 3, rand() * 3, rand() * 3);
-    }
-    B.block(x, z, r * 0.8, r * 0.7);
-  }
-  P.tires(B, 21.5, 0, 7.4, 6);
-  B.block(21.5, 7.4, 0.8, 0.8);
-  {
-    const x = 3.2;
-    const z = 6.2;
-    put(B.root, cyl(0.3, 0.8, 0x5a4636, { seg: 10 }), x, 0.4, z);
-    B.block(x, z, 0.32, 0.32);
-    const flames = [0xffb347, 0xffd27a, 0xff8a35].map((c, i) => {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.22 - i * 0.04, 0.6, 6), glowMat(c));
-      f.position.set(x + (i - 1) * 0.08, 0.95, z);
-      B.add(f);
-      B.keep(f);
-      return f;
-    });
-    const e = B.emit(new THREE.Vector3(x, 1.3, z), 0xff9a40, 12, 7);
-    const p = B.pool(x, z, 2.2, 0xff9a40, 0.3);
-    B.animate((dt, t) => {
-      flames.forEach((f, i) => {
-        const s = 0.75 + Math.sin(t * (11 + i * 3) + i) * 0.25 + Math.sin(t * 23 + i) * 0.1;
-        f.scale.set(1, s, 1);
-        f.position.y = 0.8 + s * 0.3;
-      });
-      const k = 0.8 + Math.sin(t * 13) * 0.12 + Math.sin(t * 29) * 0.08;
-      e.level = k;
-      p.material.opacity = 0.3 * k;
-    });
-  }
-  // the sun through the broken roof: one strong shaft onto the floor
-  {
-    const dir = DUSK_SUN.clone().negate().normalize();
-    const ground = (p) => {
-      const t = p.y / -dir.y;
-      return new THREE.Vector3(p.x + dir.x * t, 0.03, p.z + dir.z * t);
-    };
-    const top = [new THREE.Vector3(11.5, H, -6), new THREE.Vector3(14.5, H, -6), new THREE.Vector3(14.5, H, -3.4), new THREE.Vector3(11.5, H, -3.4)];
-    const bottom = top.map(ground);
-    const pos = [];
-    const col = [];
-    for (let i = 0; i < 4; i++) {
-      const a = top[i];
-      const b = top[(i + 1) % 4];
-      const c = bottom[(i + 1) % 4];
-      const d = bottom[i];
-      for (const [p, k] of [[a, 1], [b, 1], [c, 0.15], [a, 1], [c, 0.15], [d, 0.15]]) {
-        pos.push(p.x, p.y, p.z);
-        col.push(k, k, k);
-      }
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-    B.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: SUN, vertexColors: true, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
-    const patch = new THREE.BufferGeometry().setFromPoints([bottom[0], bottom[1], bottom[2], bottom[0], bottom[2], bottom[3]]);
-    B.add(new THREE.Mesh(patch, new THREE.MeshBasicMaterial({ color: SUN, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
-  }
-  // warm lamps hanging along the bay
-  for (const x of [4, 10, 22]) {
-    B.line([new THREE.Vector3(x, H, 2.5), new THREE.Vector3(x, 3.8, 2.5)]);
-    put(B.root, cyl(0.28, 0.16, 0x2e3034, { seg: 8, radiusEnd: 0.1 }), x, 3.7, 2.5);
-    put(B.root, cyl(0.16, 0.05, SODIUM, { seg: 8, glow: true }), x, 3.61, 2.5);
-    B.emit(new THREE.Vector3(x, 2.8, 2.5), SODIUM, 13, 7);
-    B.pool(x, 2.5, 2.2, SODIUM, 0.2);
-  }
-
-  B.finish();
-  B.mergeStatic();
-
-  // --------------------------------------------------------- behaviour
-  const state = { doorOpen: 0, opening: false, crane: null, sparks: 0 };
-  function reset() {
-    state.doorOpen = 0;
-    state.opening = false;
-    state.crane = null;
-    door.position.y = 0;
-    if (blocksRef && !blocksRef.includes(doorBlock)) blocksRef.push(doorBlock);
-    outside.material.opacity = 0;
-    outsideE.level = 0;
-    Object.assign(crane, { x: PAD_X, z: 0, y: 4.6 });
+  function setInside(on) {
+    state.inside = on;
+    for (const m of near) m.visible = !on;
     placeCrane();
-    for (const p of pads) {
-      p.holder.clear();
-      p.offer = null;
-      p.light.level = 1;
-      p.pool.visible = true;
-    }
   }
-  let blocksRef = null; // the game's live block list (the door is in it)
   function setOffers(ids) {
     pads.forEach((p, i) => {
       p.holder.clear();
+      p.holder.visible = true;
       p.offer = ids[i] ?? null;
-      p.light.level = p.offer ? 1 : 0;
-      p.pool.visible = !!p.offer;
+      p.model = null;
       if (p.offer) {
         p.model = partModel(p.offer);
         p.holder.add(p.model);
@@ -387,107 +282,101 @@ export function buildDepot(scene) {
     });
   }
   // The crane lifts the chosen part off its pallet and lowers it onto the
-  // tank. onFit fires when it touches the hull; onDone when the hook is back.
-  function install(index, getTank, { onFit, onDone }) {
-    const pad = pads[index];
-    const path = [];
-    state.crane = { t: 0, pad, getTank, onFit, onDone, fitted: false, path };
-    for (const p of pads) if (p !== pad) {
-      p.light.level = 0.15;
-      p.pool.visible = false;
-      p.holder.visible = false;
-    }
+  // tank: onFit when it touches the hull, onDone when the hook is back up.
+  function install(id, getTank, { onFit, onDone }) {
+    const pad = pads.find((p) => p.offer === id);
+    state.crane = { t: 0, pad, getTank, onFit, onDone, fitted: false };
+    for (const p of pads) if (p !== pad) p.holder.visible = false;
   }
-  function openDoor() {
-    state.opening = true;
-  }
-
   const lerp = THREE.MathUtils.lerp;
-  function update(dt, t, ctx = {}) {
-    B.update(dt, t, ctx);
+  const ease = (k) => k * k * (3 - 2 * k);
+  function update(dt, t) {
     beacon.rotation.y = t * 5;
     beaconE.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5));
-    for (const p of pads) if (p.model && p.holder.visible) {
+    if (state.openIn) state.inDoor = Math.min(1, state.inDoor + dt * 0.9);
+    else state.inDoor = Math.max(0, state.inDoor - dt * 0.9);
+    if (state.openOut) state.outDoor = Math.min(1, state.outDoor + dt * 0.9);
+    doorIn.position.y = state.inDoor * (H - 0.6);
+    doorIn.scale.y = 1 - state.inDoor * 0.8;
+    doorOut.position.y = state.outDoor * (H - 0.6);
+    doorOut.scale.y = 1 - state.outDoor * 0.8;
+    if (state.inDoor > 0.6) drop(blockIn);
+    else if (state.inDoor < 0.3) keepBlock(blockIn);
+    if (state.outDoor > 0.6) drop(blockOut);
+    goLamps[0].material = state.openIn && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
+    goLamps[1].material = state.openOut && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
+    for (const p of pads) if (p.model && p.model.parent === p.holder) {
       p.model.rotation.y = Math.sin(t * 0.8) * 0.5;
       p.model.position.y = 0.05 + Math.sin(t * 2) * 0.04;
     }
-    if (state.opening && state.doorOpen < 1) {
-      state.doorOpen = Math.min(1, state.doorOpen + dt * 0.7);
-      door.position.y = state.doorOpen * 4.0;
-      outside.material.opacity = 0.2 * state.doorOpen;
-      outsideE.level = state.doorOpen;
-      if (state.doorOpen > 0.6 && blocksRef) {
-        const i = blocksRef.indexOf(doorBlock);
-        if (i >= 0) blocksRef.splice(i, 1);
-      }
-    }
     const c = state.crane;
-    if (c) {
-      c.t += dt;
-      const tank = c.getTank(); // world position of the tank deck
-      const tx = tank.x - O.x;
-      const tz = tank.z - O.z;
-      const px = c.pad.local.x;
-      const pz = c.pad.local.z;
-      // 0-0.5 over the pad and down; 0.5-0.8 hook up with the part; 0.8-1.6
-      // across to the tank; 1.6-2.0 down onto it; then back up
-      const T = c.t;
-      const ease = (k) => k * k * (3 - 2 * k);
-      if (T < 0.5) {
-        const k = ease(T / 0.5);
-        crane.x = lerp(crane.x, px, k);
-        crane.z = lerp(crane.z, pz, k);
-        crane.y = lerp(4.6, 1.0, k);
-      } else if (T < 0.8) {
-        if (c.pad.model && c.pad.model.parent === c.pad.holder) hook.attach(c.pad.model);
-        crane.y = lerp(1.0, 4.4, ease((T - 0.5) / 0.3));
-      } else if (T < 1.6) {
-        const k = ease((T - 0.8) / 0.8);
-        crane.x = lerp(px, tx, k);
-        crane.z = lerp(pz, tz, k);
-      } else if (T < 2.0) {
-        crane.x = tx;
-        crane.z = tz;
-        crane.y = lerp(4.4, 2.0, ease((T - 1.6) / 0.4));
-      } else if (!c.fitted) {
-        c.fitted = true;
-        if (c.pad.model) c.pad.model.removeFromParent();
-        c.onFit?.();
-      } else if (T < 2.7) {
-        crane.y = lerp(2.0, 4.6, ease((T - 2.0) / 0.7));
-      } else {
-        state.crane = null;
-        c.onDone?.();
-      }
-      placeCrane();
+    if (!c) return;
+    c.t += dt;
+    const tank = c.getTank();
+    const px = c.pad.local.x;
+    const pz = c.pad.local.z;
+    const T = c.t;
+    // over the pallet and down, up with the part, across, down onto the tank
+    if (T < 0.5) {
+      const k = ease(T / 0.5);
+      crane.x = lerp(crane.x, px, k);
+      crane.z = lerp(crane.z, pz, k);
+      crane.y = lerp(H + 4, 1.0, k);
+    } else if (T < 0.8) {
+      if (c.pad.model && c.pad.model.parent === c.pad.holder) hook.attach(c.pad.model);
+      crane.y = lerp(1.0, H + 0.5, ease((T - 0.5) / 0.3));
+    } else if (T < 1.5) {
+      const k = ease((T - 0.8) / 0.7);
+      crane.x = lerp(px, tank.x, k);
+      crane.z = lerp(pz, tank.z, k);
+    } else if (T < 1.9) {
+      crane.x = tank.x;
+      crane.z = tank.z;
+      crane.y = lerp(H + 0.5, 2.0, ease((T - 1.5) / 0.4));
+    } else if (!c.fitted) {
+      c.fitted = true;
+      c.pad.model?.removeFromParent();
+      c.onFit?.();
+    } else if (T < 2.6) {
+      crane.y = lerp(2.0, H + 4, ease((T - 1.9) / 0.7));
+    } else {
+      state.crane = null;
+      c.onDone?.();
     }
+    placeCrane();
   }
 
   return {
-    origin: O,
-    builder: B,
-    colliders: B.colliders,
-    blocks: B.blocks,
-    emitters: B.emitters,
-    crushables: B.crushables || [],
+    x0,
+    x1,
+    plate,
     pads,
-    pit: { x0: PIT.x0 + O.x, x1: PIT.x1 + O.x, z0: PIT.z0 + O.z, z1: PIT.z1 + O.z },
-    entry: { x: O.x + 1.5, z: O.z, yaw: 0 },
-    exitX: O.x + W - 1.2,
-    exitPoint: at(W - 0.5, 0.4, 0),
-    bounds: { minX: O.x - 1, maxX: O.x + W + 1, minZ: O.z - D + 1.2, maxZ: O.z + D - 1.2 },
-    // where the camera looks while you're inside: the room, leaning toward the tank
-    focus: new THREE.Vector3(O.x + 14, 0, O.z + 1),
+    focus: new THREE.Vector3(cx, 0, cz),
+    door: new THREE.Vector3(x0 - 0.5, 1.6, cz),
+    // drive-in and drive-out points
+    inside: new THREE.Vector3(cx, 0, cz),
+    outside: new THREE.Vector3(x1 + 3.2, 0, cz),
     bindBlocks(list) {
       blocksRef = list;
     },
-    reset,
+    openIn() {
+      state.openIn = true;
+    },
+    closeIn() {
+      state.openIn = false;
+    },
+    openOut() {
+      state.openOut = true;
+    },
+    get inDoor() {
+      return state.inDoor;
+    },
+    get outDoor() {
+      return state.outDoor;
+    },
+    setInside,
     setOffers,
     install,
-    openDoor,
-    get doorOpen() {
-      return state.doorOpen;
-    },
     get busy() {
       return !!state.crane;
     },

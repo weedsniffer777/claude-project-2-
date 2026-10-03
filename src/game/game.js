@@ -98,7 +98,6 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     pickups?.dispose();
     pickups = new Pickups(scene);
     crushing = new Crushing(level.crushables, { combat, removeBlock: api.removeBlock, removeCollider: api.removeCollider });
-    level.depot?.bindBlocks(blocks);
     lamps = [];
     applyQuality();
     // faint line from the barrel to where the shell would land
@@ -141,7 +140,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hitstop: 0,
       depot: null,
       fading: false,
+      auto: null,
     });
+    hud.showContinue(null);
+    hud.showPicker(null);
     speed = 0;
     reload = 1;
     hasAim = false;
@@ -257,27 +259,29 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     giveRockets() {
       run.rockets = true;
     },
-    boss(e, name = 'Heavy machine') {
+    boss(e, name = 'Large quadruped') {
       run.boss = e ? { e, name } : null;
       if (!e) hud.setBoss(null, null);
     },
-    // Drive into the depot: repair pit, a pick of parts, then the door.
-    // gift: 'rockets' bolts the fuel-can rockets on first. onLeave: when the
-    // tank drives out the far door.
-    depot({ offers, gift = null, onLeave }) {
-      const d = level.depot;
-      api.transition(() => {
-        enemies.dispose();
-        d.reset();
-        d.setOffers(offers);
-        level.bounds = d.bounds;
-        api.teleport(d.entry.x, d.entry.z, d.entry.yaw);
-        run.mode = 'depot';
-        run.depot = { step: 'repair', offers, gift, onLeave, repaired: false, t: 0 };
-        hud.setObjective('Repair, then pick a part');
-        hud.prompt('Depot', 'Safe for now. Drive over the <b>pit</b> to repair.', { go: true });
-        hud.setArrow(new THREE.Vector3((d.pit.x0 + d.pit.x1) / 2, 0.6, (d.pit.z0 + d.pit.z1) / 2), 'Repair');
-      });
+    // Roll into a depot shack: the tank drives itself onto the repair plate,
+    // a pick of parts pops up (or skip), then Continue drives it out the back.
+    // gift: 'rockets' rigs the fuel-can rockets first. onLeave: once it's out.
+    depot(shack, { offers, gift = null, onLeave }) {
+      if (run.mode === 'depot') return;
+      run.mode = 'depot';
+      run.locked = true;
+      queued = 0;
+      pickups.collectAll(collect);
+      hud.setArrow(null);
+      hud.setSpot(null);
+      run.spot = null;
+      shack.setOffers(offers);
+      shack.setInside(true);
+      level.bounds = { ...level.bounds, minX: Math.min(level.bounds.minX, shack.x0 - 4), maxX: shack.outside.x + 1.5 };
+      run.depot = { shack, step: 'in', offers, gift, onLeave, t: 0 };
+      hud.setObjective('Depot');
+      hud.prompt('Depot', 'Safe for now. Rolling onto the repair plate.', { go: true });
+      run.auto = shack.inside;
     },
     prompt: (tag, html, opts) => hud.prompt(tag, html, opts),
     clearPrompt: () => hud.clearPrompt(),
@@ -294,6 +298,21 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       if (i >= 0) colliders.splice(i, 1);
     },
     shake: (k) => (combat.shake = Math.max(combat.shake, k)),
+    // break a crushable from the script (an airstrike, say)
+    crush(c, from = { x: c.footprint.x - 1, z: c.footprint.z, yaw: 0 }) {
+      if (!c.done) crushing.crush(c, from);
+    },
+    // splash damage from the script (bombs)
+    blast(at, radius, damage) {
+      for (const h of enemies.blast(at, radius, damage)) {
+        const p = new THREE.Vector3(h.e.pos.x, 1.2, h.e.pos.z);
+        hud.damage(p, h.amount, 'big');
+        if (h.killed) hud.damage(p.clone().setY(1.9), 0, 'kill');
+      }
+    },
+    get enemies() {
+      return enemies.alive;
+    },
     get combat() {
       return combat;
     },
@@ -312,7 +331,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hud.showEnd(
         'win',
         title,
-        [['Time', `${m}:${s}`], ['Machines destroyed', killedTotal + enemies.killed], ['Parts fitted', run.parts.length], ['Scrap', run.scrap]],
+        [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Parts fitted', run.parts.length], ['Scrap', run.scrap]],
         'Play again',
         () => loadLevel(levelDef.id),
         `+${run.scrap} scrap banked${total != null ? ` · ${total} total` : ''}`,
@@ -320,7 +339,6 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.style.cursor = '';
     },
   };
-  const killedTotal = 0;
   let mgActive = false;
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
@@ -374,7 +392,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.showEnd(
       'lose',
       'Tank disabled',
-      [['Machines destroyed', killedTotal + enemies.killed], ['Scrap collected', run.scrap]],
+      [['Enemies destroyed', enemies.killed], ['Scrap collected', run.scrap]],
       'Retry',
       () => loadLevel(levelDef.id),
       `Half recovered: +${kept} scrap banked${total != null ? ` · ${total} total` : ''}`,
@@ -541,75 +559,65 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     });
   }
 
-  // The depot stop: repair over the pit, pick a part (drive onto its pallet
-  // or click its card), the crane fits it, the door opens, drive out.
+  // The depot stop, step by step: in -> repair (and the rockets gift) ->
+  // pick (cards, or skip) -> fit (crane) -> done (Continue) -> out.
   function depotFrame(dt) {
-    const d = level.depot;
     const st = run.depot;
+    const d = st.shack;
     st.t += dt;
-    const onPit = pos.x > d.pit.x0 - 0.5 && pos.x < d.pit.x1 + 0.5 && pos.z > d.pit.z0 - 1.2 && pos.z < d.pit.z1 + 1.2;
-    if (onPit && run.hp < stats.maxHp) {
-      run.hp = Math.min(stats.maxHp, run.hp + dt * 45);
-      hud.setHull(run.hp, stats.maxHp);
-      if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3, 0.1, pos.z + (Math.random() - 0.5) * 1.6), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
+    if (st.step === 'in' && !run.auto) {
+      st.step = 'repair';
+      st.t = 0;
+      d.closeIn();
+      speed = 0;
     }
-    if (st.step === 'repair' && (onPit || pos.x > d.pit.x1 + 1)) {
-      if (run.hp >= stats.maxHp - 0.01 || pos.x > d.pit.x1 + 1) {
-        st.step = st.gift ? 'gift' : 'pick';
-        st.t = 0;
-        if (st.gift === 'rockets') {
+    if (st.step === 'repair') {
+      if (run.hp < stats.maxHp) {
+        run.hp = Math.min(stats.maxHp, run.hp + dt * 60);
+        hud.setHull(run.hp, stats.maxHp);
+      }
+      if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
+      if (st.t > 1.3 && run.hp >= stats.maxHp - 0.01) {
+        if (st.gift === 'rockets' && !run.rockets) {
           // the zone's salvage find: the fuel drums get rigged as rockets
           run.rockets = true;
           for (const n of tank.rocketNozzles()) combat.fx.burst(n, { count: 14, speed: 4, color: 0xffd36b, life: 0.4, size: 0.06, gravity: 10 });
           combat.shake = Math.max(combat.shake, 0.1);
           hud.prompt('Salvage', `Found: <b>fuel-can rockets</b>! Your fuel drums now fire as boosters. ${api.touch ? 'Tap the <b>rocket</b> button' : '<kbd>Shift</kbd> or right-click'} to boost and ram.`, { go: true });
+          st.t = -2.5; // let it sink in before the cards
+          return;
         }
-        if (!st.gift) showCards();
+        st.step = 'pick';
+        showPicker();
       }
     }
-    if (st.step === 'gift' && st.t > 4) {
-      st.step = 'pick';
-      showCards();
-    }
-    if (st.step === 'pick') {
-      // driving onto a pallet takes that part
-      d.pads.forEach((p, i) => {
-        if (p.offer && st.step === 'pick' && Math.hypot(pos.x - p.x, pos.z - p.z) < 1.6) pick(i);
-      });
-    }
-    if (st.step === 'out' && pos.x > d.exitX) {
+    if (st.step === 'out' && !run.auto) {
       st.step = 'gone';
-      hud.setArrow(null);
-      api.transition(() => {
-        run.mode = 'field';
-        run.depot = null;
-        st.onLeave();
-      });
+      d.setInside(false);
+      run.mode = 'field';
+      run.locked = false;
+      run.depot = null;
+      hud.clearPrompt();
+      st.onLeave();
     }
   }
-  function showCards() {
-    const d = level.depot;
-    hud.prompt('Depot', `Pick <b>one</b> part: ${api.touch ? 'tap its card' : 'click its card'} or drive onto its pallet.`, { go: true });
-    hud.setArrow(null);
-    hud.setCards(
-      d.pads.filter((p) => p.offer).map((p) => ({ at: new THREE.Vector3(p.x, 1.4, p.z), ...PARTS[p.offer] })),
-      (i) => pick(i),
+  function showPicker() {
+    const st = run.depot;
+    hud.prompt('Depot', 'Repaired. Pick <b>one</b> part to fit, or skip.', { go: true });
+    hud.showPicker(
+      st.offers.map((id) => ({ id, ...PARTS[id] })),
+      (id) => pick(id),
+      () => done('Skipped. Nothing fitted.'),
     );
   }
-  function pick(i) {
-    const d = level.depot;
+  function pick(id) {
     const st = run.depot;
     if (!st || st.step !== 'pick') return;
-    const pad = d.pads.filter((p) => p.offer)[i];
-    if (!pad) return;
     st.step = 'fit';
-    hud.setCards(null);
-    hud.prompt('Depot', `Fitting the <b>${PARTS[pad.offer].name}</b>...`, { go: true });
-    run.locked = true;
-    speed = 0;
-    d.install(d.pads.indexOf(pad), () => new THREE.Vector3(pos.x, 0, pos.z), {
+    hud.showPicker(null);
+    hud.prompt('Depot', `Fitting the <b>${PARTS[id].name}</b>...`, { go: true });
+    st.shack.install(id, () => new THREE.Vector3(pos.x, 0, pos.z), {
       onFit() {
-        const id = pad.offer;
         run.parts.push(id);
         partMeshes.push(attachPart(tank, id));
         const was = stats.maxHp;
@@ -620,14 +628,26 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         combat.glow.flash(pos.clone().setY(1.6), 0xfff0c8, 0.2, 1.4, 0.1);
         combat.shake = Math.max(combat.shake, 0.15);
       },
-      onDone() {
-        run.locked = false;
-        st.step = 'out';
-        d.openDoor();
-        hud.prompt('Depot', 'Fitted. The door is opening. On to the next sector!', { go: true });
-        hud.setObjective('Drive out of the depot');
-        hud.setArrow(d.exitPoint, 'Exit');
-      },
+      onDone: () => done(`<b>${PARTS[id].name}</b> fitted.`),
+    });
+  }
+  function done(text) {
+    const st = run.depot;
+    if (!st || (st.step !== 'pick' && st.step !== 'fit')) return;
+    st.step = 'done';
+    hud.showPicker(null);
+    hud.prompt('Depot', `${text} Continue when you're ready.`, { go: true });
+    hud.showContinue(() => {
+      if (st.step !== 'done') return;
+      hud.showContinue(null);
+      st.step = 'out';
+      st.shack.openOut();
+      hud.prompt('Depot', 'Door opening. Next sector!', { go: true, seconds: 3 });
+      // roll out once the door is up
+      const wait = () => (st.shack.outDoor > 0.6 ? (run.auto = st.shack.outside) : setTimeout(wait, 100));
+      run.auto = null;
+      st.t = 0;
+      wait();
     });
   }
 
@@ -716,7 +736,20 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       const boosting = run.boost > 0;
       let want = 0;
       let accel = ACCEL;
-      const throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
+      let throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
+      // driven by the game (into and out of depots)
+      if (run.auto) {
+        const dx = run.auto.x - pos.x;
+        const dz = run.auto.z - pos.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 0.35) {
+          run.auto = null;
+          speed = 0;
+        } else {
+          input.set(dx, 0, dz);
+          throttle = THREE.MathUtils.clamp(dist / 3, 0.25, 0.75);
+        }
+      }
       if (input.lengthSq() > 0.02) {
         input.normalize();
         const heading = Math.atan2(-input.z, input.x);
@@ -823,7 +856,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
 
       // camera follows; the aim is re-cast every frame so it tracks while driving
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
-      if (run.mode === 'depot') camWant.lerp(level.depot.focus, 0.55); // frame the room, not just the tank
+      if (run.depot) camWant.lerp(run.depot.shack.focus, 0.5); // frame the shack, not just the tank
       camTarget.lerp(camWant, 1 - Math.exp(-realDt * 6));
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);

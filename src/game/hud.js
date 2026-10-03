@@ -71,15 +71,20 @@ const CSS = `
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
 .hud:not(.touch) .hud-ability canvas { width: 64px; height: 64px; }
-.hud-cards { position: absolute; inset: 0; }
-.hud-card { position: absolute; left: 0; top: 0; width: 176px; padding: 10px 12px 12px; display: grid; gap: 6px; justify-items: center; text-align: center; pointer-events: auto; cursor: pointer;
-  transform: translate(-50%, -100%); }
+.hud-picker { position: absolute; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 12px; justify-items: center;
+  width: min(640px, calc(100vw - 32px)); pointer-events: auto; }
+.hud-picker .title { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--go); text-shadow: 2px 2px 0 #000; }
+.hud-picker .row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.hud-card { width: 180px; padding: 12px 12px 14px; display: grid; gap: 7px; justify-items: center; align-content: start; text-align: center; cursor: pointer; border: 0; color: var(--ink); font: inherit; }
 .hud-card canvas { width: 60px; height: 42px; image-rendering: pixelated; }
 .hud-card .name { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
-.hud-card .what { font-size: 13px; color: var(--ink); line-height: 1.25; }
-.hud-card button { margin-top: 2px; padding: 6px 12px 7px; border: 0; cursor: pointer; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40; }
-.hud-card:hover { filter: brightness(1.15); }
-.hud.touch .hud-card { width: 150px; }
+.hud-card .what { font-size: 13px; line-height: 1.25; }
+.hud-card .take { margin-top: 2px; padding: 6px 14px 7px; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40; }
+.hud-card:hover, .hud-card:focus-visible { filter: brightness(1.2); outline: none; }
+.hud-picker .skip { padding: 7px 16px 8px; border: 0; cursor: pointer; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud.touch .hud-card { width: 150px; padding: 10px 8px 12px; }
+.hud-continue { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); padding: 14px 20px 15px; border: 0; cursor: pointer; pointer-events: auto;
+  font: 400 16px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000, 0 5px 0 2px #2f6b40; animation: hudready 1s steps(2) infinite; }
 .hud-end .bank { color: var(--amber); font-size: 14px; }
 .hud-arrow { --go: #6be08a; position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 4px; transform: translate(-50%, -100%); }
 .hud-arrow .lbl { padding: 4px 8px 5px; background: var(--panel); color: var(--go); font: 400 13px/1.2 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap;
@@ -236,7 +241,8 @@ export function createHud() {
       <div class="hud-scrap panel px" hidden><i></i>Scrap <b>0</b></div>
       <div class="hud-chain px" hidden><span><small>Chain </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
     </div>
-    <div class="hud-cards"></div>
+    <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip">Skip</button></div>
+    <button type="button" class="hud-continue" hidden>Continue &#9654;</button>
     <div class="hud-arrow" hidden><span class="lbl"></span><i></i></div>
     <div class="hud-center">
       <div class="hud-obj panel" hidden><span class="px tag">Objective</span><span class="text"></span></div>
@@ -299,8 +305,14 @@ export function createHud() {
   let abilityKey = '';
   const abilityCenter = () => (touchMode ? { x: window.innerWidth - 92, y: window.innerHeight - 104 } : { x: window.innerWidth - 70, y: window.innerHeight - 84 });
   // depot cards
-  const cardsEl = $('.hud-cards');
-  let cards = [];
+  const picker = $('.hud-picker');
+  const cont = $('.hud-continue');
+  let onSkip = null;
+  let onContinue = null;
+  const stop = (e) => e.stopPropagation();
+  for (const el of [picker, cont]) el.addEventListener('pointerdown', stop);
+  picker.querySelector('.skip').addEventListener('click', () => onSkip?.());
+  cont.addEventListener('click', () => onContinue?.());
   let scrapShown = 0;
   let chainHide = 0;
   let hurtT = 0;
@@ -450,26 +462,27 @@ export function createHud() {
       ability.querySelector('.key').hidden = touchMode;
     },
     abilityCenter,
-    // depot cards over the pallets: [{ at: Vector3, name, text, icon }]
-    setCards(list, onPick) {
-      for (const c of cards) c.el.remove();
-      cards = (list || []).map((c, i) => {
-        const el = document.createElement('div');
+    // depot parts: [{ id, name, text, icon }], or null to hide
+    showPicker(list, onPick, skip) {
+      picker.hidden = !list;
+      onSkip = skip;
+      const row = picker.querySelector('.row');
+      row.innerHTML = '';
+      for (const c of list || []) {
+        const el = document.createElement('button');
+        el.type = 'button';
         el.className = 'hud-card panel';
-        el.innerHTML = `<canvas width="10" height="7"></canvas><span class="name"></span><span class="what"></span><button type="button">${touchMode ? 'Take' : 'Take'}</button>`;
+        el.innerHTML = '<canvas width="10" height="7"></canvas><span class="name"></span><span class="what"></span><span class="take">Take</span>';
         drawIcon(el.querySelector('canvas'), c.icon);
         el.querySelector('.name').textContent = c.name;
         el.querySelector('.what').textContent = c.text;
-        const pick = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onPick(i);
-        };
-        el.addEventListener('pointerdown', (e) => e.stopPropagation());
-        el.addEventListener('click', pick);
-        cardsEl.append(el);
-        return { el, at: c.at };
-      });
+        el.addEventListener('click', () => onPick(c.id));
+        row.append(el);
+      }
+    },
+    showContinue(fn) {
+      cont.hidden = !fn;
+      onContinue = fn;
     },
     fade(on) {
       $('.hud-fade').classList.toggle('on', on);
@@ -555,10 +568,6 @@ export function createHud() {
           spotG.fill();
         }
       }
-      for (const c of cards) {
-        const [x, y] = toScreen(c.at, camera, rect);
-        c.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
-      }
       hurtT = Math.max(0, hurtT - dt);
       hurt.style.opacity = String(Math.min(1, hurtT * 4));
       if (arrowAt) {
@@ -594,7 +603,8 @@ export function createHud() {
     },
     reset() {
       this.setSpot(null);
-      this.setCards(null);
+      this.showPicker(null);
+      this.showContinue(null);
       this.setBoss(null, null);
       this.setChain(0, 0);
       this.setAbility(null);

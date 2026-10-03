@@ -17,7 +17,7 @@ import { addDusk, DUSK_SUN } from '../render/setup.js';
 import { box, cyl, put, toon, glowMat, gradientMap, setLowPoly } from '../models/kit.js';
 import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
 import * as P from './props.js';
-import { buildDepot } from './depot.js';
+import { buildShack } from './depot.js';
 
 const FH = 1.35; // floor height
 const PX = 12; // facade texels per world unit
@@ -31,6 +31,8 @@ const CURB = { n: -7.5, s: 6.5 };
 const WALK = { n: -10, s: 9 };
 const SW = 0.16; // sidewalk height
 const CROSS = { x0: 17, x1: 27 }; // the cross street running north
+const JUNCTION = { x0: 115, x1: 127 }; // the intersection at the end of the zone
+const SHACKS = [{ x0: 50, x1: 57.6 }, { x0: 105.4, x1: 113 }]; // depot shacks across the street
 
 const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
 const COLD = 0xcfe8ff;
@@ -50,7 +52,8 @@ function toGround(p, h = 0) {
   return new THREE.Vector3(p.x + SUN_DIR.x * t, h, p.z + SUN_DIR.z * t);
 }
 
-const onSidewalk = (x, z) => z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1));
+const inJunction = (x) => x > JUNCTION.x0 && x < JUNCTION.x1;
+const onSidewalk = (x, z) => !inJunction(x) && (z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1)));
 const heightAt = (x, z) => (onSidewalk(x, z) ? SW : 0);
 const inRiver = (x) => x > RIVER.x0 - 0.5 && x < RIVER.x1 + 0.5;
 const overWater = (x, z) => inRiver(x) && (z < BRIDGE.n || z > BRIDGE.s);
@@ -122,6 +125,7 @@ function roadTexture(rand, craters) {
   rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#c3c6cc');
   rect(MAP.x0, CURB.n, MAP.x1, CURB.s, '#5c5d62');
   rect(CROSS.x0, -32, CROSS.x1, CURB.n, '#5c5d62');
+  rect(JUNCTION.x0, -30, JUNCTION.x1, 30, '#5c5d62');
   speckle(g, W, Z(CURB.s) - Z(CURB.n), ['#66676c', '#525358', '#6c6c70'], W * 40, rand, Z(CURB.n));
 
   g.fillStyle = '#aaa79e';
@@ -461,15 +465,18 @@ function buildAvenue(scene) {
     slab(MAP.x0, CROSS.x0, -16, CURB.n);
     slab(CROSS.x1, RIVER.x0, -16, CURB.n);
     slab(RIVER.x0, RIVER.x1, BRIDGE.n, CURB.n);
-    slab(RIVER.x1, MAP.x1, -16, CURB.n);
+    slab(RIVER.x1, JUNCTION.x0, -16, CURB.n);
+    slab(JUNCTION.x1, MAP.x1, -16, CURB.n);
     slab(MAP.x0, RIVER.x0, CURB.s, MAP.z1);
     slab(RIVER.x0, RIVER.x1, CURB.s, BRIDGE.s);
-    slab(RIVER.x1, MAP.x1, CURB.s, MAP.z1);
+    slab(RIVER.x1, JUNCTION.x0, CURB.s, MAP.z1);
+    slab(JUNCTION.x1, MAP.x1, CURB.s, MAP.z1);
 
     // snow banks plowed up along both curbs, with gaps where paths were cut
     for (const [z, dir] of [[CURB.n - 0.35, -1], [CURB.s + 0.35, 1]]) {
       for (let x = MAP.x0; x < MAP.x1; x += 0.55) {
         if (dir < 0 && x > CROSS.x0 - 0.5 && x < CROSS.x1 + 0.5) continue;
+        if (x > JUNCTION.x0 - 0.5 && x < JUNCTION.x1 + 0.5) continue;
         if (rand() < 0.12) x += 2;
         B.lump(x, SW, z + dir * rand() * 0.25, 0.5 + rand() * 0.4, 0.2 + rand() * 0.18, 0.35 + rand() * 0.2, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
       }
@@ -624,13 +631,14 @@ function buildAvenue(scene) {
     building({ x0: CROSS.x1, x1: 39, floors: 9, panel: PANELS[2], accent: ACCENTS[2], mural: true, bite: { w: 4.5, floors: 4 }, holes: 3, pierce: 3 });
     building({ x0: 44, x1: 58, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
     building({ x0: 80, x1: 97, floors: 9, panel: PANELS[4], accent: ACCENTS[4], holes: 3, broken: 0.4, pierce: 3 });
-    building({ x0: 103, x1: 132, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 3 });
+    building({ x0: 103, x1: JUNCTION.x0 - 0.5, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 2 });
+    building({ x0: JUNCTION.x1 + 0.5, x1: 140, floors: 7, panel: PANELS[3], accent: ACCENTS[0], holes: 4, broken: 0.45, pierce: 2 });
     // west of the start: more blocks so the street doesn't end in a void
     building({ x0: -78, x1: -44, floors: 9, panel: PANELS[3], accent: ACCENTS[2], holes: 3, pierce: 0 });
     building({ x0: 8, x1: 36, zf: -29, depth: 8, floors: 2, panel: PANELS[2], broken: 0.6, pierce: 0 });
 
     // haze in the gaps: light pouring through between the blocks
-    for (const [gx0, gx1, h] of [[CROSS.x0, CROSS.x1, 9], [39, 44, 12], [58, 80, 12], [97, 103, 9]]) {
+    for (const [gx0, gx1, h] of [[CROSS.x0, CROSS.x1, 9], [39, 44, 12], [58, 80, 12], [97, 103, 9], [JUNCTION.x0, JUNCTION.x1, 9]]) {
       const y = h * FH;
       sunVolume(B, [new THREE.Vector3(gx0, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n), new THREE.Vector3(gx0, y, WALK.n)], 0.05);
     }
@@ -645,7 +653,7 @@ function buildAvenue(scene) {
     // tank slides along a straight edge instead of snagging on heaps)
     for (const [x, r] of [[-24, 1.1], [-4, 0.8], [33, 1.3], [86, 1.0]]) rubble(x, WALK.n + 0.35, r, 0.8);
     // the north edge of the drivable street: one straight invisible rail
-    for (const [x0, x1] of [[START_X, CROSS.x0 - 0.6], [CROSS.x1 + 0.6, 48.4], [53.6, RIVER.x0], [RIVER.x1, 107.4], [112.6, 136]]) B.block((x0 + x1) / 2, WALK.n + 0.55, (x1 - x0) / 2, 0.3);
+    for (const [x0, x1] of [[START_X, CROSS.x0 - 0.6], [CROSS.x1 + 0.6, RIVER.x0], [RIVER.x1, JUNCTION.x0 - 0.6], [JUNCTION.x1 + 0.6, 136]]) B.block((x0 + x1) / 2, WALK.n + 0.55, (x1 - x0) / 2, 0.3);
 
     // Containers: stacked into walls where the street is closed off.
     const ribs = (() => {
@@ -725,6 +733,7 @@ function buildAvenue(scene) {
     for (const x of poleXs) {
       for (const side of [-1, 1]) {
         if (side < 0 && x > CROSS.x0 - 1 && x < CROSS.x1 + 1) continue; // keep the corridor mouth clear
+        if (SHACKS.some((k) => x > k.x0 - 1 && x < k.x1 + 1)) continue; // the depot shacks stand here
         const z = side < 0 ? CURB.n - 0.45 : CURB.s + 0.45;
         const idx = lampIndex++;
         B.crushable(() => lampPole(x, z, side, idx), { kind: 'pole', pivot: { x, y: SW, z }, footprint: { x, z, hx: 0.25, hz: 0.25, yaw: 0 } });
@@ -863,7 +872,8 @@ function buildAvenue(scene) {
       B.hitBox((xa + xb) / 2, SW + (y + 0.25) / 2, z, xb - xa, y + 0.25, 0.9);
     }
     pipeRun(START_X - 2, 38.6, PZ, 1.05);
-    pipeRun(44.4, 132, PZ, 1.05);
+    pipeRun(44.4, JUNCTION.x0 - 0.5, PZ, 1.05);
+    pipeRun(JUNCTION.x1 + 0.5, 136, PZ, 1.05);
     for (const x of [64, 69, 74]) B.piece(0.3, 1.05 - RIVER.y + SW, 0.3, 0x6e6c68, x, (RIVER.y + 1.05 + SW) / 2, PZ);
     const AX = 41.5;
     const AY = 6.6;
@@ -893,13 +903,13 @@ function buildAvenue(scene) {
     wreck(45, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
     wreck(67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
     wreck(72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
-    wreck(83, 5.0, 0.2, { kind: 'sedan', paint: BURNT_PAINT[1] });
+    wreck(85.6, 5.0, 0.2, { kind: 'sedan', paint: BURNT_PAINT[1] });
     wreck(88, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
     wreck(96.6, -4.6, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
     wreck(96.4, 4.8, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
     wreck(118, -5.5, 0.4, { kind: 'sedan', paint: BURNT_PAINT[4] });
     wreck(124, 4.6, -0.3, { kind: 'van', paint: 0x6b7458 });
-    wreck(129, -2, 1.3, { kind: 'hatch', paint: BURNT_PAINT[2] });
+    wreck(119.5, 1.5, 1.3, { kind: 'hatch', paint: BURNT_PAINT[2] });
     {
       // the trolleybus is still smouldering
       const fire = B.emit(new THREE.Vector3(33.4, 1.5, -1.0), 0xff8a35, 16, 8);
@@ -958,10 +968,10 @@ function buildAvenue(scene) {
     const junk = (fn, scrap = 0) => B.crushable(fn, { kind: 'prop', scrap });
     junk(() => P.bench(B, -27, SW, WALK.n + 1.2, 0));
     junk(() => P.bench(B, -1, SW, WALK.n + 1.1, 0.2, { tipped: true }));
-    junk(() => P.bench(B, 52.5, SW, WALK.n + 1.3, -0.1));
+    junk(() => P.bench(B, 46.5, SW, WALK.n + 1.3, -0.1));
     junk(() => P.bin(B, -25, SW, WALK.n + 1.0), 1);
     junk(() => P.bin(B, 2, SW, WALK.n + 1.4, { tipped: true }), 1);
-    junk(() => P.bin(B, 55, SW, WALK.n + 1.1, { tipped: true }), 1);
+    junk(() => P.bin(B, 48.5, SW, WALK.n + 1.1, { tipped: true }), 1);
     junk(() => P.planter(B, -12, SW, WALK.n + 1.2));
     junk(() => P.planter(B, 30, SW, WALK.n + 1.4));
     junk(() => P.cabinet(B, 15.5, SW, WALK.n + 0.6, 0), 1);
@@ -991,7 +1001,7 @@ function buildAvenue(scene) {
 
     {
       // kiosk with a dying cold tube
-      const kx = 49.5;
+      const kx = 44.6;
       const kz = WALK.s - 0.7;
       const kiosk = put(B.root, box(2.4, 2.2, 1.6, 0x58707a, { r: 0.08 }), kx, SW + 1.1, kz);
       put(B.root, box(2.0, 1.0, 0.04, 0x75736e, { r: 0.01 }), kx, SW + 1.2, kz - 0.82);
@@ -1169,7 +1179,7 @@ function buildAvenue(scene) {
       // a torn section of railing hanging over the edge
       B.piece(3, 0.07, 0.07, 0x5a5d61, 70, SW + 0.2, BRIDGE.s + 0.1, 0.6, 0, 0.3);
       // work lights at the bridgehead: cold white on tripods
-      for (const [x, z, yaw] of [[57.5, CURB.n + 0.8, 0.6], [79.5, CURB.s - 0.8, -2.5]]) {
+      for (const [x, z, yaw] of [[59, CURB.n + 0.8, 0.6], [76.5, CURB.s - 0.8, -2.5]]) {
         for (let k = 0; k < 3; k++) B.piece(0.04, 1.7, 0.04, 0x3a3c3f, x + Math.cos(k * 2.1) * 0.3, 0.8, z + Math.sin(k * 2.1) * 0.3, Math.sin(k * 2.1) * 0.2, 0, -Math.cos(k * 2.1) * 0.2);
         const head = put(B.root, box(0.5, 0.4, 0.2, 0x2e3034, { r: 0.04 }), x, 1.75, z);
         head.rotation.set(0, yaw, -0.4);
@@ -1353,51 +1363,16 @@ function buildAvenue(scene) {
       return true;
     }
 
-    // ------------------------------------------- depot doors (one per sector)
-    // A roller door in a block's ground floor: closed until the sector is
-    // clear, then it rolls up and the depot's lights show inside.
-    function depotDoor(x) {
-      const d = { x, open: 0, opening: false };
-      const z = WALK.n + 0.05;
-      // dark bay behind the door
-      put(B.root, box(5.2, 3.3, 0.1, 0x0d0c0e), x, SW + 1.65, WALK.n - 0.2);
-      for (const s of [-1, 1]) put(B.root, box(0.35, 3.6, 0.4, 0x45484c, { r: 0.03 }), x + s * 2.75, SW + 1.8, z + 0.1);
-      put(B.root, box(5.9, 0.4, 0.45, 0x45484c, { r: 0.03 }), x, SW + 3.6, z + 0.1);
-      const t = hazard.clone();
-      t.needsUpdate = true;
-      t.repeat.set(4, 0.5);
-      const band = new THREE.Mesh(new THREE.PlaneGeometry(5.9, 0.36), new THREE.MeshToonMaterial({ map: t, gradientMap }));
-      band.position.set(x, SW + 3.6, z + 0.34);
-      B.add(band);
-      const door = new THREE.Group();
-      put(door, box(5.2, 3.3, 0.12, 0x56606a), 0, 1.65, 0);
-      for (let y = 0.25; y < 3.2; y += 0.32) put(door, box(5.1, 0.05, 0.04, 0x434b54), 0, y, 0.08);
-      door.position.set(x, SW, z + 0.12);
-      B.add(door);
-      B.keep(door);
-      // warm light from inside once it's open, and a green go-lamp
-      const inside = B.pool(x, WALK.n + 1.6, 2.6, 0xffa245, 0, { sx: 1.2, sz: 0.7, y: SW + 0.03 });
-      const insideE = B.emit(new THREE.Vector3(x, 1.6, WALK.n + 1.4), 0xffa245, 16, 8, { level: 0 });
-      const lamp = B.keep(put(B.root, box(0.3, 0.22, 0.12, 0x2a2b2e, { r: 0.03 }), x, SW + 4.0, z + 0.4));
-      d.update = (dt, t2) => {
-        if (d.opening && d.open < 1) d.open = Math.min(1, d.open + dt * 0.8);
-        door.position.y = SW + d.open * 3.1;
-        door.scale.y = 1 - d.open * 0.85;
-        inside.material.opacity = 0.22 * d.open;
-        insideE.level = d.open;
-        lamp.material = d.opening && Math.sin(t2 * 6) > 0 ? glowMat(0x6be08a) : toon(0x2a2b2e);
-      };
-      B.animate((dt, t2) => d.update(dt, t2));
-      return d;
-    }
-    const doorA = depotDoor(51);
-    const doorB = depotDoor(110);
+    // ------------------------------------- depot shacks (sector borders)
+    // A garage shack across the whole street between sectors: the way on is
+    // through it. Its sides are walled off to the buildings and the pipes.
+    const shacks = SHACKS.map((k) => buildShack(B, { x0: k.x0, x1: k.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: PZ - 0.45 }, heightAt }));
 
     // ---------------------------------- the bridgehead barricade (sector 2)
     // Wrecks chained across the approach to the bridge: too heavy to drive
     // through. A rocket ram (or a dozer blade) bursts each section.
     {
-      const BX = 58.6;
+      const BX = 81.5;
       for (const [z0, z1] of [[WALK.n, -3.3], [-3.3, 3.3], [3.3, WALK.s + 1]]) {
         const zc = (z0 + z1) / 2;
         B.crushable(
@@ -1421,43 +1396,81 @@ function buildAvenue(scene) {
       }
     }
 
-    // ------------------------------------- the end of the zone (east wall)
+    // ------------------------------ the end of the zone: the intersection
+    // Side streets choked by a collapsed block (north) and rubble (south);
+    // the way ahead walled off with stacked crates until the airstrike.
     {
-      const X = 136;
+      const jx = (JUNCTION.x0 + JUNCTION.x1) / 2;
+      // north: a facade that came down across the side street
+      rubble(jx, -13.5, 5, 3.2, { slabs: 6 });
+      rubble(jx - 3.5, -11.8, 2.2, 1.6, { slabs: 2 });
+      B.solid(B.chunk(10, 6, 0.45, CONCRETE[1], jx + 0.5, 2.0, -15.5, -0.95, 0.12, 0.06));
+      B.chunk(4, 3, 0.4, CONCRETE[3], jx - 2, 1.0, -12.6, -1.2, -0.3, 0.1);
+      B.rebar(jx + 2, 1.5, -12, 6);
+      B.rebar(jx - 1, 1.2, -12.4, 5);
+      B.hitBox(jx, 1.5, -13.5, 12, 3, 5);
+      B.block(jx, -13.2, 6.2, 2.6);
+      // south: rubble and a burnt bus nose-down in it
+      rubble(jx, 13, 4.6, 2.6, { slabs: 5 });
+      rubble(jx + 3.6, 11.5, 2, 1.4, { slabs: 2 });
+      B.hitBox(jx, 1.2, 13, 11, 2.4, 4.6);
+      B.block(jx, 12.6, 6.2, 2.4);
+      P.bus(B, jx - 1.5, 16.5, 0.6);
+      // ahead: crates stacked into a wall right across the street
+      for (const [z0, z1] of [[WALK.n - 0.4, -6], [-6, -2], [-2, 2], [2, 6], [6, PZ - 0.45]]) {
+        const zc = (z0 + z1) / 2;
+        const y = heightAt(130.5, zc);
+        B.crushable(
+          () => {
+            for (let row = 0; row < 2; row++) {
+              for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.25) {
+                if (row && rand() < 0.3) continue;
+                const sz = 1.0 + rand() * 0.25;
+                const wood = rand() < 0.7;
+                B.piece(sz, sz, sz, wood ? 0x7a5f3e : 0x6b6f62, 130.5 + (rand() - 0.5) * 0.4, y + sz / 2 + row * 1.1, z, 0, (rand() - 0.5) * 0.3, 0);
+                if (wood) B.piece(sz + 0.04, 0.08, sz + 0.04, 0x5c472e, 130.5, y + sz * 0.5 + row * 1.1, z, 0, 0, 0);
+              }
+            }
+            put(B.root, box(0.06, 0.12, z1 - z0, 0xc99a2e), 129.8, y + 1.2, zc);
+            B.lump(130.5, y + 2.25, zc, 0.8, 0.08, (z1 - z0) / 2.4, 0xd0d3d8);
+            B.hitBox(130.5, y + 1.1, zc, 1.4, 2.2, z1 - z0);
+            B.block(130.5, zc, 0.75, (z1 - z0) / 2);
+          },
+          { kind: 'prop', heavy: true, scrap: 2 },
+        );
+      }
+      // the zone ends at a container wall further on
+      const X = 136.5;
       let i = 0;
       for (let z = -15; z < 20; z += 6.2, i++) {
         container(X, 0, z, Math.PI / 2, CONTAINERS[(i + 1) % 5]);
         if (i % 2 === 0) container(X + 0.1, 2.6, z + 0.3, Math.PI / 2, CONTAINERS[(i + 3) % 5]);
       }
       B.block(X, 2, 1.4, 22);
-      rubble(X - 2.2, 4, 1.8, 1.2, { slabs: 2 });
-      rubble(X - 2.0, -7, 1.4, 1.0, { slabs: 2 });
     }
 
     B.finish();
     B.mergeStatic();
 
-    // the depot lives in this scene too, out of sight
-    const depot = buildDepot(scene);
-    const blocks = [...B.blocks, ...depot.blocks];
-    const colliders = [...B.colliders, ...depot.colliders];
-    const emitters = [...B.emitters, ...depot.emitters];
+    const crateWall = B.crushables.filter((c) => c.heavy && c.footprint.x > 125);
 
     // ---------------------------------------------------- the zone script
-    // Three sectors with a depot stop between each:
+    // Three sectors, a depot shack across the street between each:
     //  1 The avenue: learn to drive, shoot, crush, collect scrap
-    //  2 The bridge: rocket-ram the barricade, cross, blow the gate
-    //  3 The checkpoint: hold out, then the heavy machine
-    const SECTORS = ['The avenue', 'The bridge', 'The checkpoint'];
-    const B1 = { minX: START_X + 2, maxX: 57, minZ: -21, maxZ: 9.9 };
-    const B2 = { minX: 44, maxX: GX + 12, minZ: -12, maxZ: 9.9 };
-    const B3 = { minX: GX + 1.5, maxX: 133, minZ: -12, maxZ: 9.9 };
-    const S = { sector: 0, step: 0, t: 0, spawnX: 0, n: 0, shots: 0, hold: 0, boss: null, waveT: 0 };
+    //  2 The bridge: rocket-ram the barricade, blow the gate
+    //  3 The intersection: hold out, the airstrike, the large quadruped
+    const SECTORS = ['The avenue', 'The bridge', 'The intersection'];
+    const [shackA, shackB] = shacks;
+    const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: -21, maxZ: 9.9 };
+    const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: -12, maxZ: 9.9 };
+    const B3 = { minX: shackB.x1 + 1.2, maxX: 133, minZ: -11, maxZ: 10 };
+    const BARRICADE_X = 81.5;
+    const S = { sector: 0, step: 0, t: 0, spawnX: 0, n: 0, shots: 0, hold: 0, boss: null, waveT: 0, strike: null };
     const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
     let CLICK = '<kbd>Click</kbd>';
     const bounds = { ...B1 };
-    const setBounds = (b) => Object.assign(bounds, b);
-    // the arrow that follows the nearest machine
+    const setBounds = (api, b) => api.setBounds(Object.assign(bounds, b));
+    // the arrow that follows the nearest enemy
     const onEnemy = (api) => () => {
       const e = api.nearestEnemy();
       return e ? new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z) : null;
@@ -1466,12 +1479,19 @@ function buildAvenue(scene) {
       S.step = step;
       S.t = 0;
     };
+    // the sector is clear: open the shack ahead and point at it
+    function openShack(api, shack, text) {
+      shack.openIn();
+      api.objective('Enter the depot');
+      api.prompt('Sector clear', text, { go: true });
+      api.arrow(shack.door, 'Depot');
+    }
+    const atDoor = (api, shack) => shack.inDoor > 0.6 && Math.hypot(api.tankPos.x - shack.door.x, api.tankPos.z - shack.door.z) < 5;
 
     function start(api) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null });
-      setBounds(B1);
-      api.setBounds(bounds);
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false });
+      setBounds(api, B1);
       gate.hp = 2;
       api.sectors(SECTORS, 0);
       api.objective('Drive up the street and destroy all enemies');
@@ -1481,7 +1501,7 @@ function buildAvenue(scene) {
     }
 
     // ------------------------------------------------- sector 1: the avenue
-    function sector1(api, dt) {
+    function sector1(api) {
       const x = api.tankPos.x;
       const run = api.run;
       switch (S.step) {
@@ -1507,13 +1527,12 @@ function buildAvenue(scene) {
           const e = api.nearestEnemy();
           if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
             S.shots = run.shots;
-            api.prompt('Contact', `Enemies incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
+            api.prompt('Contact', `Quadruped walkers incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
             api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
             api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
             go(3);
           } else if (!e && S.t > 3) {
-            // already dealt with (shot from long range): skip the lesson
-            S.shots = -1;
+            S.shots = -1; // already dealt with from long range: skip the lesson
             go(3);
           }
           break;
@@ -1527,13 +1546,11 @@ function buildAvenue(scene) {
           }
           break;
         case 4:
-          // the first scrap on the ground
           if (run.drops > 0 && !api.spotlit) {
             const d = api.nearestDrop();
             if (d) {
-              const at = d.clone();
-              api.prompt('Scrap', 'Machines drop <b>scrap</b>. Drive close to collect it.', { go: true });
-              api.spotlight({ targets: [at, () => api.tankPos.clone().setY(1)], r: 90 }, () => run.scrap > 0, { maxTime: 3.5 });
+              api.prompt('Scrap', 'Walkers drop <b>scrap</b>. Drive close to collect it.', { go: true });
+              api.spotlight({ targets: [d.clone(), () => api.tankPos.clone().setY(1)], r: 90 }, () => run.scrap > 0, { maxTime: 3.5 });
               go(5);
             }
           }
@@ -1554,13 +1571,12 @@ function buildAvenue(scene) {
           break;
         case 6:
           if (api.enemiesAlive === 0 && S.t > 3 && x > 22) {
-            api.clearPrompt();
-            api.spawnDog(55, -4, { delay: 0.3 });
-            api.spawnDog(55, 4, { delay: 0.6 });
-            api.spawnDog(54, 0, { delay: 0.9 });
+            api.spawnDog(47, -8.4, { delay: 0.3 });
+            api.spawnDog(47, 5.6, { delay: 0.6 });
+            api.spawnDog(45, 0, { delay: 0.9 });
             api.spawnDog(x - 16, -4, { delay: 2 });
             api.spawnDog(x - 16, 4, { delay: 2.4 });
-            api.prompt('Contact', 'They are coming from the bridge, and from behind!', { danger: true, seconds: 5 });
+            api.prompt('Contact', 'Walkers ahead, and coming up from behind!', { danger: true, seconds: 5 });
             go(7);
           } else if (api.enemiesAlive === 0 && S.t > 3 && S.n === 0) {
             S.n = 1;
@@ -1570,17 +1586,14 @@ function buildAvenue(scene) {
           break;
         case 7:
           if (api.enemiesAlive === 0 && S.t > 3) {
-            doorA.opening = true;
-            api.objective('Enter the depot');
-            api.prompt('Sector clear', 'Nice work. Get into the <b>depot</b> for repairs and parts.', { go: true });
-            api.arrow(new THREE.Vector3(51, 1.6, WALK.n + 1), 'Depot');
+            openShack(api, shackA, 'Street clear. Roll into the <b>depot</b> for repairs and parts.');
             go(8);
           }
           break;
         case 8:
-          if (doorA.open > 0.6 && Math.hypot(x - 51, api.tankPos.z - (WALK.n + 1)) < 3.6) {
+          if (atDoor(api, shackA)) {
             go(9);
-            api.depot({ offers: ['dozer', 'autoloader', 'era'], gift: 'rockets', onLeave: () => startSector2(api) });
+            api.depot(shackA, { offers: ['dozer', 'autoloader', 'era'], gift: 'rockets', onLeave: () => startSector2(api) });
           }
           break;
       }
@@ -1590,53 +1603,51 @@ function buildAvenue(scene) {
     function startSector2(api) {
       S.sector = 1;
       go(0);
-      setBounds(B2);
-      api.setBounds(bounds);
-      api.teleport(50, -6.2, 0);
+      setBounds(api, B2);
       api.sectors(SECTORS, 1);
-      api.objective('Break through and cross the bridge');
-      api.prompt('Sector 2', 'Wrecks block the bridge. Too heavy to crush.', { danger: false });
-      api.arrow(new THREE.Vector3(58.6, 1.8, 0), 'Barricade');
+      api.objective('Cross the bridge');
+      api.prompt('Sector 2', 'Over the bridge. Watch the far bank.', { seconds: 4 });
     }
     function sector2(api) {
       const x = api.tankPos.x;
       const run = api.run;
       switch (S.step) {
         case 0:
-          if (S.t > 1.6 && !api.spotlit) {
+          if (x > BARRICADE_X - 11 && !api.spotlit) {
             S.shots = run.boosts;
-            api.prompt('Rockets', api.touch ? 'Tap the <b>rocket</b> button to boost and <b>ram</b> through the barricade!' : 'Press <kbd>Shift</kbd> (or right-click) to fire your rockets and <b>ram</b> through!', { go: true });
-            api.spotlight({ targets: [new THREE.Vector3(58.6, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots, { maxTime: 15 });
+            api.objective('Break through the barricade');
+            api.prompt('Rockets', api.touch ? 'Wrecks too heavy to crush! Tap the <b>rocket</b> button to boost and <b>ram</b> through!' : 'Wrecks too heavy to crush! Press <kbd>Shift</kbd> (or right-click) to fire your rockets and <b>ram</b> through!', { go: true });
+            api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Ram it!');
+            api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots, { maxTime: 15 });
             go(1);
           }
           break;
         case 1:
-          if (x > 61) {
+          if (x > BARRICADE_X + 2) {
             api.arrow(null);
-            api.objective('Cross the bridge and destroy all enemies');
-            api.prompt('Contact', 'Machines on the far bank! Rockets ram machines too.', { danger: true, seconds: 5 });
-            api.spawnDog(82, -3);
-            api.spawnDog(83, 2, { delay: 0.4 });
-            api.spawnDog(84.5, 5, { delay: 0.8 });
-            api.spawnDog(44, -4, { delay: 2.5 });
-            api.spawnDog(44, 4, { delay: 3 });
+            api.objective('Destroy all enemies');
+            api.prompt('Contact', 'Walkers! Rockets ram them too.', { danger: true, seconds: 5 });
+            api.spawnDog(94, -3);
+            api.spawnDog(95, 2, { delay: 0.4 });
+            api.spawnDog(96.5, 5, { delay: 0.8 });
+            api.spawnDog(92, -6, { delay: 1.2 });
             go(2);
           } else if (S.t > 6 && run.boosts > 0 && S.n !== 2) {
             S.n = 2;
-            api.prompt('Rockets', 'Missed? The rockets recharge in a few seconds. Try again!', { seconds: 5 });
+            api.prompt('Rockets', 'Missed? The rockets recharge in a few seconds. Line up and try again!', { seconds: 5 });
           }
           break;
         case 2:
-          if (x > 79) {
+          if (api.enemiesAlive === 0 && S.t > 2) {
             api.spawnDog(97.5, -7.5);
             api.spawnDog(97.5, 7.6, { delay: 0.4 });
             api.spawnDog(96, 0, { delay: 0.9 });
-            api.spawnDog(92, -3, { delay: 1.5 });
+            api.spawnDog(x - 12, 0, { delay: 1.8 });
             go(3);
           }
           break;
         case 3:
-          if (x > 82 && api.enemiesAlive === 0 && S.t > 1) {
+          if (api.enemiesAlive === 0 && S.t > 1) {
             api.objective('Blow down the checkpoint gate');
             api.prompt('Main gun', api.touch ? `${CLICK} the gate to fire at it. Two hits bring it down.` : `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
             api.arrow(gateMark, `${CLICK} to shoot the gate!`);
@@ -1645,100 +1656,159 @@ function buildAvenue(scene) {
           break;
         // 4: waiting for the gate (onImpact)
         case 5:
-          if (x > GX + 2) {
-            doorB.opening = true;
-            api.objective('Enter the depot');
-            api.prompt('Sector clear', 'Through! Another <b>depot</b> on the left. Patch up before the checkpoint.', { go: true });
-            api.arrow(new THREE.Vector3(110, 1.6, WALK.n + 1), 'Depot');
+          if (x > GX + 1) {
+            openShack(api, shackB, 'Through! Another <b>depot</b>. Patch up before the intersection.');
             go(6);
           }
           break;
         case 6:
-          if (doorB.open > 0.6 && Math.hypot(x - 110, api.tankPos.z - (WALK.n + 1)) < 3.6) {
+          if (atDoor(api, shackB)) {
             go(7);
             const pool = ['twinmg', 'he', 'plating', 'dozer', 'autoloader', 'era'].filter((id) => !run.parts.includes(id));
-            api.depot({ offers: pool.slice(0, 3), onLeave: () => startSector3(api) });
+            api.depot(shackB, { offers: pool.slice(0, 3), onLeave: () => startSector3(api) });
           }
           break;
       }
     }
 
-    // --------------------------------------------- sector 3: the checkpoint
+    // ------------------------------------------- sector 3: the intersection
     const HOLD = 40;
     function startSector3(api) {
       S.sector = 2;
       go(0);
-      setBounds(B3);
-      api.setBounds(bounds);
-      api.teleport(110, -6.4, -Math.PI / 2);
+      setBounds(api, B3);
       api.sectors(SECTORS, 2);
       S.hold = HOLD;
-      S.waveT = 1.5;
+      S.waveT = 2;
       S.n = 0;
-      api.objective(`Hold the checkpoint: 0:${HOLD}`);
-      api.prompt('Sector 3', 'They know we are here. <b>Hold the checkpoint</b> until the street is ours.', { danger: true, seconds: 6 });
+      api.objective(`Hold the intersection: 0:${HOLD}`);
+      api.prompt('Sector 3', 'Dead end: the street ahead is walled off. <b>Hold the line</b> until air support arrives!', { danger: true, seconds: 7 });
     }
     function sector3(api, dt) {
+      const jx = (JUNCTION.x0 + JUNCTION.x1) / 2;
       switch (S.step) {
         case 0: {
           S.hold -= dt;
           S.waveT -= dt;
           const sec = Math.max(0, Math.ceil(S.hold));
-          api.objective(`Hold the checkpoint: 0:${String(sec).padStart(2, '0')}`);
-          if (S.waveT <= 0 && S.hold > 4 && api.enemiesAlive < 7) {
-            S.waveT = 5.5;
+          api.objective(`Hold the intersection: 0:${String(sec).padStart(2, '0')}`);
+          if (S.waveT <= 0 && S.hold > 3 && api.enemiesAlive < 8) {
+            S.waveT = 5;
             S.n++;
             const k = S.n % 3;
+            // over the rubble from the side streets, and back through the gate
             if (k === 1) {
-              api.spawnDog(133, -6);
-              api.spawnDog(133, 0, { delay: 0.3 });
-              api.spawnDog(133, 6, { delay: 0.6 });
+              api.spawnDog(jx - 2, -9.6);
+              api.spawnDog(jx + 2, -9.6, { delay: 0.3 });
+              api.spawnDog(jx, 9.4, { delay: 0.7 });
             } else if (k === 2) {
-              api.spawnDog(95, -2, { via: [[GX + 3, 0]] });
-              api.spawnDog(95, 2, { delay: 0.4, via: [[GX + 3, 0]] });
-              api.spawnDog(132, 7, { delay: 1 });
+              api.spawnDog(95, -2, { via: [[GX + 3, 0], [GX + 3, 5], [shackB.x1 + 2, 7.5]] });
+              api.spawnDog(jx - 3, 9.4, { delay: 0.4 });
+              api.spawnDog(jx + 3, 9.4, { delay: 0.8 });
             } else {
-              api.spawnDog(133, -3);
-              api.spawnDog(133, 3, { delay: 0.3 });
-              api.spawnDog(130, -8, { delay: 0.8 });
-              api.spawnDog(95, 0, { delay: 1.2, via: [[GX + 3, 0]] });
+              api.spawnDog(jx - 3, -9.6);
+              api.spawnDog(jx + 3, -9.6, { delay: 0.3 });
+              api.spawnDog(jx, 9.4, { delay: 0.6 });
+              api.spawnDog(jx + 4, 9.4, { delay: 1 });
             }
           }
+          if (S.hold <= 10 && !S.warned) {
+            S.warned = true;
+            api.prompt('Radio', 'Air support inbound! Ten seconds. Keep them off you!', { go: true, seconds: 6 });
+          }
           if (S.hold <= 0) {
-            api.objective('Destroy all enemies');
+            api.objective('Air strike!');
+            api.prompt('Radio', 'Air strike on the crate wall. <b>Heads down!</b>', { danger: true, seconds: 4 });
+            S.strike = airstrike(api);
             go(1);
           }
           break;
         }
         case 1:
-          if (api.enemiesAlive === 0) {
-            api.objective('Destroy the heavy machine');
-            S.boss = api.spawnHound(134, 0);
-            api.spawnDog(133, -6, { delay: 1.5 });
-            api.spawnDog(133, 6, { delay: 2 });
-            api.boss(S.boss, 'Hound');
-            api.prompt('Warning', 'A <b>heavy machine</b>! Pound it with the cannon. Ram it when it gets close!', { danger: true, seconds: 7 });
-            api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 1.6, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 120 }, () => S.t > 0.5, { maxTime: 2.5 });
+          if (S.strike.update(dt)) {
+            S.strike = null;
+            S.boss = api.spawnHound(134, 0, { via: [[128, 0]] });
+            api.spawnDog(133, -6, { delay: 1.5, via: [[128, -5]] });
+            api.spawnDog(133, 6, { delay: 2, via: [[128, 5]] });
+            api.boss(S.boss, 'Large quadruped');
+            api.objective('Destroy the large quadruped');
+            api.prompt('Warning', 'Something big is coming through the breach! Pound it with the cannon, ram it when it gets close!', { danger: true, seconds: 7 });
+            api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 0.6, { maxTime: 2.5 });
             go(2);
           }
           break;
         case 2:
           if (!S.boss.alive) {
-            api.prompt('Zone clear', 'The heavy machine is down. <b>Zone 1 is ours.</b>', { go: true });
-            api.objective('');
+            api.prompt('Zone clear', 'The large quadruped is down. Drive through the breach!', { go: true });
+            api.objective('Leave the zone');
+            api.arrow(new THREE.Vector3(132, 0.6, 0), 'Exit');
             go(3);
           }
           break;
         case 3:
-          if (S.t > 3.2 && api.enemiesAlive === 0) {
+          if (api.tankPos.x > 129.5) {
+            api.arrow(null);
             api.win('Zone 1 cleared');
             go(4);
-          } else if (S.t > 3.2 && S.n !== -1) {
-            S.n = -1;
-            api.objective('Destroy all enemies');
           }
           break;
       }
+    }
+
+    // Jets scream over, bombs walk across the crate wall and everything near
+    // it: walkers die, the crates are blown apart. update() returns true
+    // when it's over.
+    function airstrike(api) {
+      const c = api.combat;
+      const jets = [0, 1].map((i) => {
+        const g = new THREE.Group();
+        put(g, box(3.4, 0.4, 0.55, 0x3a3d42, { r: 0.08 }), 0, 0, 0);
+        put(g, box(1.5, 0.1, 4.2, 0x33363b, { r: 0.03 }), -0.2, 0, 0);
+        put(g, box(0.7, 0.08, 1.8, 0x33363b, { r: 0.02 }), -1.5, 0, 0);
+        put(g, box(0.6, 0.8, 0.08, 0x33363b, { r: 0.02 }), -1.5, 0.4, 0);
+        put(g, box(0.4, 0.18, 0.3, 0xcfe8ff, { glow: true }), 1.0, 0.2, 0);
+        put(g, box(0.3, 0.3, 0.3, 0xffb347, { glow: true }), -1.85, 0, 0);
+        g.traverse((m) => m.isMesh && (m.castShadow = true));
+        g.visible = false;
+        B.root.add(g);
+        return { g, delay: i * 0.35, z: i ? 3.5 : -3.5 };
+      });
+      // bomb points: every crate section, every walker near the wall, more round about
+      const points = [];
+      for (const w of crateWall) points.push(new THREE.Vector3(w.footprint.x, 0.6, w.footprint.z));
+      for (const e of api.enemies) points.push(new THREE.Vector3(e.pos.x, 0.6, e.pos.z));
+      for (let i = 0; i < 6; i++) points.push(new THREE.Vector3(126 + Math.random() * 6, 0.4, -8 + Math.random() * 16));
+      points.sort((a, b) => a.z - b.z);
+      const bombs = points.map((p, i) => ({ p, at: 1.0 + i * 0.09, done: false }));
+      let t = 0;
+      return {
+        update(dt) {
+          t += dt;
+          for (const j of jets) {
+            const k = (t - j.delay) / 1.8;
+            j.g.visible = k > 0 && k < 1;
+            if (!j.g.visible) continue;
+            // a straight run from bottom-left to top-right of the screen
+            j.g.position.set(95 + k * 60, 16, 22 - k * 44 + j.z);
+            j.g.rotation.y = Math.atan2(44, 60);
+          }
+          for (const b of bombs) {
+            if (b.done || t < b.at) continue;
+            b.done = true;
+            c.glow.tracer(b.p.clone().setY(18), b.p, 0xfff0c8, 0.12, 0.12);
+            c.explode(b.p);
+            api.blast(b.p, 3.2, 999);
+            for (const w of crateWall) if (Math.abs(w.footprint.z - b.p.z) < 2.2 && Math.abs(w.footprint.x - b.p.x) < 3) api.crush(w, { x: w.footprint.x - 2, z: w.footprint.z, yaw: 0 });
+            api.shake(0.6);
+          }
+          if (t > 3.4) {
+            for (const w of crateWall) api.crush(w);
+            for (const j of jets) j.g.removeFromParent();
+            return true;
+          }
+          return false;
+        },
+      };
     }
 
     function script(api, dt) {
@@ -1758,7 +1828,7 @@ function buildAvenue(scene) {
 
     function update(dt, t, ctx = {}) {
       B.update(dt, t, ctx);
-      depot.update(dt, t, ctx);
+      for (const k of shacks) k.update(dt, t);
       for (const f of flickers) {
         if (f.e.dead) continue;
         const n = Math.sin(t * (f.fast ? 31 : 13.7) + f.seed) + Math.sin(t * (f.fast ? 47 : 5.3) + f.seed * 0.7);
@@ -1786,12 +1856,11 @@ function buildAvenue(scene) {
 
     return {
       light,
-      colliders,
-      blocks,
-      emitters,
+      colliders: B.colliders,
+      blocks: B.blocks,
+      emitters: B.emitters,
       crushables: B.crushables,
-      depot,
-      heightAt: (x, z) => (z > 100 ? 0 : heightAt(x, z)),
+      heightAt,
       spawn: { x: START_X + 7, z: -0.5, yaw: 0 },
       bounds,
       script: S, // for tests
