@@ -16,7 +16,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { box, gradientMap } from './kit.js';
 
-const URL_GLB = new URL('../assets/crew.glb', import.meta.url).href;
+const URL_MODEL = new URL('../assets/crew.gltf.json', import.meta.url).href;
 const HEIGHT = 1.45; // world units, head top
 const MODEL_H = 620; // the model's own units, feet to head top
 const LEG = 223; // hip to sole, model units
@@ -39,7 +39,7 @@ const C = {
 };
 
 let loading = null;
-const load = () => (loading ??= new GLTFLoader().loadAsync(URL_GLB));
+const load = () => (loading ??= new GLTFLoader().loadAsync(URL_MODEL));
 
 function toonMat(color, opts = {}) {
   return new THREE.MeshToonMaterial({ color, gradientMap, ...opts });
