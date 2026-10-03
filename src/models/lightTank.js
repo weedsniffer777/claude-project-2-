@@ -19,7 +19,8 @@
 //    hooded sight and the gunner's sight on the roof
 //  - the gun: a thick jacket, then a thin barrel; the muzzle stops short of
 //    the nose
-//  - a mesh-covered exhaust along the top of the left side; a slatted bin on
+//  - a mesh-covered exhaust along the top of each side (the boost rockets:
+//    outlets out the back); a slatted bin on
 //    the rear plate
 //  - three-tone camo (green, brown, black) in big blotches
 import * as THREE from 'three';
@@ -249,6 +250,10 @@ export function createLightTank() {
   const tracks = new THREE.Group();
   group.add(tracks);
   const slotGroups = { tracks: [tracks], armor: [], engine: [], gun: [], mg: [], sights: [], module: [] };
+  // boost flame materials (shared by both exhausts); see setFlameStyle
+  const flameOuter = new THREE.MeshBasicMaterial({ color: 0xff7a22, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
+  const flameMid = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide });
+  const flameInner = new THREE.MeshBasicMaterial({ color: 0xfff1b8, side: THREE.DoubleSide });
   const mgSlot = new THREE.Group();
   turret.add(mgSlot);
   slotGroups.mg.push(mgSlot);
@@ -299,16 +304,53 @@ export function createLightTank() {
   put(chassis, box(0.02, 0.04, 0.12, C.glass), 1.185, DECK_Y + 0.04, -0.38);
   for (const z of [-0.36, 0.0, 0.36]) put(chassis, cyl(0.06, 0.32, C.canvas, { axis: 'z', seg: 8 }), 0.62, DECK_Y + 0.06, z);
   put(chassis, box(0.5, 0.18, 0.4, C.canvas, { r: 0.08 }), 0.6, DECK_Y + 0.09, 0.42); // a bundled net
-  // the long exhaust along the top of the left side in its mesh guard, a
-  // bin under it
-  const exZ = -(UPPER_HALF + 0.08);
-  put(chassis, cyl(0.1, 1.1, C.mesh, { axis: 'x', seg: 10 }), -0.6, DECK_Y - 0.02, exZ);
-  for (let k = 0; k < 10; k++) put(chassis, cyl(0.105, 0.02, C.dark, { axis: 'x', seg: 10 }), -1.1 + k * 0.11, DECK_Y - 0.02, exZ);
-  put(chassis, cyl(0.06, 0.18, C.dark, { axis: 'x', seg: 8 }), -0.02, DECK_Y - 0.02, exZ);
-  put(chassis, camoBox(0.9, 0.18, 0.12, 5), -0.65, 0.62, -(UPPER_HALF + 0.06));
-  // the right side: a long stowage bin along the middle of the hull
-  put(chassis, camoBox(1.3, 0.18, 0.1, 6), -0.05, 0.66, UPPER_HALF + 0.05);
-  put(chassis, box(1.32, 0.025, 0.12, C.greenDark, { r: 0.01 }), -0.05, 0.76, UPPER_HALF + 0.05);
+  // a long exhaust along the top of each side in its mesh guard, its outlet
+  // pointing out the back, a bin under it. They're the boost: the outlets
+  // light up as rocket nozzles and the flame flares out wide behind.
+  const nozzles = [];
+  const EX = { x0: -1.12, x1: -0.06, y: DECK_Y - 0.02, r: 0.1 };
+  for (const s of [-1, 1]) {
+    const exZ = s * (UPPER_HALF + 0.08);
+    put(chassis, cyl(EX.r, EX.x1 - EX.x0, C.mesh, { axis: 'x', seg: 10 }), (EX.x0 + EX.x1) / 2, EX.y, exZ);
+    for (let k = 0; k < 10; k++) put(chassis, cyl(EX.r + 0.005, 0.02, C.dark, { axis: 'x', seg: 10 }), EX.x0 + 0.02 + k * 0.11, EX.y, exZ);
+    put(chassis, cyl(EX.r + 0.012, 0.04, C.greenDark, { axis: 'x', seg: 10 }), EX.x1 + 0.02, EX.y, exZ); // front cap
+    // the outlet out the back: a collar, a short pipe, a flared mouth
+    put(chassis, cyl(0.075, 0.06, C.greenDark, { axis: 'x', seg: 10 }), EX.x0 - 0.03, EX.y, exZ);
+    put(chassis, cyl(0.06, 0.14, C.dark, { axis: 'x', seg: 10 }), EX.x0 - 0.12, EX.y, exZ);
+    const mouthGeo = new THREE.CylinderGeometry(0.06, 0.085, 0.08, 12, 1, true);
+    mouthGeo.rotateZ(-Math.PI / 2); // narrow end forward, the flare opening back
+    const mouth = new THREE.Mesh(mouthGeo, toon(C.dark));
+    mouth.material.side = THREE.DoubleSide;
+    mouth.position.set(EX.x0 - 0.22, EX.y, exZ);
+    chassis.add(mouth);
+    put(chassis, cyl(0.055, 0.02, 0x0f1011, { axis: 'x', seg: 10 }), EX.x0 - 0.2, EX.y, exZ); // sooty throat
+    // the bin under it, and its brackets
+    put(chassis, camoBox(0.9, 0.18, 0.12, 5 + s), -0.65, 0.62, s * (UPPER_HALF + 0.06));
+    for (const x of [-1.0, -0.3]) put(chassis, box(0.04, 0.12, 0.06, C.dark), x, EX.y - 0.1, s * (UPPER_HALF + 0.05));
+    // the flame: a hot core, then an orange plume that flares out to a cone
+    // several times the outlet's width
+    const flame = new THREE.Group();
+    flame.position.set(EX.x0 - 0.26, EX.y, exZ);
+    flame.visible = false;
+    chassis.add(flame);
+    // a lathed plume: tight at the outlet, flaring out wide, then closing to
+    // a ragged tip; three nested layers, the hot core showing through
+    const plume = (prof, mat) => {
+      const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 10);
+      g.rotateZ(Math.PI / 2); // +y to -x: out the back
+      const m = new THREE.Mesh(g, mat);
+      m.userData.fx = true;
+      flame.add(m);
+      return m;
+    };
+    plume([[0.075, 0], [0.2, 0.25], [0.34, 0.7], [0.36, 1.05], [0.26, 1.45], [0.1, 1.75], [0, 1.85]], flameOuter);
+    plume([[0.065, 0], [0.14, 0.2], [0.2, 0.55], [0.17, 0.9], [0.06, 1.15], [0, 1.2]], flameMid);
+    plume([[0.055, 0], [0.085, 0.12], [0.08, 0.32], [0.04, 0.5], [0, 0.56]], flameInner);
+    nozzles.push({ flame, at: new THREE.Vector3(EX.x0 - 0.26, EX.y, exZ) });
+  }
+  // the right side: a short stowage bin ahead of the exhaust
+  put(chassis, camoBox(0.6, 0.18, 0.1, 6), 0.5, 0.66, UPPER_HALF + 0.05);
+  put(chassis, box(0.62, 0.025, 0.12, C.greenDark, { r: 0.01 }), 0.5, 0.76, UPPER_HALF + 0.05);
   // the slatted bin on the rear plate, tail lights either side
   put(chassis, box(0.22, 0.3, 0.9, C.greenDark, { r: 0.02 }), REAR - 0.11, 0.68, 0);
   for (let k = 0; k < 5; k++) put(chassis, box(0.02, 0.025, 0.86, C.slats), REAR - 0.225, 0.56 + k * 0.055, 0);
@@ -352,32 +394,37 @@ export function createLightTank() {
     // roof: the commander's hooded sight (left), the gunner's sight (right),
     // two hatches behind, periscopes round the edge
     // A sight head: a turning collar, an armoured box with its back top
-    // edge chamfered, and at the front a thick armour frame standing proud
-    // round a deep window opening, the roof plate running forward over it
-    // as a hood; ribs and grab handles on the sides.
-    const sight = (x, z, w, h, d) => {
+    // edge chamfered, and on the front a slim frame round the window opening,
+    // the glass set back in it, the roof plate running forward as a hood;
+    // ribs and grab handles on the sides. panes: 1 window, or 2 side by side
+    // split by a thin bar.
+    const sight = (x, z, w, h, d, panes) => {
       const sg = new THREE.Group();
       sg.position.set(x, ROOF, z);
       turret.add(sg);
-      put(sg, cyl(d * 0.55, 0.06, C.greenDark, { seg: 12 }), -0.02, 0.03, 0); // collar
+      put(sg, cyl(Math.min(d, w) * 0.55, 0.06, C.greenDark, { seg: 12 }), -0.02, 0.03, 0); // collar
       const body = prism([[-w / 2, 0], [w / 2, 0], [w / 2, h], [-w / 2 + 0.07, h], [-w / 2, h - 0.07]], d / 2, d / 2, camo(0.8, 14 + z * 10));
       body.position.y = 0.06;
       sg.add(body);
-      const fx = w / 2 + 0.035; // the frame's centre, out from the front face
-      const y0 = 0.06 + h * 0.18;
-      const y1 = 0.06 + h * 0.82;
-      put(sg, box(0.07, 0.05, d, C.greenDark, { r: 0.01 }), fx, y1 + 0.025, 0); // top bar
-      put(sg, box(0.07, 0.05, d, C.greenDark, { r: 0.01 }), fx, y0 - 0.025, 0); // bottom bar
-      for (const sz of [-1, 1]) put(sg, box(0.07, y1 - y0, 0.05, C.greenDark, { r: 0.01 }), fx, (y0 + y1) / 2, sz * (d / 2 - 0.025)); // side bars
-      put(sg, box(0.02, y1 - y0, d - 0.1, C.dark), w / 2 + 0.01, (y0 + y1) / 2, 0); // the window, set back in the frame
-      put(sg, box(0.14, 0.035, d + 0.04, C.greenDark, { r: 0.01 }), w / 2 + 0.03, 0.06 + h + 0.015, 0); // hood
+      const T = 0.022; // frame bar thickness
+      const P = 0.03; // how far it stands off the face
+      const fx = w / 2 + P / 2;
+      const y0 = 0.06 + h * 0.24;
+      const y1 = 0.06 + h * 0.78;
+      const zw = d / 2 - 0.035; // the opening's half width
+      put(sg, box(P, T, zw * 2 + T * 2, C.greenDark, { r: 0.006 }), fx, y1 + T / 2, 0); // top bar
+      put(sg, box(P, T, zw * 2 + T * 2, C.greenDark, { r: 0.006 }), fx, y0 - T / 2, 0); // bottom bar
+      for (const sz of [-1, 1]) put(sg, box(P, y1 - y0, T, C.greenDark, { r: 0.006 }), fx, (y0 + y1) / 2, sz * (zw + T / 2)); // side bars
+      if (panes === 2) put(sg, box(P * 0.8, y1 - y0, 0.012, C.greenDark), fx - 0.002, (y0 + y1) / 2, 0); // the divider
+      put(sg, box(0.01, y1 - y0, zw * 2, C.glass), w / 2 + 0.003, (y0 + y1) / 2, 0); // the window, set back
+      put(sg, box(0.1, 0.025, d + 0.02, C.greenDark, { r: 0.008 }), w / 2 + 0.01, 0.06 + h + 0.012, 0); // hood
       for (const sz of [-1, 1]) {
-        put(sg, box(0.03, h * 0.8, 0.02, C.greenDark), -w * 0.15, 0.06 + h / 2, sz * (d / 2 + 0.01)); // rib
-        put(sg, box(0.16, 0.025, 0.025, C.dark), 0.02, 0.06 + h * 0.62, sz * (d / 2 + 0.035)); // grab handle
+        put(sg, box(0.025, h * 0.8, 0.015, C.greenDark), -w * 0.15, 0.06 + h / 2, sz * (d / 2 + 0.008)); // rib
+        put(sg, box(0.14, 0.02, 0.02, C.dark), 0.0, 0.06 + h * 0.62, sz * (d / 2 + 0.03)); // grab handle
       }
     };
-    sight(0.22, -0.2, 0.32, 0.28, 0.3);
-    sight(0.28, 0.2, 0.28, 0.24, 0.27);
+    sight(0.24, -0.25, 0.3, 0.26, 0.4, 2); // commander's: wide, two windows
+    sight(0.3, 0.27, 0.24, 0.2, 0.22, 1); // gunner's: smaller, one window
     put(turret, cyl(0.15, 0.04, C.green, { seg: 14 }), COMMANDER.x, ROOF + 0.02, COMMANDER.z);
     put(turret, cyl(0.14, 0.04, C.green, { seg: 14 }), -0.24, ROOF + 0.02, 0.2);
     for (const [x, z] of [[-0.02, -0.38], [-0.45, -0.34], [-0.45, 0.34], [0.5, 0.0]]) put(turret, box(0.07, 0.07, 0.08, C.dark, { r: 0.01 }), x, ROOF + 0.035, z);
@@ -410,9 +457,12 @@ export function createLightTank() {
 
   // ---------------------------------------------------------------- roof MG
   const mgPivot = new THREE.Group();
-  mgPivot.position.set(COMMANDER.x + 0.12, ROOF + 0.26, COMMANDER.z);
+  // on a tall pintle, so the barrel clears the sight heads in front of it
+  const MG_Y = ROOF + 0.48;
+  mgPivot.position.set(COMMANDER.x + 0.12, MG_Y, COMMANDER.z);
   mgSlot.add(mgPivot);
-  put(mgSlot, cyl(0.025, 0.16, C.steel, { seg: 6 }), COMMANDER.x + 0.12, ROOF + 0.16, COMMANDER.z);
+  put(mgSlot, cyl(0.025, MG_Y - ROOF - 0.04, C.steel, { seg: 6 }), COMMANDER.x + 0.12, (ROOF + MG_Y) / 2, COMMANDER.z);
+  put(mgSlot, box(0.08, 0.06, 0.08, C.dark, { r: 0.01 }), COMMANDER.x + 0.12, MG_Y - 0.06, COMMANDER.z); // cradle
   put(mgPivot, box(0.3, 0.08, 0.08, C.dark, { r: 0.02 }), 0, 0, 0);
   put(mgPivot, cyl(0.022, 0.5, C.dark, { axis: 'x', seg: 6 }), 0.38, 0.01, 0);
   const mgFlash = put(mgPivot, new THREE.Group(), 0.66, 0.01, 0);
@@ -615,9 +665,34 @@ export function createLightTank() {
     }
   }
 
-  const commanderTop = new THREE.Vector3(COMMANDER.x, ROOF + 0.3, COMMANDER.z);
+  // a second gun goes on the gunner's hatch, also up clear of the sights
+  const commanderTop = new THREE.Vector3(-0.24, ROOF + 0.42, 0.2);
+
+  // Exhaust rockets: k 0..1 how lit (flame length grows with it)
+  let rocketK = 0;
+  function setRocket(k, lit, t = 0) {
+    rocketK = k;
+    for (const [i, n] of nozzles.entries()) {
+      n.flame.visible = lit && k > 0.05;
+      if (!n.flame.visible) continue;
+      const flick = 0.85 + Math.sin(t * 55 + i * 2.1) * 0.12 + Math.random() * 0.15;
+      const len = k * flick;
+      n.flame.scale.set(len, 0.8 + 0.2 * k + Math.random() * 0.08, 0.8 + 0.2 * k + Math.random() * 0.08);
+    }
+  }
+  function rocketNozzles() {
+    group.updateWorldMatrix(true, true);
+    return nozzles.map((n) => chassis.localToWorld(n.at.clone()));
+  }
+  function setFlameStyle(style) {
+    const hot = style === 'afterburner';
+    flameOuter.color.set(hot ? 0xff7a5a : 0xff7a22);
+    flameMid.color.set(hot ? 0xff9ad0 : 0xffa040);
+    flameInner.color.set(hot ? 0xa8e8ff : 0xfff1b8);
+  }
   return {
     kind: 'light',
+    autocannon: true, // small rounds: sparks, little smoke (see combat.fireCannon)
     group,
     chassis,
     turret,
@@ -631,11 +706,12 @@ export function createLightTank() {
     update,
     events,
     aimError: () => aimError,
-    // no rocket drums on this one: its Breakthrough is driven by the game
-    setRocket() {},
-    rocketNozzles: () => [],
-    setFlameStyle() {},
+    setRocket,
+    rocketNozzles,
+    setFlameStyle,
     commanderTop,
-    rocketK: 0,
+    get rocketK() {
+      return rocketK;
+    },
   };
 }

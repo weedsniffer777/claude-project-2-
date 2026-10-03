@@ -79,6 +79,28 @@ export function addNight(scene, { shadowSize = 14, shadowMap = 2048 } = {}) {
   };
 }
 
+// How far back along its direction the dusk sun's shadow camera sits.
+const SUN_BACK = 150;
+
+// A follow function for a shadow-casting light: centres its shadow box on a
+// point (the camera's target), snapped to whole shadow-map texels in the
+// light's own frame so shadow edges hold still instead of crawling as the
+// view moves.
+function shadowFollower(light, offset, size) {
+  const z = offset.clone().normalize();
+  const x = new THREE.Vector3(0, 1, 0).cross(z).normalize();
+  const y = z.clone().cross(x);
+  const q = new THREE.Vector3();
+  return (p) => {
+    const texel = (2 * size) / light.shadow.mapSize.x;
+    const a = Math.round(p.dot(x) / texel) * texel;
+    const b = Math.round(p.dot(y) / texel) * texel;
+    q.copy(x).multiplyScalar(a).addScaledVector(y, b).addScaledVector(z, p.dot(z));
+    light.target.position.copy(q);
+    light.position.copy(q).add(offset);
+  };
+}
+
 // Where the dusk sun sits relative to its target: low, from behind the far
 // (north) side of the street. Levels use it to aim fake light shafts.
 export const DUSK_SUN = new THREE.Vector3(7, 8.5, -30);
@@ -104,19 +126,17 @@ export function addDusk(scene, { shadowSize = 18, shadowMap = 2048 } = {}) {
   scene.fog = new THREE.Fog(0x6b5568, 79, 121); // the game camera sits ~65 units back
   scene.add(new THREE.HemisphereLight(0x9d97c8, 0x5a4a44, 2.1));
   const sun = new THREE.DirectionalLight(0xffbf7a, 5.2);
-  const offset = DUSK_SUN.clone();
+  // the sun sits far back along its direction, so every tall building
+  // between it and the view is inside the shadow volume: with it close, a
+  // far-side block was behind the near plane until you drove up to it, and
+  // then its whole long shadow popped in at once
+  const offset = DUSK_SUN.clone().setLength(SUN_BACK);
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMap, shadowMap);
-  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: 80 });
-  sun.shadow.bias = -0.0008;
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: SUN_BACK + 60 });
+  sun.shadow.bias = -0.0003;
   sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
   sun.position.copy(offset);
-  return {
-    sun,
-    follow(p) {
-      sun.target.position.copy(p);
-      sun.position.copy(p).add(offset);
-    },
-  };
+  return { sun, follow: shadowFollower(sun, offset, shadowSize) };
 }

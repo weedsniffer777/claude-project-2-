@@ -1110,7 +1110,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           hovered = hits[0].object.userData.enemy || null;
         }
       }
-      level.light.follow(pos);
+      level.light.follow(camTarget); // the shadow box follows the view, not the tank
       if (fireOnAim) {
         fireOnAim = false;
         fire();
