@@ -49,6 +49,19 @@ function watchFrameRate(dt) {
   }
 }
 
+// Dev-only frame counter in the bottom-right corner (with the quality tier).
+const fpsEl = document.createElement('div');
+fpsEl.className = 'dk-fps';
+document.body.append(fpsEl);
+const fpsMeter = { t: 0, frames: 0 };
+function countFrame(dt) {
+  fpsMeter.t += dt;
+  fpsMeter.frames++;
+  if (fpsMeter.t < 0.5) return;
+  fpsEl.textContent = `${Math.round(fpsMeter.frames / fpsMeter.t)} fps · ${TIERS[tier].name}${autoQuality ? ' (auto)' : ''}`;
+  fpsMeter.t = fpsMeter.frames = 0;
+}
+
 const devkit = createDevKit({
   tools: [{ id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) }],
   settings: [
@@ -108,6 +121,7 @@ function frame() {
   const raw = clock.getDelta();
   const dt = Math.min(raw, 0.05);
   watchFrameRate(raw);
+  countFrame(raw);
   mode.frame(dt, clock.getElapsed());
   window.__ready = true;
   requestAnimationFrame(frame);

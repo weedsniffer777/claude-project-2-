@@ -68,7 +68,9 @@ const CSS = `
 .dk-setting select option { color: #111; }
 .dk-menu button span { font: 400 12px/1.35 var(--dk-font-body); text-transform: none; letter-spacing: 0; opacity: 0.8; }
 .dk-panel [hidden], .dk-menu[hidden] { display: none !important; }
-.dk-shot .dk-panel, .dk-shot .dk-hint, .dk-shot .dk-button, .dk-shot .dk-menu { display: none !important; }
+.dk-fps { position: fixed; z-index: 30; right: 6px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); padding: 2px 6px; border-radius: 4px;
+  background: var(--dk-panel); color: var(--dk-muted); font: 600 10px/1.3 var(--dk-font-label); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; pointer-events: none; }
+.dk-shot .dk-panel, .dk-shot .dk-hint, .dk-shot .dk-button, .dk-shot .dk-menu, .dk-shot .dk-fps { display: none !important; }
 `;
 
 let injected = false;

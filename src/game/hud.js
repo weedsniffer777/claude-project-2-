@@ -68,7 +68,7 @@ const CSS = `
 .hud-stick .knob { left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; }
 .hud-stick.idle .base { opacity: 0.45; }
 .hud-stick.idle .knob { opacity: 0.6; animation: hudbreathe 1.6s steps(4) infinite; }
-.hud.touch .hud-prompt { left: auto; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: none; max-width: min(420px, 52vw); }
+.hud.touch .hud-prompt { left: auto; right: 16px; bottom: calc(30px + env(safe-area-inset-bottom, 0px)); transform: none; max-width: min(420px, 52vw); }
 .hud.touch .hud-prompt[hidden] { transform: translateY(10px); }
 .hud.touch .hud-top { transform-origin: top left; transform: scale(0.8); }
 .hud.touch .hud-kills { top: calc(46px + env(safe-area-inset-top, 0px)); }

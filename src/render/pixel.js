@@ -98,7 +98,7 @@ const frag = /* glsl */ `
         if (hitTeam.r + hitTeam.g > 0.5 && !spanX && !spanY) c = hitTeam.g > 0.5 ? enemyRim : playerRim;
       } else if (!shown) {
         vec3 team = m.g > 0.5 ? enemyRim : playerRim;
-        c = mix(c * 0.85, team * 0.55, 0.5); // hidden behind scenery: tinted silhouette
+        c = mix(c, team * 0.5, 0.3); // hidden behind scenery: faint tinted silhouette
       }
     }
     gl_FragColor = vec4(c, 1.0);
