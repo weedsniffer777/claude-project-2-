@@ -16,9 +16,10 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, partModel, BASE_STATS } from './parts.js';
+import { PARTS, attachPart, statsFor, BASE_STATS } from './parts.js';
 import { save } from './save.js';
-import { snapshotCanvas as sharedSnapshot, upArrow } from '../render/snapshot.js';
+import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
+import { partPicture } from '../render/partPictures.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -127,6 +128,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       won: false,
       scrap: 0,
       parts: [...loadout],
+      startParts: [...loadout], // what it rolled out with (not 'found' this run)
       rockets: false,
       boost: 0,
       boostCd: 0,
@@ -648,7 +650,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     for (const e of level.emitters) {
       if (e.level <= 0.01) continue;
       const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
-      if (d < 26 * 26) nearest.push([d, e]);
+      if (d < 26 * 26) nearest.push([e.priority ? 0 : d, e]); // (priority only counts in reach)
     }
     nearest.sort((a, b) => a[0] - b[0]);
     lamps.forEach((l, i) => {
@@ -770,8 +772,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // its model for the results screen.
   const partShots = new Map();
   function partCards() {
-    return run.parts.map((id) => {
-      if (!partShots.has(id)) partShots.set(id, id === 'afterburner' ? boostPicture(true, 'afterburner', 72, 48, bigUpArrow).toDataURL() : snapshot(partModel(id), 72, 48, PARTS[id].badge === 'up' ? upArrow : null));
+    return run.parts.filter((id) => !run.startParts.includes(id)).map((id) => {
+      if (!partShots.has(id)) partShots.set(id, id === 'afterburner' ? boostPicture(true, 'afterburner', 72, 48, bigUpArrow).toDataURL() : partPicture(renderer, id, 72, 48));
       return { ...PARTS[id], image: partShots.get(id) };
     });
   }
@@ -805,9 +807,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const pic = snapshotCanvas(tk.group, W, H, decorate, { target, dir: new THREE.Vector3(0.12, 0.3, 1), half, aspectFit: true });
     boostPics.set(key, pic);
     return pic;
-  }
-  function snapshot(model, W = 72, H = 48, decorate = null) {
-    return snapshotCanvas(model, W, H, decorate).toDataURL();
   }
   // view: optional { target, dir, half } framing a close-up instead of the
   // whole model
@@ -1003,7 +1002,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       pos.z = THREE.MathUtils.clamp(pos.z, bounds.minZ, bounds.maxZ);
       // drive through junk (before the blocks push back), rockets and the
       // dozer blade break heavy stuff too
-      const ram = boosting || (stats.crushHeavy && Math.abs(speed) > 2.5);
+      const ram = boosting ? 'boost' : stats.crushHeavy && Math.abs(speed) > 2.5 ? 'dozer' : false;
       crushing.update(dt, tankBox(), {
         ram,
         speed,

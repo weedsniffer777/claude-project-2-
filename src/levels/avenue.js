@@ -516,6 +516,9 @@ function buildAvenue(scene) {
     slab(RIVER.x0, RIVER.x1, CURB.s, BRIDGE.s);
     slab(RIVER.x1, JUNCTION.x0, CURB.s, MAP.z1);
     slab(JUNCTION.x1, MAP.x1, CURB.s, MAP.z1);
+    // the embankments: paved the whole way along both banks
+    slab(RIVER.x0 - 3.5, RIVER.x0, MAP.z0, -16);
+    slab(RIVER.x1, RIVER.x1 + 3.5, MAP.z0, -16);
     // the cross road's own sidewalks
     for (const [xa, xb] of [[JUNCTION.x0, JROAD.x0], [JROAD.x1, JUNCTION.x1]]) {
       slab(xa, xb, MAP.z0, CURB.n);
@@ -1379,8 +1382,18 @@ function buildAvenue(scene) {
       // embankment walls, with the bank's snow on top
       for (const [x, side] of [[RIVER.x0 - 0.25, -1], [RIVER.x1 + 0.25, 1]]) {
         for (const [z0, z1] of [[MAP.z0, BRIDGE.n], [BRIDGE.s, MAP.z1]]) {
-          B.chunk(0.5, -RIVER.y + SW, z1 - z0, 0x77736c, x, (RIVER.y + SW) / 2, (z0 + z1) / 2);
+          // (its top just under the sidewalk's, so the two never flicker)
+          B.chunk(0.5, -RIVER.y + SW - 0.02, z1 - z0, 0x77736c, x, (RIVER.y + SW - 0.02) / 2, (z0 + z1) / 2);
           B.block(x - side * 0.1, (z0 + z1) / 2, 0.4, (z1 - z0) / 2);
+          // a railing along the bank's edge, a post every couple of metres
+          const rx = x + side * 0.3; // on the land side of the wall
+          const len = z1 - z0;
+          for (let z = z0 + 0.6; z < z1 - 0.3; z += 1.8) {
+            const bent = rand() < 0.08;
+            B.piece(0.07, 0.9, 0.07, 0x4c4f53, rx, SW + 0.45, z, bent ? 0.35 : 0, 0, 0);
+          }
+          B.piece(0.06, 0.06, len - 0.4, 0x5a5d61, rx, SW + 0.88, (z0 + z1) / 2);
+          B.piece(0.05, 0.05, len - 0.4, 0x5a5d61, rx, SW + 0.48, (z0 + z1) / 2);
         }
       }
       // the bridge: deck, fascia beams, two piers, railings

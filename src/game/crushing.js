@@ -19,8 +19,8 @@ export class Crushing {
     this.anims = [];
   }
 
-  // tankBox: the tank's 2D box; ram: boosting (or a dozer blade) so heavy
-  // things break too. Returns the props crushed this frame.
+  // tankBox: the tank's 2D box; ram: 'boost' or 'dozer' (a blade), so heavy
+  // things break too (breakables only to the boost). Returns the props crushed this frame.
   update(dt, tankBox, { ram = false, speed = 0, onCrush } = {}) {
     const out = [];
     if (Math.abs(speed) > 0.6 || ram) {
@@ -31,6 +31,7 @@ export class Crushing {
         const f = c.footprint;
         if (Math.abs(f.x - tankBox.x) > reach + f.hx || Math.abs(f.z - tankBox.z) > reach + f.hz) continue;
         if (c.armored || (c.heavy && !ram)) continue;
+        if (c.breakable && ram !== 'boost') continue; // barricades and gates: a shell or the boost, not the blade
         if (!separate(probe, f)) continue;
         this.crush(c, tankBox);
         out.push(c);

@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { createRenderer } from './render/setup.js';
 import { createGame } from './game/game.js';
-import { createHub } from './hub/hub.js';
+import { createHub, CAMPAIGN } from './hub/hub.js';
+import { save } from './game/save.js';
 import { createModelViewer } from './devkit/modelViewer.js';
 import { createDevKit } from './devkit/devkit.js';
 import { MODELS } from './models/registry.js';
@@ -86,6 +87,15 @@ const devkit = createDevKit({
         } catch {
           // storage blocked: nothing saved to clear
         }
+        location.reload(); // start over, as on a first visit
+      },
+    },
+    {
+      id: 'add-scraps',
+      label: 'Add 1,000,000 scraps',
+      detail: 'For testing upgrades and unlocks',
+      open: () => {
+        save.addBank(1000000);
         hub.refresh();
       },
     },
@@ -100,6 +110,21 @@ const devkit = createDevKit({
         if (id === 'base') return setMode(hub);
         game.loadLevel(id);
         setMode(game);
+      },
+    },
+    {
+      id: 'complete',
+      label: 'Complete up to',
+      options: [{ value: '0', label: '(nothing)' }, ...CAMPAIGN.filter((l) => l.id).map((l) => ({ value: String(l.n), label: `Level ${l.n}` }))],
+      value: '0',
+      // marks every level up to n cleared and hands over all their rewards
+      onChange: (v) => {
+        for (const l of CAMPAIGN) {
+          if (!l.id || l.n > +v) continue;
+          save.clear(l.id);
+          for (const id of l.rewards || []) save.own(id);
+        }
+        hub.refresh();
       },
     },
     {

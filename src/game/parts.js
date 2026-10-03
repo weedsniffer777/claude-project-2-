@@ -36,7 +36,7 @@ const ERA_EDGE = 0x3a3626;
 export const PARTS = {
   dozer: {
     name: 'Dozer blade',
-    text: 'Ram walkers for heavy damage. Plows through wrecks.',
+    text: 'Ram enemies for heavy damage. Plows through wrecks.',
     icon: ['................', '.##############.', '.#++++++++++++#.', '.#++++++++++++#.', '.#++++++++++++#.', '.##############.', '...-........-...', '...--......--...', '....--------....', '................'],
     apply(s) {
       s.ramDamage = 45;
@@ -56,7 +56,7 @@ export const PARTS = {
     },
   },
   autoloader: {
-    name: 'Autoloader',
+    name: 'Fast reload',
     text: 'Main gun reloads 40% faster.',
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
@@ -191,8 +191,8 @@ export const PARTS = {
     },
   },
   twinmg: {
-    name: 'Twin MG',
-    text: 'A second MG on the cupola. It picks its own target.',
+    name: 'Second gun',
+    text: 'A second machine gun that picks its own target.',
     icon: ['................', '.....------.....', '.....-####-.....', '#########-#.....', '.....-####-.....', '.....------.....', '#########-#.....', '.....-####-.....', '.....------.....', '................'],
     apply(s) {
       s.twinMg = true;
@@ -266,8 +266,8 @@ export const PARTS = {
     },
   },
   optics: {
-    name: 'Optics',
-    text: 'A better sight: see further around you, MG reaches further.',
+    name: 'Wider view',
+    text: 'See further around you. Machine gun reaches further.',
     icon: ['................', '....######......', '...#------#.....', '..#--****--#####', '..#--*##*--#....', '..#--****--#####', '...#------#.....', '....######......', '................', '................'],
     apply(s) {
       s.view *= 1.14;
@@ -290,7 +290,7 @@ export const PARTS = {
     },
   },
   he: {
-    name: 'HE-frag shells',
+    name: 'Explosive shells',
     text: 'Bigger blast and +20 damage per shot.',
     icon: ['................', '......+.........', '.....+++........', '.....+++........', '.....###........', '.....+++........', '.....###........', '................', '................', '................'],
     apply(s) {

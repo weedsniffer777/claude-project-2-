@@ -16,9 +16,9 @@ import { createTank } from '../models/tank.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
-import { PARTS, attachPart, partModel } from '../game/parts.js';
+import { PARTS, attachPart } from '../game/parts.js';
 import { save } from '../game/save.js';
-import { snapshotCanvas, upArrow } from '../render/snapshot.js';
+import { partPicture } from '../render/partPictures.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -49,7 +49,7 @@ const ANCHOR = {
 // The campaign: the levels in order, bottom of the map to the top. Each
 // level is made of zones (the avenue, the bridge, ...). Only the first is
 // scouted.
-const LEVELS = [
+export const CAMPAIGN = [
   { n: 1, id: 'avenue', name: 'Ruined city street', at: [0.3, 0.84], open: true, steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'era', 'afterburner', 'twinmg', 'optics'] },
   { n: 2, at: [0.66, 0.62] },
   { n: 3, at: [0.34, 0.38] },
@@ -100,6 +100,10 @@ const CSS = `
 .base-brief .rewards { display: flex; flex-wrap: wrap; gap: 8px; }
 .base-brief .rewards span { position: relative; width: 54px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .base-brief .rewards img { width: 100%; height: 100%; image-rendering: pixelated; }
+.base-brief .rewards span.got img { filter: brightness(0.45) saturate(0.4); }
+.base-brief .rewards span:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-brief .rewards span[data-tip]:hover::before { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 190px; padding: 7px 9px; z-index: 3;
+  font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
 .base-brief .rewards span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 /* hangar: the tank in the middle, a box per fitted part with a line to it */
 .base-fit { position: absolute; inset: 0; pointer-events: none; }
@@ -253,9 +257,9 @@ function campaignMap() {
   }
   // the route between the levels: dashed white
   g.fillStyle = '#f1e9d8';
-  for (let i = 0; i < LEVELS.length - 1; i++) {
-    const [ax, ay] = LEVELS[i].at;
-    const [bx, by] = LEVELS[i + 1].at;
+  for (let i = 0; i < CAMPAIGN.length - 1; i++) {
+    const [ax, ay] = CAMPAIGN[i].at;
+    const [bx, by] = CAMPAIGN[i + 1].at;
     for (let s = 0; s <= 40; s += 2) {
       const t = s / 40;
       g.fillRect(Math.round((ax + (bx - ax) * t) * W), Math.round((ay + (by - ay) * t) * Hc), 2, 2);
@@ -912,15 +916,15 @@ export function createHub({ renderer, pixel, onDeploy }) {
     menu.querySelector('.back').addEventListener('click', closeRoom);
   }
   // the briefing: the campaign map in the middle, the zone's details beside it
-  let selLevel = LEVELS[0];
+  let selLevel = CAMPAIGN[0];
   const mapCanvas = campaignMap();
   function openBriefing() {
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${LEVELS.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
-    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(LEVELS[b.dataset.n - 1]));
+    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
     showLevel(selLevel);
   }
   function showLevel(z) {
@@ -940,7 +944,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         <h2>${z.name}</h2>
         <div class="steps">${z.steps.map((t, i) => `${i ? '<i></i>' : ''}<b class="${t === 'Boss' ? 'boss' : ''}">${t}</b>`).join('')}</div>
         <span class="label">Possible rewards</span>
-        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'got' : ''}" title="${PARTS[id].name}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"></span>`).join('')}</div>
+        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'got' : ''}" data-tip="${PARTS[id].name}: ${PARTS[id].text}${owned.includes(id) ? ' (found)' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"></span>`).join('')}</div>
         <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
       info.querySelector('.go').addEventListener('click', () => deploy(z.id));
     }
@@ -950,11 +954,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // ---------------------------------------------------- the fitting screen
   // The tank's loadout (what it had at the end of its last level), a box per
   // part with a line to where it sits; click a box to swap or remove it.
-  const icons = new Map();
-  function partIcon(id) {
-    if (!icons.has(id)) icons.set(id, snapshotCanvas(renderer, partModel(id), 84, 56, PARTS[id].badge === 'up' ? upArrow : null).toDataURL());
-    return icons.get(id);
-  }
+  const partIcon = (id) => partPicture(renderer, id);
   const fitBoxes = fit.querySelector('.boxes');
   const fitSvg = fit.querySelector('svg');
   const fitNote = fit.querySelector('.note');

@@ -203,7 +203,7 @@ export function buildDepotRoom(scene) {
     B.line([at(PAD_X, H, z).sub(O), new THREE.Vector3(PAD_X, 3.4, z)]);
     put(B.root, cyl(0.3, 0.18, 0x2e3034, { seg: 8, radiusEnd: 0.12 }), PAD_X, 3.3, z);
     put(B.root, cyl(0.18, 0.05, SODIUM, { seg: 8, glow: true }), PAD_X, 3.2, z);
-    const e = B.emit(new THREE.Vector3(PAD_X, 2.4, z), SODIUM, 14, 6);
+    const e = B.emit(new THREE.Vector3(PAD_X, 2.4, z), SODIUM, 16, 6, { priority: true }); // always gets a real light while it has a part
     const p = B.pool(PAD_X, z, 1.8, SODIUM, 0.26);
     const holder = new THREE.Group();
     holder.position.set(PAD_X, 0.24, z);
@@ -348,11 +348,13 @@ export function buildDepotRoom(scene) {
     B.add(new THREE.Mesh(patch, new THREE.MeshBasicMaterial({ color: SUN, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
   }
   // warm lamps hanging along the bay
+  let bayLamp = null; // the one by the pallets: off while parts are on offer (it favoured the middle one)
   for (const x of [4, 10, 22]) {
     B.line([new THREE.Vector3(x, H, 2.5), new THREE.Vector3(x, 3.8, 2.5)]);
     put(B.root, cyl(0.28, 0.16, 0x2e3034, { seg: 8, radiusEnd: 0.1 }), x, 3.7, 2.5);
     put(B.root, cyl(0.16, 0.05, SODIUM, { seg: 8, glow: true }), x, 3.61, 2.5);
-    B.emit(new THREE.Vector3(x, 2.8, 2.5), SODIUM, 13, 7);
+    const e = B.emit(new THREE.Vector3(x, 2.8, 2.5), SODIUM, 13, 7);
+    if (x === 22) bayLamp = e;
     B.pool(x, 2.5, 2.2, SODIUM, 0.2);
   }
 
@@ -381,6 +383,7 @@ export function buildDepotRoom(scene) {
   }
   let blocksRef = null; // the game's live block list (the door is in it)
   function setOffers(ids) {
+    if (bayLamp) bayLamp.level = ids.length ? 0 : 1;
     pads.forEach((p, i) => {
       p.holder.clear();
       p.offer = ids[i] ?? null;
