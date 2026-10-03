@@ -4,7 +4,7 @@
 // T-55 traits this model is built around:
 //  - long hull with a ~30 deg upper glacis, steep lower glacis and rear plate
 //    (one extruded side profile, so the plates actually meet)
-//  - no return rollers: the top run of the track rests on the five big road
+//  - no return rollers: the top run of the track rests on the big road
 //    wheels and sags between them; wider gap after the first wheel; small
 //    raised idler at the front, raised drive sprocket at the rear
 //  - double road wheels with the track's guide horns running between them
@@ -17,7 +17,9 @@
 //  - commander's cupola left, loader's hatch right with the DShK, L-2 IR
 //    searchlight right of the gun, driver's hatch front-left
 //  - two fuel drums hung off the rear plate above the unditching beam
-// "Small-ized" = big turret, fat gun. Proportions otherwise stay T-55.
+// "Small-ized" = the hull is compressed (0.85x long and wide) and lifted onto
+// four oversized road wheels, while the turret keeps its size; fat gun; big
+// fuel drums as the caricature accent.
 //
 // Each of the seven loadout slots lives in its own group(s) so variants can be
 // swapped in later without touching the rest of the model:
@@ -46,9 +48,16 @@ const C = PALETTE;
 const TAU = Math.PI * 2;
 
 // ---------------------------------------------------------------- layout
-const HULL_TOP = 0.98;
-const DECK_Y = HULL_TOP + 0.03; // extrude bevel adds a little
-const HULL_W = 0.8; // half width of the hull body
+// The hull, track covers and deck fittings are laid out in "design"
+// coordinates below, then compressed by SX (length and width) and lifted by
+// LIFT onto the running gear. Running gear, turret and drums use world units.
+const SX = 0.85;
+const LIFT = 0.08;
+const HULL_TOP = 0.98; // design
+const DECK_Y = HULL_TOP + 0.03; // design; extrude bevel adds a little
+const WORLD_DECK_Y = DECK_Y + LIFT;
+const HULL_W = 0.8; // design half width of the hull body
+const HULL_HALF = HULL_W * SX; // world
 const HULL_PROFILE = [
   [-2.1, HULL_TOP], // rear deck edge
   [1.3, HULL_TOP], // top edge of the upper glacis (just under the turret front)
@@ -59,17 +68,18 @@ const HULL_PROFILE = [
 ];
 const GLACIS_ANGLE = Math.atan2(HULL_TOP - 0.55, 2.25 - 1.3);
 
-const TRACK_Z = 1.07; // track centre line
-const TRACK_W = 0.44;
+// running gear (world units)
+const TRACK_Z = 1.07 * SX; // track centre line
+const TRACK_W = 0.44 * SX;
 const LINK_T = 0.045;
-const WHEEL_R = 0.29;
-const WHEEL_Y = 0.34;
-const ROAD_WHEELS = [1.25, 0.48, -0.14, -0.75, -1.36]; // front to rear; wider gap after the first
-const IDLER = { x: 1.9, y: 0.44, r: 0.2 };
-const SPROCKET = { x: -1.99, y: 0.48, r: 0.26 };
-const DISC_DZ = 0.11; // half spacing of the double wheel discs
+const WHEEL_R = 0.34; // oversized road wheels; these lift the whole hull
+const WHEEL_Y = WHEEL_R + LINK_T;
+const ROAD_WHEELS = [1.31, 0.43, -0.31, -1.05]; // front to rear; wider gap after the first
+const IDLER = { x: 1.87, y: 0.5, r: 0.2 };
+const SPROCKET = { x: -1.75, y: 0.52, r: 0.28 };
+const DISC_DZ = 0.11 * SX; // half spacing of the double wheel discs
 
-const FENDER_Y = 0.9; // close under the deck: most of the hull side reads as track height
+const FENDER_Y = 0.9; // design; close under the deck: most of the hull side reads as track height
 const FENDER_IN = HULL_W;
 const FENDER_OUT = 1.34;
 const FENDER_PROFILE = [
@@ -83,7 +93,7 @@ const FENDER_PROFILE = [
   }),
 ];
 
-const TURRET_X = 0.08;
+const TURRET_X = 0.07; // world
 // Revolved turret profile: skirt from R0 (at the ring) tapering to R1 at h1,
 // then a superellipse dome of height D. sx stretches it front-to-back.
 const TURRET = { R0: 1.0, R1: 0.9, h1: 0.28, D: 0.4, p: 2.4, sx: 1.08, base: 0.06 };
@@ -207,8 +217,19 @@ export function createTank() {
   const chassis = new THREE.Group(); // everything that rocks on recoil
   group.add(chassis);
 
+  // compressed + lifted hull (design coordinates inside)
+  const body = new THREE.Group();
+  body.scale.set(SX, 1, SX);
+  body.position.y = LIFT;
+  chassis.add(body);
+  // track covers use the same transform but stay on the ground with the running gear
+  const coverFrame = new THREE.Group();
+  coverFrame.scale.set(SX, 1, SX);
+  coverFrame.position.y = LIFT;
+  group.add(coverFrame);
+
   const turret = new THREE.Group();
-  turret.position.set(TURRET_X, DECK_Y, 0);
+  turret.position.set(TURRET_X, WORLD_DECK_Y, 0);
   chassis.add(turret);
 
   // Slot groups. Some slots have parts on both the hull and the turret, so
@@ -221,8 +242,10 @@ export function createTank() {
     return g;
   };
   const tracks = slot('tracks', group); // running gear stays on the ground
+  const covers = slot('tracks', coverFrame);
   slot('armor', chassis);
-  const engine = slot('engine', chassis);
+  const engine = slot('engine', chassis); // world-space parts (drums)
+  const engineBody = slot('engine', body); // hull-attached parts (design coords)
   const gunSlot = slot('gun', turret);
   const mgSlot = slot('mg', turret);
   const sights = slot('sights', turret);
@@ -233,7 +256,7 @@ export function createTank() {
 
   // ---------------------------------------------------------------- hull
   const hull = new THREE.Group();
-  chassis.add(hull);
+  body.add(hull);
   {
     const shape = new THREE.Shape(HULL_PROFILE.map(([x, y]) => new THREE.Vector2(x, y)));
     const depth = HULL_W * 2 - 0.06;
@@ -312,20 +335,18 @@ export function createTank() {
   loaderLid.rotation.z = 0.7;
   seat(box(0.1, 0.07, 0.1, C.dark, { r: 0.015 }), 0.2, 0.46, 0.02); // loader's periscope
   seat(ellipsoid(0.11, 0.07, 0.11, C.oliveDark, { wseg: 10, hseg: 6 }), 0.42, 0.24, 0); // ventilator dome
-  // the T-55 "face": an oval cast boss either side of the gun. Left is the
-  // gunner's sight port (sights slot adds its glass), right is the coax MG port.
+  // the T-55 "face": a tall rounded-rectangle cast frame either side of the
+  // gun with a smaller empty cutout inside. Left is the gunner's sight
+  // (sights slot adds its glass), right is the coax MG port.
   for (const side of [-1, 1]) {
-    const z = side * 0.32;
+    const z = side * 0.33;
     const y = GUN_Y + 0.08;
-    const boss = put(turret, ellipsoid(0.12, 0.17, 0.11, C.oliveLight, { wseg: 12, hseg: 8 }), turretFrontX(y, z) + 0.01, y, z);
-    boss.rotation.y = -side * 0.3; // follow the dome's curve
-  }
-  {
-    const z = 0.32;
-    const y = GUN_Y + 0.06;
-    const x = turretFrontX(y, z) + 0.11;
-    put(turret, cyl(0.032, 0.04, C.dark, { axis: 'x', seg: 8 }), x, y, z); // coax port
-    put(turret, cyl(0.018, 0.08, C.steel, { axis: 'x', seg: 6 }), x + 0.03, y, z);
+    const port = new THREE.Group();
+    port.position.set(turretFrontX(y, z) - 0.01, y, z);
+    port.rotation.y = -side * 0.33; // follow the dome's curve
+    turret.add(port);
+    put(port, box(0.1, 0.28, 0.14, C.olive, { r: 0.065 }));
+    if (side > 0) put(port, box(0.04, 0.17, 0.06, C.dark, { r: 0.028 }), 0.04, 0, 0); // coax: empty cutout
   }
   // whip antenna on the left rear of the roof
   seat(cyl(0.045, 0.08, C.dark, { seg: 8 }), -0.55, -0.6, 0.03);
@@ -406,11 +427,11 @@ export function createTank() {
     const face = s * (DISC_DZ + 0.061);
     for (let k = 0; k < 6; k++) {
       const a = (k / 6) * TAU;
-      const hole = put(p, box(0.075, 0.06, 0.012, C.dark, { r: 0.01 }), Math.cos(a) * 0.135, Math.sin(a) * 0.135, face);
+      const hole = put(p, box(WHEEL_R * 0.26, WHEEL_R * 0.21, 0.012, C.dark, { r: 0.01 }), Math.cos(a) * WHEEL_R * 0.47, Math.sin(a) * WHEEL_R * 0.47, face);
       hole.rotation.z = a;
     }
-    put(p, cyl(0.075, 0.03, C.steel, { axis: 'z', seg: 10 }), 0, 0, face + s * 0.012);
-    put(p, cyl(0.03, 0.03, C.dark, { axis: 'z', seg: 6 }), 0, 0, face + s * 0.03);
+    put(p, cyl(WHEEL_R * 0.26, 0.03, C.steel, { axis: 'z', seg: 10 }), 0, 0, face + s * 0.012);
+    put(p, cyl(WHEEL_R * 0.1, 0.03, C.dark, { axis: 'z', seg: 6 }), 0, 0, face + s * 0.03);
     put(p, cyl(0.045, DISC_DZ * 2 + 0.1, C.steel, { axis: 'z', seg: 8 })); // axle
   }
 
@@ -456,7 +477,7 @@ export function createTank() {
       const seg = new THREE.Group();
       seg.position.set((x0 + x1) / 2, (y0 + y1) / 2, zc);
       seg.rotation.z = Math.atan2(y1 - y0, x1 - x0);
-      tracks.add(seg);
+      covers.add(seg);
       put(seg, box(len + 0.05, 0.05, width, C.dusty, { r: 0.015 }));
       const isGuard = k !== 1;
       if (isGuard) {
@@ -488,18 +509,18 @@ export function createTank() {
       const mesh = new THREE.Mesh(geo, toon(C.dusty));
       mesh.castShadow = mesh.receiveShadow = true;
       mesh.position.z = s * (HULL_W + 0.02);
-      tracks.add(mesh);
+      covers.add(mesh);
     }
   }
 
   // Suspension arms, final drive and idler crank, seen between the wheels.
   function runningGearDetail(s) {
-    const z = s * (HULL_W + 0.05);
+    const z = s * (HULL_HALF + 0.05);
     for (const x of ROAD_WHEELS) {
       const arm = put(tracks, box(0.26, 0.07, 0.05, C.oliveDark, { r: 0.015 }), x + 0.11, WHEEL_Y + 0.05, z);
       arm.rotation.z = 0.42;
     }
-    put(tracks, cyl(0.16, 0.12, C.oliveDark, { axis: 'z', seg: 12 }), SPROCKET.x + 0.04, SPROCKET.y, s * (HULL_W + 0.06));
+    put(tracks, cyl(0.17, 0.12, C.oliveDark, { axis: 'z', seg: 12 }), SPROCKET.x + 0.04, SPROCKET.y, s * (HULL_HALF + 0.06));
     const crank = put(tracks, box(0.26, 0.08, 0.05, C.oliveDark, { r: 0.015 }), IDLER.x - 0.13, IDLER.y + 0.04, z);
     crank.rotation.z = -0.3;
   }
@@ -516,47 +537,50 @@ export function createTank() {
     }
     // stowage on the left cover (front)
     const top = FENDER_Y + 0.025;
-    put(tracks, box(0.5, 0.22, 0.44, C.oliveDark, { r: 0.04 }), 0.95, top + 0.11, -1.07);
-    put(tracks, box(0.18, 0.03, 0.03, C.steel), 0.95, top + 0.235, -1.07);
+    put(covers, box(0.5, 0.22, 0.38, C.oliveDark, { r: 0.04 }), 0.95, top + 0.11, -1.13);
+    put(covers, box(0.18, 0.03, 0.03, C.steel), 0.95, top + 0.235, -1.13);
   }
 
   // ---------------------------------------------------------------- engine
   // Fuel and exhaust: box tanks along the right cover, an oil tank and the
   // exhaust outlet on the left, drums hung off the rear above the beam.
   function buildEngine() {
+    const e = engineBody; // design coordinates (compressed with the hull)
     const top = FENDER_Y + 0.025;
-    for (const x of [-1.85, -1.29, -0.73]) {
-      put(engine, box(0.56, 0.28, 0.46, C.olive, { r: 0.05 }), x, top + 0.14, 1.07);
-      for (const dx of [-0.16, 0.16]) put(engine, box(0.035, 0.29, 0.475, C.dark, { r: 0.008 }), x + dx, top + 0.14, 1.07);
+    for (const x of [-1.82, -1.26]) {
+      put(e, box(0.56, 0.28, 0.46, C.olive, { r: 0.05 }), x, top + 0.14, 1.07);
+      for (const dx of [-0.16, 0.16]) put(e, box(0.035, 0.29, 0.475, C.dark, { r: 0.008 }), x + dx, top + 0.14, 1.07);
     }
-    put(engine, cyl(0.03, 1.6, C.steel, { axis: 'x', seg: 6 }), -1.29, top + 0.3, 1.2); // feed pipe
-    put(engine, box(0.6, 0.26, 0.44, C.olive, { r: 0.05 }), -0.95, top + 0.13, -1.09); // oil tank
+    put(e, cyl(0.03, 1.15, C.steel, { axis: 'x', seg: 6 }), -1.54, top + 0.3, 1.2); // feed pipe
+    put(e, box(0.58, 0.26, 0.44, C.olive, { r: 0.05 }), -1.15, top + 0.13, -1.09); // oil tank
     // exhaust outlet on the left cover, sooty
-    put(engine, box(0.46, 0.12, 0.3, C.dark, { r: 0.03 }), -1.68, top + 0.06, -0.98);
-    for (let i = 0; i < 4; i++) put(engine, box(0.03, 0.02, 0.3, C.steel), -1.85 + i * 0.11, top + 0.13, -0.98);
+    put(e, box(0.4, 0.12, 0.3, C.dark, { r: 0.03 }), -1.74, top + 0.06, -0.98);
+    for (let i = 0; i < 3; i++) put(e, box(0.03, 0.02, 0.3, C.steel), -1.86 + i * 0.12, top + 0.13, -0.98);
     // unditching beam across the rear, under the drums
-    put(engine, cyl(0.11, 2.3, C.oliveDark, { axis: 'z', seg: 12 }), -2.3, 0.6, 0);
-    for (const z of [-0.6, 0.6]) put(engine, box(0.22, 0.14, 0.06, C.steel), -2.2, 0.6, z);
-    // two big drums lying across, side by side, sitting in U cradles that are
-    // bolted to the rear plate (a deliberate chibi exaggeration: keep them big)
-    const DR = 0.3;
-    const DX = -2.42;
-    const DY = 1.1;
-    for (const z of [-0.41, 0.41]) {
+    put(e, cyl(0.11, 2.3, C.oliveDark, { axis: 'z', seg: 12 }), -2.3, 0.6, 0);
+    for (const z of [-0.6, 0.6]) put(e, box(0.22, 0.14, 0.06, C.steel), -2.2, 0.6, z);
+
+    // Two big drums lying across, side by side, sitting high in U cradles
+    // bolted to the rear plate. The caricature accent: keep them big.
+    const DR = 0.41;
+    const DL = 1.0;
+    const DX = HULL_PROFILE[0][0] * SX - 0.3;
+    const DY = WORLD_DECK_Y + 0.16;
+    for (const z of [-0.53, 0.53]) {
       const drum = new THREE.Group();
       drum.position.set(DX, DY, z);
       engine.add(drum);
-      put(drum, cyl(DR, 0.74, C.olive, { axis: 'z', seg: 18 }));
-      put(drum, cyl(0.06, 0.02, C.oliveDark, { axis: 'z', seg: 8 }), 0.12, 0.12, z > 0 ? 0.37 : -0.37); // filler cap
+      put(drum, cyl(DR, DL, C.olive, { axis: 'z', seg: 20 }));
+      put(drum, cyl(0.07, 0.02, C.oliveDark, { axis: 'z', seg: 8 }), 0.16, 0.16, z > 0 ? DL / 2 : -DL / 2); // filler cap
       for (const off of [-1, 1]) {
-        put(drum, cyl(DR + 0.012, 0.04, C.oliveDark, { axis: 'z', seg: 18 }), 0, 0, off * 0.35); // rolled rims
-        put(drum, cyl(DR + 0.008, 0.035, C.dark, { axis: 'z', seg: 18 }), 0, 0, off * 0.17); // straps
-        put(drum, box(0.06, 0.08, 0.06, C.steel, { r: 0.012 }), 0, DR + 0.02, off * 0.17); // buckles on top
-        // U cradle: bottom bar, two uprights, arm back to the rear plate
-        const cz = z + off * 0.17;
-        put(engine, box(0.62, 0.05, 0.06, C.steel, { r: 0.01 }), DX, DY - DR - 0.03, cz);
-        for (const ux of [-0.29, 0.29]) put(engine, box(0.05, 0.22, 0.06, C.steel, { r: 0.01 }), DX + ux, DY - DR + 0.08, cz);
-        put(engine, box(0.12, 0.06, 0.06, C.steel, { r: 0.01 }), -2.08, DY - DR - 0.03, cz);
+        put(drum, cyl(DR + 0.014, 0.05, C.oliveDark, { axis: 'z', seg: 20 }), 0, 0, off * (DL / 2 - 0.03)); // rolled rims
+        put(drum, cyl(DR + 0.01, 0.04, C.dark, { axis: 'z', seg: 20 }), 0, 0, off * DL * 0.24); // straps
+        put(drum, box(0.07, 0.09, 0.07, C.steel, { r: 0.014 }), 0, DR + 0.025, off * DL * 0.24); // buckles on top
+        // U cradle: bottom bar, two uprights hugging the drum, arm to the rear plate
+        const cz = z + off * DL * 0.24;
+        put(engine, box(DR * 2 + 0.06, 0.06, 0.07, C.steel, { r: 0.012 }), DX, DY - DR - 0.035, cz);
+        for (const ux of [-1, 1]) put(engine, box(0.06, DR * 0.9, 0.07, C.steel, { r: 0.012 }), DX + ux * (DR + 0.02), DY - DR * 0.55, cz);
+        put(engine, box(0.2, 0.07, 0.07, C.steel, { r: 0.012 }), HULL_PROFILE[0][0] * SX - 0.04, DY - DR - 0.035, cz);
       }
     }
   }
@@ -578,8 +602,14 @@ export function createTank() {
     barrel.castShadow = barrel.receiveShadow = true;
     gunPivot.add(barrel);
     put(gunPivot, cyl(0.07, 0.12, C.dark, { axis: 'x', seg: 10 }), 2.26, 0, 0); // dark bore, seen through the muzzle
-    put(gunPivot, cyl(0.25, 0.34, C.canvas, { axis: 'x', seg: 12, radiusEnd: 0.15 }), 0.15, 0, 0); // canvas cover
-    put(gunPivot, cyl(0.16, 0.04, C.dark, { axis: 'x', seg: 12 }), 0.3, 0, 0); // cover strap
+    // square frame bolted to the turret front, holding a square canvas boot
+    const fx = turretFrontX(GUN_Y, 0) - 0.03;
+    const H = 0.25; // half size of the frame
+    for (const sy of [-1, 1]) put(gunSlot, box(0.07, 0.055, H * 2 + 0.055, C.oliveDark, { r: 0.012 }), fx, GUN_Y + sy * H, 0);
+    for (const sz of [-1, 1]) put(gunSlot, box(0.07, H * 2, 0.055, C.oliveDark, { r: 0.012 }), fx, GUN_Y, sz * H);
+    const boot = put(gunSlot, cyl(H * Math.SQRT2 - 0.02, 0.3, C.canvas, { axis: 'x', seg: 4, radiusEnd: 0.16 }), fx + 0.16, GUN_Y, 0);
+    boot.rotation.x = Math.PI / 4; // square, aligned with the frame
+    put(gunSlot, cyl(0.15, 0.04, C.dark, { axis: 'x', seg: 12 }), fx + 0.3, GUN_Y, 0); // boot strap
     gunFlash = new THREE.Group();
     put(gunFlash, box(0.34, 0.34, 0.34, 0xffb43a, { glow: true, r: 0.05 }), 0, 0, 0);
     put(gunFlash, box(0.2, 0.2, 0.2, 0xfff6c8, { glow: true, r: 0.04 }), 0.12, 0, 0);
@@ -625,9 +655,10 @@ export function createTank() {
     put(light, cyl(0.21, 0.025, C.dark, { axis: 'x', seg: 16 }), 0.13, 0, 0); // drawstring band
     put(light, box(0.04, 0.1, 0.04, C.dark), -0.05, -0.18, 0); // link to the mantlet
     {
-      const z = -0.32;
-      const y = GUN_Y + 0.1;
-      put(sights, box(0.04, 0.15, 0.06, C.dark, { r: 0.012 }), turretFrontX(y, z) + 0.11, y, z); // gunner's sight glass
+      const z = -0.33;
+      const y = GUN_Y + 0.08;
+      const glass = put(sights, box(0.04, 0.17, 0.06, C.dark, { r: 0.028 }), turretFrontX(y, z) + 0.03, y, z); // gunner's sight glass
+      glass.rotation.y = 0.33;
     }
     const { x, z } = COMMANDER;
     const cy = turretSurfaceY(x, z);
