@@ -17,6 +17,8 @@ import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
 import { PARTS, attachPart, statsFor, partModel, BASE_STATS } from './parts.js';
+import { save } from './save.js';
+import { snapshotCanvas as sharedSnapshot, upArrow } from '../render/snapshot.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -39,16 +41,7 @@ const MULT_HOLD = 4; // seconds a fresh kill keeps it
 const MULT_STEP = 2.2; // seconds per step down after that
 const MULT_MAX = 5;
 const SLOW_MO = 0.15; // game speed under a tutorial spotlight
-const BANK_KEY = 'scavenger.bank';
-function bank(add = 0) {
-  try {
-    const n = (parseInt(localStorage.getItem(BANK_KEY), 10) || 0) + add;
-    if (add) localStorage.setItem(BANK_KEY, String(n));
-    return n;
-  } catch {
-    return null;
-  }
-}
+const bank = (add = 0) => save.addBank(add);
 
 // Screen-relative input: W drives straight up the screen, D straight right.
 const INPUT_FORWARD = new THREE.Vector3(1, 0, -1).normalize();
@@ -72,6 +65,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const run = { hp: 100, time: 0, over: false, won: false };
   let stats = { ...BASE_STATS };
   const partMeshes = [];
+  let lastSize = null; // the last resize, replayed when the view size changes (optics)
   let debug = null;
   let reload = 1;
   let speed = 0;
@@ -114,18 +108,25 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     scene.add(aimLine, aimMark);
     tank.group.position.set(level.spawn.x, 0, level.spawn.z);
     tank.group.rotation.y = level.spawn.yaw;
-    // a fresh run: bare tank, no parts, no rockets
+    // a fresh run: the tank as it finished its last level (its saved
+    // loadout), no rockets until the level hands them out
     for (const m of partMeshes) m.removeFromParent();
     partMeshes.length = 0;
-    tank.setFlameStyle('normal');
-    stats = statsFor([]);
+    const loadout = save.loadout().filter((id) => PARTS[id]);
+    for (const id of loadout) {
+      const g = attachPart(tank, id);
+      partMeshes.push(g, ...(g.userData.extra || []));
+    }
+    stats = statsFor(loadout);
+    tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
+    if (lastSize) game.resize(...lastSize); // optics widen the view
     Object.assign(run, {
       hp: stats.maxHp,
       time: 0,
       over: false,
       won: false,
       scrap: 0,
-      parts: [],
+      parts: [...loadout],
       rockets: false,
       boost: 0,
       boostCd: 0,
@@ -287,13 +288,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     enableGun() {
       run.gun = true;
     },
-    // the scraps counter appears, picked out by a spotlight (not a bounce)
-    revealScraps(until = () => false) {
-      hud.showScrap(true, false);
-      requestAnimationFrame(() => {
-        const c = hud.scrapCenter();
-        api.spotlight({ targets: [{ screen: [c.x, c.y], r: Math.max(80, c.w * 0.75) }, () => pos.clone().setY(1)], r: 90 }, until, { maxTime: 2.6 });
-      });
+    // the scraps counter appears, glowing for a moment (no slow-down)
+    revealScraps() {
+      hud.showScrap(true, true);
     },
     boss(e, name = 'Large quadruped') {
       run.boss = e ? { e, name } : null;
@@ -307,6 +304,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     depot(shack, { offers, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
+      offers = offers.filter((id) => !run.parts.includes(id)); // nothing it already has
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
@@ -368,6 +366,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (run.over) return;
       run.over = true;
       run.won = true;
+      save.clear(levelDef.id);
       pickups.collectAll(collect);
       hud.clearPrompt();
       hud.setMarker(null);
@@ -686,7 +685,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (st.t > 0.8 && run.hp >= stats.maxHp - 0.01) {
         if (st.gift === 'boost') run.rockets = true; // the drums get rigged as boosters
         st.step = 'pick';
-        showPicker();
+        if (st.offers.length) showPicker();
+        else done(); // everything here is already fitted: straight to Continue
       }
     }
     // leaving: start the fade while still rolling for the door
@@ -729,6 +729,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     st.room.install(id, () => new THREE.Vector3(pos.x, 0, pos.z), {
       onFit() {
         run.parts.push(id);
+        save.own(id);
+        save.setLoadout(run.parts); // the tank keeps it for next time
         const g = attachPart(tank, id);
         partMeshes.push(g, ...(g.userData.extra || []));
         const was = stats.maxHp;
@@ -774,19 +776,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return { ...PARTS[id], image: partShots.get(id) };
     });
   }
-  // a white pixel arrow on the right of a picture: an improved version
-  function upArrow(g, W, H) {
-    const x = W - 11;
-    const y = 8;
-    const rows = ['....X....', '...XXX...', '..XXXXX..', '.XXXXXXX.', 'XXXXXXXXX', '...XXX...', '...XXX...', '...XXX...', '...XXX...'];
-    rows.forEach((r, j) => [...r].forEach((ch, i) => {
-      if (ch !== 'X') return;
-      g.fillStyle = '#000';
-      g.fillRect(x + i - 1, y + j - 1, 3, 3);
-    }));
-    g.fillStyle = '#ffffff';
-    rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'X' && g.fillRect(x + i, y + j, 1, 1)));
-  }
+
   // a big white arrow up the right side: an improved version of an ability
   function bigUpArrow(g, W, H) {
     const s = Math.max(1, Math.floor(H / 22));
@@ -823,41 +813,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // view: optional { target, dir, half } framing a close-up instead of the
   // whole model
   function snapshotCanvas(model, W = 72, H = 48, decorate = null, view = null) {
-    const rt = new THREE.WebGLRenderTarget(W, H);
-    rt.texture.colorSpace = THREE.SRGBColorSpace; // read back display colours, not linear
-    const sc = new THREE.Scene();
-    sc.add(new THREE.HemisphereLight(0xdfe6f0, 0x504a44, 2.4));
-    const sun = new THREE.DirectionalLight(0xffe2c0, 3.2);
-    sun.position.set(-2, 4, 3);
-    sc.add(sun, model);
-    const bb = new THREE.Box3().setFromObject(model);
-    const c = view ? view.target : bb.getCenter(new THREE.Vector3());
-    const size = view ? view.half : bb.getSize(new THREE.Vector3()).length() * 0.5 || 1;
-    const cam = view ? new THREE.OrthographicCamera((-size * W) / H, (size * W) / H, size, -size, 0.1, 100) : new THREE.OrthographicCamera(-size * 1.05, size * 1.05, size * 0.7, -size * 0.7, 0.1, 100);
-    cam.position.copy(c).add((view ? view.dir.clone() : new THREE.Vector3(-1, 0.85, 1)).normalize().multiplyScalar(20));
-    cam.lookAt(c);
-    const was = renderer.getRenderTarget();
-    const clear = renderer.getClearColor(new THREE.Color());
-    const alpha = renderer.getClearAlpha();
-    renderer.setRenderTarget(rt);
-    renderer.setClearColor(0x000000, 0);
-    renderer.clear();
-    renderer.render(sc, cam);
-    const px = new Uint8Array(W * H * 4);
-    renderer.readRenderTargetPixels(rt, 0, 0, W, H, px);
-    renderer.setRenderTarget(was);
-    renderer.setClearColor(clear, alpha);
-    rt.dispose();
-    const cv = document.createElement('canvas');
-    cv.width = W;
-    cv.height = H;
-    const img = cv.getContext('2d').createImageData(W, H);
-    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4); // flip rows
-    cv.getContext('2d').putImageData(img, 0, 0);
-    decorate?.(cv.getContext('2d'), W, H);
-    sc.remove(model);
-    return cv;
+    return sharedSnapshot(renderer, model, W, H, decorate, view);
   }
+
 
   // the pointer: the gun's reticle while fighting, a pixel arrow elsewhere
   function setCursor() {
@@ -913,7 +871,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   loadLevel(startLevel);
 
 
-  let lastSize = null;
   const game = {
     enter() {
       window.addEventListener('keydown', onKeyDown);

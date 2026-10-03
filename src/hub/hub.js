@@ -16,6 +16,9 @@ import { createTank } from '../models/tank.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
+import { PARTS, attachPart, partModel } from '../game/parts.js';
+import { save } from '../game/save.js';
+import { snapshotCanvas, upArrow } from '../render/snapshot.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -28,26 +31,36 @@ const HOLO = 0x5fe0f0;
 const INPUT_FORWARD = new THREE.Vector3(1, 0, -1).normalize();
 const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 const BASE_CENTER = new THREE.Vector3(7.5, 0, -3.2);
-export const BANK_KEY = 'scavenger.bank';
 
 // The tank's own name: no real-world designations anywhere on screen.
-const TANK = { name: 'Battle tank', blurb: 'Old, slow to start, hard to kill. Everything on it has been replaced at least once.' };
+const TANK = { name: 'Battle tank' };
+// where each part sits on the tank (tank-local), for the fitting screen's lines
+const ANCHOR = {
+  dozer: [2.1, 0.5, 0],
+  autoloader: [-1.0, 1.35, 0],
+  era: [1.45, 0.95, -0.3],
+  twinmg: [-0.15, 1.75, -0.42],
+  afterburner: [-2.05, 0.95, 0.55],
+  optics: [0.25, 1.7, 0.45],
+  he: [2.6, 1.42, 0],
+  plating: [0, 0.85, 1.1],
+};
 
 // The campaign: the levels in order, bottom of the map to the top. Each
 // level is made of zones (the avenue, the bridge, ...). Only the first is
 // scouted.
 const LEVELS = [
-  { n: 1, id: 'avenue', name: 'Ruined city street', at: [0.3, 0.84], open: true, text: 'Panel blocks along a wide avenue, a bridge over the river and the intersection beyond. A large quadruped holds it.', zones: ['The avenue', 'The bridge', 'The intersection'], threats: ['Quadruped walkers', 'Large quadruped'] },
-  { n: 2, name: 'Not scouted', at: [0.66, 0.62], text: 'Across the river. Clear level 1 to scout it.' },
-  { n: 3, name: 'Not scouted', at: [0.34, 0.38], text: 'Clear level 2 to scout it.' },
-  { n: 4, name: 'Not scouted', at: [0.68, 0.15], text: 'Clear level 3 to scout it.' },
+  { n: 1, id: 'avenue', name: 'Ruined city street', at: [0.3, 0.84], open: true, steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'era', 'afterburner', 'twinmg', 'optics'] },
+  { n: 2, at: [0.66, 0.62] },
+  { n: 3, at: [0.34, 0.38] },
+  { n: 4, at: [0.68, 0.15] },
 ];
 
 const CSS = `
 .base { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --holo: #5fe0f0; }
 .base .panel { background: rgba(12, 11, 13, 0.88); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 4px 4px 0 4px #000; }
 .base .px { font-family: 'Silkscreen', 'Pixelify Sans', monospace; text-transform: uppercase; letter-spacing: 0.06em; }
-.base-bank { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 6px 14px; display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--amber); }
+.base-bank { position: absolute; left: calc(16px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); padding: 6px 14px; display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--amber); }
 .base-bank i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .base-bank b { font-weight: 400; color: #f1e9d8; font-variant-numeric: tabular-nums; }
 .base-tag { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); padding: 3px 8px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase;
@@ -79,7 +92,31 @@ const CSS = `
 .base-brief .info { width: min(300px, 32vw); padding: 16px 18px 18px; display: grid; gap: 10px; align-self: center; }
 .base-brief .info .tagline { font-size: 11px; color: #ff6a5a; }
 .base-brief .info p { margin: 0; font-size: 13px; color: #d8d0c0; }
-.base-brief .info ul { margin: 0; padding: 0 0 0 14px; font-size: 13px; color: #d8d0c0; }
+.base-brief .steps { display: flex; align-items: center; gap: 6px; font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; }
+.base-brief .steps b { font-weight: 400; padding: 5px 8px; background: #2a2628; box-shadow: 0 0 0 2px #000; color: #f1e9d8; }
+.base-brief .steps b.boss { background: #5a1f1c; color: #ffb0a8; }
+.base-brief .steps i { width: 14px; height: 2px; background: #6d655a; }
+.base-brief .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
+.base-brief .rewards { display: flex; flex-wrap: wrap; gap: 8px; }
+.base-brief .rewards span { position: relative; width: 54px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.base-brief .rewards img { width: 100%; height: 100%; image-rendering: pixelated; }
+.base-brief .rewards span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
+/* hangar: the tank in the middle, a box per fitted part with a line to it */
+.base-fit { position: absolute; inset: 0; pointer-events: none; }
+.base-fit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.base-fit .head { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 10px 16px; display: flex; gap: 14px; align-items: center; pointer-events: auto; }
+.base-fit .head h2 { font-size: 16px; }
+.base-fit .part { position: absolute; transform: translate(-50%, -50%); width: 112px; padding: 6px 6px 8px; display: grid; gap: 4px; justify-items: center; pointer-events: auto; cursor: var(--cursor);
+  background: rgba(12, 11, 13, 0.9); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font: 400 10px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; text-align: center; border: 0; }
+.base-fit .part:hover, .base-fit .part.on { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-fit .part img { width: 84px; height: 56px; image-rendering: pixelated; }
+.base-fit .part.add { color: var(--amber); }
+.base-fit .note { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 13px; color: #b9b0a0; text-align: center; max-width: min(460px, calc(100vw - 32px)); }
+.base-fit .pop { position: absolute; padding: 8px; display: grid; gap: 6px; pointer-events: auto; z-index: 2; }
+.base-fit .pop button { display: flex; gap: 8px; align-items: center; padding: 4px 8px 4px 4px; border: 0; cursor: var(--cursor); background: #1d1b1e; color: #f1e9d8; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; box-shadow: 0 0 0 2px #000; }
+.base-fit .pop button:hover { background: #2a2628; color: var(--amber); }
+.base-fit .pop img { width: 48px; height: 32px; image-rendering: pixelated; }
+.base-fit .pop .remove { justify-content: center; padding: 8px; color: #ff9a8a; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 760px) {
   .base-brief { flex-direction: column; gap: 14px; padding: 56px 16px 16px; overflow-y: auto; justify-content: flex-start; }
@@ -261,7 +298,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const ROOMS = [
     { id: 'quarters', name: 'Quarters', rect: [-8, 4, -17, -6], focus: new THREE.Vector3(-2, 0, -11.5), view: 12, label: new THREE.Vector3(-2, 4.4, -16.8), entry: new THREE.Vector3(1, 0, -7.2) },
     { id: 'briefing', name: 'Briefing', rect: [-12, -2, -5, 7], focus: new THREE.Vector3(-7, 0, 1), view: 11, label: new THREE.Vector3(-7, 3.0, -4.6), entry: new THREE.Vector3(-3.2, 0, 1.5) },
-    { id: 'hangar', name: 'Hangar', rect: [6, 24, -8, 8], focus: new THREE.Vector3(15, 0, 0), view: 14, label: new THREE.Vector3(15, 5.8, -7.8), entry: new THREE.Vector3(7.4, 0, 0.5) },
+    { id: 'hangar', name: 'Hangar', rect: [6, 24, -8, 8], focus: new THREE.Vector3(15, 0.4, 0), view: 8.5, label: new THREE.Vector3(15, 5.8, -7.8), entry: new THREE.Vector3(7.4, 0, 0.5) },
   ];
   const HALL = [-2, 6, -6, 8];
   const floorMeshes = [];
@@ -334,16 +371,16 @@ export function createHub({ renderer, pixel, onDeploy }) {
   }
 
   // ceiling beams with pendant lamps hung off them (no lamps in mid-air)
-  const pendant = (x, z, beamY, drop = 1.2, warm = SODIUM, power = 14) => {
-    B.line([new THREE.Vector3(x, beamY, z), new THREE.Vector3(x, beamY - drop, z)]);
-    put(B.root, cyl(0.28, 0.16, 0x2e3034, { seg: 8, radiusEnd: 0.1 }), x, beamY - drop - 0.04, z);
-    put(B.root, cyl(0.16, 0.05, warm, { seg: 8, glow: true }), x, beamY - drop - 0.12, z);
+  const pendant = (x, z, beamY, drop = 1.2, warm = SODIUM, power = 14, parent = B.root) => {
+    parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, beamY, z), new THREE.Vector3(x, beamY - drop, z)]), B.lineMat));
+    put(parent, cyl(0.28, 0.16, 0x2e3034, { seg: 8, radiusEnd: 0.1 }), x, beamY - drop - 0.04, z);
+    put(parent, cyl(0.16, 0.05, warm, { seg: 8, glow: true }), x, beamY - drop - 0.12, z);
     B.emit(new THREE.Vector3(x, beamY - drop - 0.6, z), warm, power, 8);
     B.pool(x, z, 2.4, warm, 0.14);
   };
-  const beamZ = (x, z0, z1, y) => {
-    B.chunk(0.26, 0.3, z1 - z0, 0x3a3c3f, x, y, (z0 + z1) / 2);
-    B.piece(0.4, 0.05, z1 - z0, 0x2c2e31, x, y - 0.16, (z0 + z1) / 2);
+  const beamZ = (x, z0, z1, y, parent = B.root) => {
+    put(parent, box(0.26, 0.3, z1 - z0, 0x3a3c3f), x, y, (z0 + z1) / 2);
+    put(parent, box(0.4, 0.05, z1 - z0, 0x2c2e31), x, y - 0.16, (z0 + z1) / 2);
   };
   const beamX = (z, x0, x1, y) => {
     B.chunk(x1 - x0, 0.3, 0.26, 0x3a3c3f, (x0 + x1) / 2, y, z);
@@ -460,6 +497,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
   // -------------------------------------------------------- the hangar
   const tank = createTank();
+  const hangarOverhead = new THREE.Group();
+  B.add(hangarOverhead);
   {
     const lx = 15;
     const lz = 0;
@@ -470,26 +509,31 @@ export function createHub({ renderer, pixel, onDeploy }) {
     for (const s of [-1, 1]) B.piece(9.2, 0.02, 0.12, 0xc99a2e, lx, 0.015, lz + s * 3.4);
     B.block(lx, lz, 3.4, 2.3);
     tank.group.position.set(lx, 0.3, lz);
+    tank.group.name = 'hangar-tank';
     tank.group.rotation.y = Math.PI * 0.86;
     tank.update(0.016, 0, {});
     scene.add(tank.group);
-    // gantry crane over it: four legs, two runway beams, the bridge, a hoist
+    // gantry crane over it: four legs, two runway beams, the bridge, a hoist.
+    // It and the near roof beam stand between the camera and the tank, so
+    // they're kept apart and hidden while the fitting screen is up.
+    const G = hangarOverhead;
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        B.chunk(0.26, 4.4, 0.26, 0xc99a2e, lx + sx * 4.3, 2.2, lz + sz * 3.2);
+        put(G, box(0.26, 4.4, 0.26, 0xc99a2e), lx + sx * 4.3, 2.2, lz + sz * 3.2);
         B.block(lx + sx * 4.3, lz + sz * 3.2, 0.2, 0.2);
       }
     }
-    for (const sz of [-1, 1]) B.chunk(8.9, 0.3, 0.3, 0xc99a2e, lx, 4.4, lz + sz * 3.2);
-    B.chunk(0.36, 0.34, 6.7, 0xb08826, lx - 1.2, 4.7, lz);
-    B.chunk(0.5, 0.4, 0.5, 0x2b2c2e, lx - 1.2, 4.35, lz - 0.6);
-    B.line([new THREE.Vector3(lx - 1.2, 4.15, lz - 0.6), new THREE.Vector3(lx - 1.2, 2.9, lz - 0.6)]);
-    put(B.root, box(0.22, 0.26, 0.16, 0xc99a2e), lx - 1.2, 2.8, lz - 0.6);
+    for (const sz of [-1, 1]) put(G, box(8.9, 0.3, 0.3, 0xc99a2e), lx, 4.4, lz + sz * 3.2);
+    put(G, box(0.36, 0.34, 6.7, 0xb08826), lx - 1.2, 4.7, lz);
+    put(G, box(0.5, 0.4, 0.5, 0x2b2c2e), lx - 1.2, 4.35, lz - 0.6);
+    G.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(lx - 1.2, 4.15, lz - 0.6), new THREE.Vector3(lx - 1.2, 2.9, lz - 0.6)]), B.lineMat));
+    put(G, box(0.22, 0.26, 0.16, 0xc99a2e), lx - 1.2, 2.8, lz - 0.6);
     // beams across the roof carrying the lamps, clear of the gantry
     for (const x of [8.6, 21.4]) {
-      beamZ(x, -8, 8, HH - 0.2);
-      pendant(x, -4.5, HH - 0.35, 1.4, SODIUM, 16);
-      pendant(x, 4.5, HH - 0.35, 1.4, SODIUM, 16);
+      const parent = x < 10 ? G : B.root;
+      beamZ(x, -8, 8, HH - 0.2, parent);
+      pendant(x, -4.5, HH - 0.35, 1.4, SODIUM, 16, parent);
+      pendant(x, 4.5, HH - 0.35, 1.4, SODIUM, 16, parent);
     }
     B.emit(new THREE.Vector3(lx, 3.4, lz), SODIUM, 18, 9);
 
@@ -736,6 +780,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
     beamX(1, -2, 6, H - 0.2);
     pendant(2, 1, H - 0.35, 1.0, SODIUM, 12);
   }
+  hangarOverhead.traverse((o) => {
+    if (o.isMesh) o.castShadow = true;
+  });
+  B.keep(hangarOverhead);
   B.finish();
   B.mergeStatic();
   setLowPoly(false);
@@ -746,6 +794,19 @@ export function createHub({ renderer, pixel, onDeploy }) {
     l.position.copy(e.pos);
     scene.add(l);
     e.light = l;
+  }
+
+  // the parts on the tank up on the lift: its saved loadout
+  const hubParts = [];
+  function fitHubTank(loadout = save.loadout()) {
+    for (const m of hubParts) m.removeFromParent();
+    hubParts.length = 0;
+    for (const id of loadout) {
+      if (!PARTS[id]) continue;
+      const g = attachPart(tank, id);
+      for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.layers.disable(PLAYER_LAYER)); // no see-through outline here
+      hubParts.push(g, ...(g.userData.extra || []));
+    }
   }
 
   // room outlines, lit while hovered
@@ -793,6 +854,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     ${ROOMS.map((r) => `<div class="base-tag" data-id="${r.id}">${r.name}</div>`).join('')}
     <div class="base-menu panel" hidden></div>
     <div class="base-brief" hidden></div>
+    <div class="base-fit" hidden><svg></svg><div class="head panel"><h2>${TANK.name}</h2><button type="button" class="back">Back</button></div><div class="boxes"></div><div class="note panel" hidden></div></div>
     <div class="base-hint panel">Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
@@ -802,6 +864,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const hint = root.querySelector('.base-hint');
   const fade = root.querySelector('.base-fade');
   const bankEl = root.querySelector('.base-bank b');
+  const fit = root.querySelector('.base-fit');
+  fit.querySelector('.back').addEventListener('click', () => closeRoom());
   let open = null;
   let hover = null;
   let hoverTag = null;
@@ -814,27 +878,15 @@ export function createHub({ renderer, pixel, onDeploy }) {
     tag.addEventListener('click', () => clickRoom(r));
   }
 
-  function bankTotal() {
-    try {
-      return parseInt(localStorage.getItem(BANK_KEY), 10) || 0;
-    } catch {
-      return 0;
-    }
-  }
+  const bankTotal = () => save.bank();
   function openRoom(r) {
     open = r;
     hint.hidden = true;
     if (r.id === 'briefing') return openBriefing();
     menu.hidden = false;
     if (r.id === 'hangar') {
-      const stat = (label, v) => `<span>${label}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
-      menu.innerHTML = `
-        <h2>Hangar</h2><p class="sub">The tank is up on the lift.</p>
-        <div class="zone"><b>${TANK.name}</b><span>${TANK.blurb}</span>
-          <div class="stats">${stat('Armour', 0.55)}${stat('Gun', 0.5)}${stat('Speed', 0.45)}${stat('Boost', 0.4)}</div></div>
-        <div class="zone"><b>Parts</b><span>Found at checkpoints during a run, lost when it ends.</span></div>
-        <div class="zone locked"><b>Workshop</b><span>Coming soon: spend scraps on the tank for good.</span></div>
-        <button type="button" class="back">Back</button>`;
+      menu.hidden = true;
+      return openFitting();
     } else {
       menu.innerHTML = `
         <h2>Quarters</h2><p class="sub">Bunks, lockers, a stove going.</p>
@@ -859,18 +911,146 @@ export function createHub({ renderer, pixel, onDeploy }) {
     selLevel = z;
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);
     const info = brief.querySelector('.info');
-    info.innerHTML = `
-      <span class="tagline px">Level ${z.n} · ${z.open ? 'Ready' : 'Locked'}</span>
-      <h2>${z.name}</h2>
-      <p>${z.text}</p>
-      ${z.zones ? `<div class="zone"><b>Zones</b><ul>${z.zones.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''}
-      ${z.threats ? `<div class="zone"><b>Threats</b><ul>${z.threats.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''}
-      <div class="row"><button type="button" class="go" ${z.open ? '' : 'disabled'}>Deploy</button><button type="button" class="back">Back</button></div>`;
+    const owned = save.owned();
+    if (!z.open) {
+      info.innerHTML = `
+        <span class="tagline px">Level ${z.n}</span>
+        <h2>Locked</h2>
+        <p>Beat level ${z.n - 1} to unlock.</p>
+        <div class="row"><button type="button" class="back">Back</button></div>`;
+    } else {
+      info.innerHTML = `
+        <span class="tagline px">Level ${z.n}${save.cleared().includes(z.id) ? ' · Cleared' : ''}</span>
+        <h2>${z.name}</h2>
+        <div class="steps">${z.steps.map((t, i) => `${i ? '<i></i>' : ''}<b class="${t === 'Boss' ? 'boss' : ''}">${t}</b>`).join('')}</div>
+        <span class="label">Possible rewards</span>
+        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'got' : ''}" title="${PARTS[id].name}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"></span>`).join('')}</div>
+        <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
+      info.querySelector('.go').addEventListener('click', () => deploy(z.id));
+    }
     info.querySelector('.back').addEventListener('click', closeRoom);
-    if (z.open) info.querySelector('.go').addEventListener('click', () => deploy(z.id));
   }
+
+  // ---------------------------------------------------- the fitting screen
+  // The tank's loadout (what it had at the end of its last level), a box per
+  // part with a line to where it sits; click a box to swap or remove it.
+  const icons = new Map();
+  function partIcon(id) {
+    if (!icons.has(id)) icons.set(id, snapshotCanvas(renderer, partModel(id), 84, 56, PARTS[id].badge === 'up' ? upArrow : null).toDataURL());
+    return icons.get(id);
+  }
+  const fitBoxes = fit.querySelector('.boxes');
+  const fitSvg = fit.querySelector('svg');
+  const fitNote = fit.querySelector('.note');
+  let fitItems = []; // { id, el, anchor }
+  let popFor = null;
+  function openFitting() {
+    fit.hidden = false;
+    buildFitting();
+  }
+  function buildFitting() {
+    closePop();
+    const loadout = save.loadout().filter((id) => PARTS[id]);
+    const spare = save.owned().filter((id) => PARTS[id] && !loadout.includes(id));
+    fitBoxes.innerHTML = '';
+    fitItems = loadout.map((id) => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'part';
+      el.innerHTML = `<img alt="" src="${partIcon(id)}"><span>${PARTS[id].name}</span>`;
+      el.addEventListener('click', (e) => (e.stopPropagation(), openPop(id, el, spare)));
+      fitBoxes.append(el);
+      return { id, el, anchor: new THREE.Vector3(...(ANCHOR[id] || [0, 1, 0])) };
+    });
+    if (spare.length) {
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'part add';
+      el.innerHTML = `<span>+ Add part</span><span style="color:#b9b0a0">${spare.length} spare</span>`;
+      el.addEventListener('click', (e) => (e.stopPropagation(), openPop(null, el, spare)));
+      fitBoxes.append(el);
+      fitItems.push({ id: null, el, anchor: null });
+    }
+    fitNote.hidden = loadout.length > 0;
+    fitNote.textContent = save.owned().length ? 'Nothing fitted. Add a part to start the next level with it.' : 'No parts yet. Parts picked at checkpoints stay on the tank for its next level.';
+    fitHubTank(loadout);
+  }
+  function openPop(id, el, spare) {
+    closePop();
+    const pop = document.createElement('div');
+    pop.className = 'pop panel';
+    for (const s of spare) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = `<img alt="" src="${partIcon(s)}">${PARTS[s].name}`;
+      b.addEventListener('click', () => setLoadout(id ? save.loadout().map((x) => (x === id ? s : x)) : [...save.loadout(), s]));
+      pop.append(b);
+    }
+    if (id) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'remove';
+      b.textContent = 'Remove';
+      b.addEventListener('click', () => setLoadout(save.loadout().filter((x) => x !== id)));
+      pop.append(b);
+    }
+    if (!pop.children.length) return;
+    const r = el.getBoundingClientRect();
+    pop.style.left = `${Math.round(r.left)}px`;
+    pop.style.top = `${Math.round(r.bottom + 10)}px`;
+    fit.append(pop);
+    popFor = pop;
+    el.classList.add('on');
+  }
+  function closePop() {
+    popFor?.remove();
+    popFor = null;
+    for (const it of fitItems) it.el.classList.remove('on');
+  }
+  function setLoadout(list) {
+    save.setLoadout(list);
+    buildFitting();
+  }
+  document.addEventListener('pointerdown', (e) => {
+    if (popFor && !popFor.contains(e.target)) closePop();
+  });
+  // lay the boxes out either side of the tank, lines to each part
+  const sv = new THREE.Vector3();
+  function layoutFitting() {
+    const rect = canvasEl.getBoundingClientRect();
+    const toScreen = (p) => {
+      sv.copy(p).project(camera);
+      return [rect.left + ((sv.x + 1) / 2) * rect.width, rect.top + ((1 - sv.y) / 2) * rect.height];
+    };
+    tank.group.updateMatrixWorld(true);
+    const [cx, cy] = toScreen(tank.group.position.clone().setY(1));
+    const reach = Math.min(rect.width * 0.36, 380);
+    const parts = fitItems.filter((it) => it.anchor).map((it) => ({ it, at: toScreen(tank.group.localToWorld(it.anchor.clone())) }));
+    const sides = [parts.filter((p) => p.at[0] < cx), parts.filter((p) => p.at[0] >= cx)];
+    let lines = '';
+    sides.forEach((list, side) => {
+      list.sort((a, b) => a.at[1] - b.at[1]);
+      list.forEach((p, i) => {
+        const x = cx + (side ? 1 : -1) * reach;
+        const y = cy + (i - (list.length - 1) / 2) * 110;
+        p.it.el.style.left = `${Math.round(x)}px`;
+        p.it.el.style.top = `${Math.round(y)}px`;
+        const ex = x + (side ? -60 : 60);
+        lines += `<polyline points="${ex},${y} ${(ex + p.at[0]) / 2},${y} ${p.at[0]},${p.at[1]}" fill="none" stroke="#000" stroke-width="5"/><polyline points="${ex},${y} ${(ex + p.at[0]) / 2},${y} ${p.at[0]},${p.at[1]}" fill="none" stroke="#ffb347" stroke-width="2"/><rect x="${p.at[0] - 4}" y="${p.at[1] - 4}" width="8" height="8" fill="#ffb347" stroke="#000" stroke-width="2"/>`;
+      });
+    });
+    const add = fitItems.find((it) => !it.anchor);
+    if (add) {
+      add.el.style.left = `${Math.round(cx)}px`;
+      add.el.style.top = `${Math.round(Math.min(rect.bottom - 80, cy + 190))}px`;
+    }
+    fitSvg.innerHTML = lines;
+  }
+
   function closeRoom() {
+    if (popFor) return closePop();
     open = null;
+    fit.hidden = true;
     menu.hidden = true;
     brief.hidden = true;
     hint.hidden = false;
@@ -941,6 +1121,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       me.copy(HOME);
       lastRoom = null;
       bankEl.textContent = bankTotal();
+      fitHubTank();
       fade.classList.remove('off');
       requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('off')));
     },
@@ -962,6 +1143,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
     // for the dev kit's data reset
     refresh() {
       bankEl.textContent = bankTotal();
+      fitHubTank();
+      if (open?.id === 'hangar') buildFitting();
     },
     frame(dt, t) {
       // walking: keys (screen-relative), or toward a clicked spot
@@ -1030,6 +1213,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
         r.outline.visible = r === lit;
         if (r === lit) r.outlineMat.opacity = 0.75 + Math.sin(t * 8) * 0.2;
       }
+      if (open?.id === 'hangar') layoutFitting();
+      hangarOverhead.visible = open?.id !== 'hangar';
       const rect = canvasEl.getBoundingClientRect();
       for (const r of ROOMS) {
         const tag = tags.get(r.id);

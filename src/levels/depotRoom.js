@@ -477,7 +477,7 @@ export function buildDepotRoom(scene) {
     outside: at(W + 3, 0, 0),
     bounds: { minX: O.x - 1, maxX: O.x + W + 4, minZ: O.z - D + 1.2, maxZ: O.z + D - 1.2 },
     // where the camera looks while you're inside: the room, leaning toward the tank
-    focus: new THREE.Vector3(O.x + 14, 0, O.z + 0.5),
+    focus: new THREE.Vector3(O.x + 17.5, 0, O.z + 4), // with the tank on the plate, all three pads in view
     bindBlocks(list) {
       blocksRef = list;
     },

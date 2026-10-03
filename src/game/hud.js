@@ -68,8 +68,7 @@ const CSS = `
 .hud-scrap b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
 .hud-scrap i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .hud-scrap.pop { animation: hudpop 0.18s steps(2); }
-.hud-scrap.intro { animation: hudintro 0.5s steps(2) 7; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber), 0 0 18px 4px #ffb34788; }
-@keyframes hudintro { 50% { transform: scale(1.18); } }
+.hud-scrap.intro { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber), 0 0 18px 4px #ffb34788; }
 @keyframes hudpop { 50% { transform: scale(1.15); } }
 .hud-chain { font: 400 22px/1 'Silkscreen', monospace; color: var(--amber); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; display: grid; justify-items: end; gap: 4px; }
 .hud-chain small { font-size: 11px; color: var(--ink); }

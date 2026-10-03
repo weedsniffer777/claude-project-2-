@@ -15,8 +15,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { box, gradientMap } from './kit.js';
+import CREW_GLB from '../assets/crewModel.js';
 
-const URL_MODEL = new URL('../assets/crew.gltf.json', import.meta.url).href;
 const HEIGHT = 1.45; // world units, head top
 const MODEL_H = 620; // the model's own units, feet to head top
 const LEG = 223; // hip to sole, model units
@@ -39,7 +39,12 @@ const C = {
 };
 
 let loading = null;
-const load = () => (loading ??= new GLTFLoader().loadAsync(URL_MODEL));
+// parsed straight from memory: no fetch (a sandboxed page may refuse one)
+const load = () =>
+  (loading ??= new Promise((resolve, reject) => {
+    const bin = Uint8Array.from(atob(CREW_GLB), (ch) => ch.charCodeAt(0));
+    new GLTFLoader().parse(bin.buffer, '', resolve, reject);
+  }));
 
 function toonMat(color, opts = {}) {
   return new THREE.MeshToonMaterial({ color, gradientMap, ...opts });
@@ -193,6 +198,21 @@ export function createCrew({ layer = null } = {}) {
       }
     });
     holder.add(root);
+  }).catch((err) => {
+    // never leave him invisible: a plain stand-in figure
+    console.warn('crew model failed to load', err);
+    const fb = new THREE.Group();
+    const part = (w, h, d, c, y) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), toonMat(c));
+      m.position.y = y;
+      m.castShadow = true;
+      if (layer != null) m.layers.enable(layer);
+      fb.add(m);
+    };
+    part(0.34, 0.6, 0.28, C.trousers, 0.3);
+    part(0.42, 0.5, 0.32, C.jacket, 0.82);
+    part(0.36, 0.36, 0.36, C.helmet, 1.26);
+    group.add(fb);
   });
 
   // bone.quaternion = bind * (rotations about the bone's own axes, in order)

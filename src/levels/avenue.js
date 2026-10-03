@@ -1868,7 +1868,7 @@ function buildAvenue(scene) {
           const e = api.nearestEnemy();
           if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
             S.shots = run.shots;
-            api.prompt('Contact', `Quadruped walkers incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
+            api.prompt('Contact', `Enemies incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
             api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
             api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
             go(3);
@@ -1890,7 +1890,7 @@ function buildAvenue(scene) {
           if (run.drops > 0 && !api.spotlit) {
             const d = api.nearestDrop();
             if (d) {
-              api.prompt('Scraps', 'Walkers drop <b>scraps</b> too. Drive close to collect them.', { go: true });
+              api.prompt('Scraps', 'Enemies drop <b>scraps</b> too. Drive close to collect them.', { go: true });
               api.spotlight({ targets: [d.clone(), () => api.tankPos.clone().setY(1)], r: 90 }, () => run.scrap > 0, { maxTime: 3.5 });
               go(5);
             }
@@ -1926,7 +1926,7 @@ function buildAvenue(scene) {
             api.spawnDog(gx + 2, -6.4, { delay: 0.2 });
             api.spawnDog(gx + 2.5, 5.2, { delay: 0.5 });
             api.spawnDog(gx, 0, { delay: 0.8 });
-            api.prompt('Contact', 'Walkers at the checkpoint!', { danger: true, seconds: 4 });
+            api.prompt('Contact', 'Enemies at the checkpoint!', { danger: true, seconds: 4 });
             go(7);
           }
           break;
@@ -1952,7 +1952,6 @@ function buildAvenue(scene) {
       setBounds(api, B2);
       api.sectors(SECTORS, 1);
       api.objective('Cross the bridge');
-      api.prompt('Zone 2', 'Over the bridge. Watch the far bank.', { seconds: 4 });
     }
     function sector2(api) {
       const x = api.tankPos.x;
@@ -1975,7 +1974,7 @@ function buildAvenue(scene) {
           if (x > BARRICADE_X + 2) {
             api.arrow(null);
             api.objective('Destroy all enemies');
-            api.prompt('Contact', 'Walkers! Boost rams them too.', { danger: true, seconds: 5 });
+            api.prompt('Contact', 'Enemies! Boost rams them too.', { danger: true, seconds: 5 });
             api.spawnDog(94, -3);
             api.spawnDog(95, 2, { delay: 0.4 });
             api.spawnDog(96.5, 5, { delay: 0.8 });
@@ -1998,7 +1997,7 @@ function buildAvenue(scene) {
         case 3:
           if (api.enemiesAlive === 0 && S.t > 1) {
             api.objective('Break the gate');
-            api.prompt('Gate', api.touch ? `${CLICK} the gate to shell it, or boost into it.` : `Shell the gate (${CLICK}), or boost into it.`);
+            api.prompt('Gate', api.touch ? `${CLICK} the gate to shoot it, or boost into it.` : `Shoot the gate (${CLICK}), or boost into it.`);
             api.arrow(gateMark, 'Break it!');
             go(4);
           }
@@ -2063,7 +2062,7 @@ function buildAvenue(scene) {
             fromSouth(api, -3, 1.5);
             fromSouth(api, 3, 2);
             api.boss(S.boss, 'Large quadruped');
-            api.prompt('Warning', 'A <b>large quadruped</b>, coming over the rubble! Pound it with the cannon, ram it when it gets close!', { danger: true, seconds: 7 });
+            api.prompt('Warning', '<b>Defeat the boss</b> to complete the level!', { danger: true, seconds: 7 });
             api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 1.4, { maxTime: 2.5, frame: () => (S.boss.alive ? S.boss.pos.clone() : null) });
             go(1);
           }

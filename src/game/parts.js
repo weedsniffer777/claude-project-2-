@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
-import { turretSurfaceY } from '../models/tank.js';
 
 export const BASE_STATS = {
   maxHp: 100,
@@ -153,26 +152,26 @@ export const PARTS = {
       // lower block sloping down and back, meeting at a point out front
       const tg = new THREE.Group();
       const SX = 1.08;
-      const PL = 0.3; // each block's length up its slope
+      const PL = 0.38; // each block's length up its slope
       const TILT = 0.6;
       const N = 4;
       for (const side of [-1, 1]) {
         for (let i = 0; i < N; i++) {
-          const a = side * (0.36 + i * 0.3);
+          const a = side * (0.38 + i * 0.33);
           const rr = 0.98; // out on the rim, so the whole "<" stands proud
           const u = new THREE.Group();
-          u.position.set(SX * rr * Math.cos(a), 0.19, rr * Math.sin(a)); // points level with the gun
+          u.position.set(SX * rr * Math.cos(a), 0.08, rr * Math.sin(a)); // points just under the gun
           u.rotation.y = -a; // +x out from the turret's middle
-          const tip = new THREE.Vector2(0.14, 0.17);
+          const tip = new THREE.Vector2(0.18, 0.22);
           for (const s of [1, -1]) {
             // s = 1 the upper block, -1 the lower one
             const cx = tip.x - Math.cos(TILT) * PL * 0.5;
             const cy = tip.y + s * Math.sin(TILT) * PL * 0.5;
-            const b = put(u, box(PL, 0.075, 0.28, G, { r: 0.012 }), cx, cy, 0);
+            const b = put(u, box(PL, 0.1, 0.33, G, { r: 0.015 }), cx, cy, 0);
             b.rotation.z = -s * TILT;
-            put(b, box(PL + 0.004, 0.012, 0.012, EDGE), 0, 0.038 * s, 0.13); // seam at its end
+            put(b, box(PL + 0.004, 0.014, 0.014, EDGE), 0, 0.05 * s, 0.155); // seam at its end
           }
-          put(u, box(0.2, 0.22, 0.08, BRACKET, { r: 0.01 }), -0.14, 0.17, 0); // the mount behind
+          put(u, box(0.26, 0.28, 0.1, BRACKET, { r: 0.01 }), -0.16, 0.22, 0); // the mount behind
           tg.add(u);
         }
       }
