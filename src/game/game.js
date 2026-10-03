@@ -370,6 +370,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       camera.top = viewH / 2;
       camera.bottom = -viewH / 2;
       camera.updateProjectionMatrix();
+      // keep the same pixels per world unit on every screen: portrait shows
+      // more of the world, so it gets more rows, not bigger pixels
+      pixel.setHeight(Math.round((viewH * PIXEL_ROWS) / VIEW_H));
     },
     frame(dt, t) {
       if (!run.over) run.time += dt;

@@ -68,29 +68,37 @@ const frag = /* glsl */ `
       vec2 m = texture2D(tMask, vUv).rg;
       bool isActor = m.r + m.g > 0.5;
       bool shown = isActor && maskZ(vUv) <= viewZ(vUv) + 0.08;
-      // neighbours: is there a visible actor beside this pixel, or open ground?
-      vec2 offs[4];
-      offs[0] = vec2(texel.x, 0.0); offs[1] = vec2(-texel.x, 0.0);
-      offs[2] = vec2(0.0, texel.y); offs[3] = vec2(0.0, -texel.y);
-      vec2 near2 = vec2(0.0);
-      float openNear = 0.0;
-      for (int i = 0; i < 4; i++) {
-        vec2 uv2 = vUv + offs[i];
-        vec2 n = texture2D(tMask, uv2).rg;
-        bool nActor = n.r + n.g > 0.5;
-        if (nActor && maskZ(uv2) <= viewZ(uv2) + 0.08) near2 = max(near2, n);
-        if (!nActor) openNear = 1.0;
+      // the actor's outer silhouette: a background pixel touching a visible
+      // actor. Gaps inside the silhouette (1-2 px between wheels, rails,
+      // cradles) have actor on both sides and are left alone, so the outline
+      // traces the shape, not every part.
+      vec2 hitTeam = vec2(0.0);
+      bool spanX = false;
+      bool spanY = false;
+      if (!isActor) {
+        vec2 offs[4];
+        offs[0] = vec2(texel.x, 0.0); offs[1] = vec2(-texel.x, 0.0);
+        offs[2] = vec2(0.0, texel.y); offs[3] = vec2(0.0, -texel.y);
+        for (int i = 0; i < 4; i++) {
+          vec2 uv2 = vUv + offs[i];
+          vec2 n = texture2D(tMask, uv2).rg;
+          if (n.r + n.g > 0.5 && maskZ(uv2) <= viewZ(uv2) + 0.08) hitTeam = max(hitTeam, n);
+        }
+        float l1 = dot(texture2D(tMask, vUv - vec2(texel.x, 0.0)).rg + texture2D(tMask, vUv - vec2(2.0 * texel.x, 0.0)).rg, vec2(1.0));
+        float r1 = dot(texture2D(tMask, vUv + vec2(texel.x, 0.0)).rg + texture2D(tMask, vUv + vec2(2.0 * texel.x, 0.0)).rg, vec2(1.0));
+        float u1 = dot(texture2D(tMask, vUv + vec2(0.0, texel.y)).rg + texture2D(tMask, vUv + vec2(0.0, 2.0 * texel.y)).rg, vec2(1.0));
+        float d1 = dot(texture2D(tMask, vUv - vec2(0.0, texel.y)).rg + texture2D(tMask, vUv - vec2(0.0, 2.0 * texel.y)).rg, vec2(1.0));
+        spanX = l1 > 0.5 && r1 > 0.5;
+        spanY = u1 > 0.5 && d1 > 0.5;
       }
-      vec3 team = m.g > 0.5 ? enemyRim : playerRim;
       if (!isActor) {
         // the background, a little darker and greyer than the units
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(c, vec3(l), 0.14) * 0.9;
-        if (near2.r + near2.g > 0.5) c = vec3(0.02, 0.02, 0.03); // outer outline
+        if (hitTeam.r + hitTeam.g > 0.5 && !spanX && !spanY) c = hitTeam.g > 0.5 ? enemyRim : playerRim;
       } else if (!shown) {
+        vec3 team = m.g > 0.5 ? enemyRim : playerRim;
         c = mix(c * 0.85, team * 0.55, 0.5); // hidden behind scenery: tinted silhouette
-      } else if (openNear > 0.5) {
-        c = team; // inner rim
       }
     }
     gl_FragColor = vec4(c, 1.0);
