@@ -64,26 +64,41 @@ export const PARTS = {
       s.reload *= 0.6;
     },
     build(t) {
+      // a welded bustle box on the turret rear: the magazine lives in here
       const g = new THREE.Group();
-      put(g, box(0.62, 0.36, 1.1, DARKOLIVE, { r: 0.05 }), -1.12, 0.26, 0);
-      put(g, box(0.5, 0.06, 0.9, OLIVE, { r: 0.02 }), -1.12, 0.46, 0);
-      put(g, cyl(0.07, 0.5, STEEL, { axis: 'x', seg: 8 }), -0.8, 0.18, 0.4);
+      put(g, box(0.75, 0.42, 1.3, DARKOLIVE, { r: 0.04 }), -1.15, 0.24, 0);
+      put(g, box(0.7, 0.05, 1.24, OLIVE, { r: 0.02 }), -1.15, 0.47, 0); // lid
+      put(g, box(0.06, 0.32, 1.32, DARK, { r: 0.01 }), -1.53, 0.24, 0); // rear hatch seam
+      for (const z of [-0.4, 0.4]) put(g, box(0.1, 0.06, 0.14, STEEL, { r: 0.01 }), -1.56, 0.36, z); // hinges
+      for (const z of [-0.68, 0.68]) put(g, box(0.6, 0.3, 0.04, DARK, { r: 0.01 }), -1.15, 0.24, z); // side ribs
       t.turret.add(g);
       return g;
     },
-    // on its pallet: the whole loader, carousel and rammer behind a breech
+    // on its pallet: the magazine module, shells racked crosswise in a frame
+    // with coloured side plates, and the breech it feeds
     model() {
       const g = new THREE.Group();
-      put(g, box(0.5, 0.5, 0.55, DARK, { r: 0.04 }), 0.75, 0.45, 0); // breech block
-      put(g, cyl(0.1, 0.5, STEEL, { axis: 'x', seg: 10 }), 1.2, 0.5, 0); // gun stub
-      put(g, box(0.9, 0.62, 1.1, DARKOLIVE, { r: 0.06 }), 0, 0.42, 0); // bustle housing
-      const drum = put(g, cyl(0.42, 0.6, STEEL, { axis: 'x', seg: 12 }), 0, 0.47, 0); // carousel
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        put(drum, cyl(0.07, 0.62, 0xc9a24a, { seg: 6 }), 0, Math.cos(a) * 0.3, Math.sin(a) * 0.3); // shell bases
+      const F = 0x8a6a3a; // frame
+      // frame: corner posts and rails
+      for (const x of [-0.55, 0.55]) for (const z of [-0.45, 0.45]) put(g, box(0.06, 0.62, 0.06, F, { r: 0.01 }), x, 0.33, z);
+      for (const y of [0.05, 0.62]) for (const z of [-0.45, 0.45]) put(g, box(1.16, 0.05, 0.05, F, { r: 0.01 }), 0, y, z);
+      // side plates (an orange service panel on one)
+      put(g, box(0.04, 0.56, 0.86, 0xd06a2a, { r: 0.01 }), 0.57, 0.33, 0);
+      put(g, box(0.04, 0.4, 0.5, 0x3a8fb0, { r: 0.01 }), 0.6, 0.36, 0.05);
+      put(g, box(0.04, 0.56, 0.86, 0x6a6e74, { r: 0.01 }), -0.57, 0.33, 0);
+      // racked rounds, two layers of four, brass bases toward the gun
+      for (const y of [0.2, 0.46]) {
+        for (let i = 0; i < 4; i++) {
+          const z = -0.3 + i * 0.2;
+          put(g, cyl(0.07, 1.0, 0x5d6650, { axis: 'x', seg: 8 }), 0, y, z);
+          put(g, cyl(0.075, 0.12, 0xc9a24a, { axis: 'x', seg: 8 }), 0.5, y, z);
+        }
       }
-      put(g, box(1.1, 0.08, 0.12, 0xc99a2e, { r: 0.02 }), 0.3, 0.86, 0); // rammer rail
-      put(g, box(0.18, 0.18, 0.18, DARK, { r: 0.03 }), -0.2, 0.86, 0);
+      // feed tray, then the breech ring and a stub of the gun
+      put(g, box(0.5, 0.06, 0.24, STEEL, { r: 0.02 }), 0.85, 0.33, 0);
+      put(g, box(0.44, 0.46, 0.5, 0x8e96a0, { r: 0.04 }), 1.3, 0.33, 0);
+      put(g, cyl(0.17, 0.3, 0x8e96a0, { axis: 'x', seg: 12 }), 1.65, 0.33, 0);
+      put(g, cyl(0.1, 0.8, 0x9aa2ac, { axis: 'x', seg: 10 }), 2.15, 0.33, 0);
       return g;
     },
   },
@@ -105,11 +120,17 @@ export const PARTS = {
         put(g, box(0.42, 0.05, 0.03, ERA_EDGE), 1.52, 1.05, z + 0.14).rotation.z = -0.5;
       }
       t.chassis.add(g);
+      // two rows of bricks hugging the turret front, leaving the gun clear
       const tg = new THREE.Group();
-      for (const s of [-1, 1]) {
-        for (let i = 0; i < 3; i++) {
-          const b = put(tg, box(0.3, 0.26, 0.12, ERA_TAN, { r: 0.02 }), 0.62 - i * 0.16, 0.2, s * (0.48 + i * 0.2));
-          b.rotation.y = s * (0.75 + i * 0.12);
+      for (const [y, r, tilt] of [[0.12, 1.02, -0.25], [0.32, 0.9, -0.55]]) {
+        for (const a of [-1.15, -0.85, -0.55, -0.27, 0.27, 0.55, 0.85, 1.15]) {
+          const holder = new THREE.Group();
+          holder.rotation.y = a;
+          holder.position.y = y;
+          const b = put(holder, box(0.12, 0.17, 0.24, ERA_TAN, { r: 0.015 }), r, 0, 0);
+          b.rotation.z = tilt;
+          put(holder, box(0.13, 0.02, 0.25, ERA_EDGE), r + 0.005, 0.085, 0).rotation.z = tilt;
+          tg.add(holder);
         }
       }
       t.turret.add(tg);
@@ -156,7 +177,7 @@ export const PARTS = {
     },
   },
   afterburner: {
-    name: 'Afterburner',
+    name: 'Improved boost',
     text: 'Boost burns hotter: faster and longer, but a longer recharge.',
     icon: ['................', '......-----.....', '%%%***-###-.....', '.%%%**-###-.....', '%%%***-###-.....', '......-----.....', '................', '................', '................', '................'],
     apply(s) {
@@ -189,11 +210,15 @@ export const PARTS = {
       s.mgRange += 2;
     },
     build(t) {
-      const g = new THREE.Group();
-      put(g, box(0.34, 0.2, 0.2, DARK, { r: 0.03 }), 0.2, 0.62, 0.15);
-      put(g, cyl(0.07, 0.12, 0x5fe6ff, { axis: 'x', seg: 10, glow: true }), 0.38, 0.62, 0.15);
-      put(g, box(0.1, 0.18, 0.1, STEEL, { r: 0.02 }), 0.12, 0.5, 0.15);
+      const g = sightHead();
+      g.position.set(0.15, 0.52, 0.3);
+      g.scale.setScalar(0.62);
       t.turret.add(g);
+      return g;
+    },
+    model() {
+      const g = sightHead();
+      g.position.y = 0.05;
       return g;
     },
   },
@@ -232,6 +257,25 @@ export const PARTS = {
     },
   },
 };
+
+// An armoured sight head: a boxy housing, a big blue main lens and two
+// small ones in a recessed face, an armoured shutter swung open to the side.
+function sightHead() {
+  const g = new THREE.Group();
+  const SAND = 0x9a8a62;
+  put(g, box(0.62, 0.5, 0.52, SAND, { r: 0.05 }), 0, 0.25, 0); // housing
+  put(g, box(0.06, 0.4, 0.4, 0x1d1f22, { r: 0.02 }), 0.3, 0.25, 0); // recessed face
+  put(g, cyl(0.14, 0.04, 0x2f5fd0, { axis: 'x', seg: 14, glow: true }), 0.33, 0.2, 0.04); // main lens
+  put(g, cyl(0.09, 0.045, 0x8fd8ff, { axis: 'x', seg: 12, glow: true }), 0.335, 0.2, 0.04);
+  put(g, cyl(0.05, 0.04, 0x5fe6a0, { axis: 'x', seg: 10, glow: true }), 0.33, 0.37, -0.11);
+  put(g, cyl(0.04, 0.04, 0x1d1f22, { axis: 'x', seg: 10 }), 0.33, 0.37, 0.12);
+  const shutter = put(g, box(0.05, 0.46, 0.3, 0x3a3c3a, { r: 0.02 }), 0.36, 0.25, 0.36); // swung open
+  shutter.rotation.y = -1.1;
+  put(g, box(0.5, 0.04, 0.5, 0x7d7050, { r: 0.01 }), 0, 0.52, 0); // top plate
+  put(g, cyl(0.06, 0.12, STEEL, { axis: 'z', seg: 8 }), -0.05, 0.3, -0.29); // side bolt-on
+  put(g, box(0.3, 0.1, 0.36, DARK, { r: 0.02 }), -0.05, 0.02, 0); // base ring
+  return g;
+}
 
 // Mark a freshly built part for the player's team outline.
 export function attachPart(tank, id) {

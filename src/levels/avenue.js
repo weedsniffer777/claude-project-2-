@@ -139,7 +139,7 @@ function roadTexture(rand, craters) {
   for (const z of [-4, -0.6, -0.3, 3]) {
     const center = z === -0.6 || z === -0.3;
     for (let x = MAP.x0; x < MAP.x1; x += center ? 1 : 4) {
-      if (rand() < 0.45) continue;
+      if (rand() < 0.45 || (x > JROAD.x0 - 2.5 && x < JROAD.x1 + 2.5)) continue;
       g.fillRect(X(x), Z(z), (center ? 1 : 2) * GPX, 2);
     }
   }
@@ -162,9 +162,41 @@ function roadTexture(rand, craters) {
     let x = MAP.x0;
     while (x < MAP.x1) {
       const len = 2 + rand() * 9;
-      if (rand() < 0.55) g.fillRect(X(x), Z(z + (rand() - 0.5) * 0.2), len * GPX, 2);
+      if (rand() < 0.55 && (x + len < JROAD.x0 || x > JROAD.x1)) g.fillRect(X(x), Z(z + (rand() - 0.5) * 0.2), len * GPX, 2);
       x += len + rand() * 2;
     }
+  }
+  // the cross road at the intersection, worn the same way as the avenue
+  {
+    const jx = (JROAD.x0 + JROAD.x1) / 2;
+    const zs = [[MAP.z0, CURB.n], [CURB.s, MAP.z1]];
+    for (const [za, zb] of zs) {
+      for (let i = 0; i < (Z(zb) - Z(za)) * 40; i++) {
+        g.fillStyle = ['#66676c', '#525358', '#6c6c70'][(rand() * 3) | 0];
+        g.fillRect((X(JROAD.x0) + rand() * (X(JROAD.x1) - X(JROAD.x0))) | 0, (Z(za) + rand() * (Z(zb) - Z(za))) | 0, 1, 1);
+      }
+      for (let i = 0; i < 160; i++) {
+        const x = JROAD.x0 + 0.3 + rand() * (JROAD.x1 - JROAD.x0 - 0.6);
+        const z = za + rand() * (zb - za);
+        const nearCurb = Math.min(x - JROAD.x0, JROAD.x1 - x) < 1.3;
+        g.fillStyle = nearCurb ? (rand() < 0.5 ? '#a9a8a6' : '#9a9996') : rand() < 0.5 ? '#86847f' : '#76746f';
+        blob(g, X(x), Z(z), (0.35 + rand() * 0.6) * GPX, (0.5 + rand() * 1.3) * GPX, rand, 9);
+      }
+      g.fillStyle = '#aaa79e';
+      for (const x of [jx - 0.15, jx + 0.15, jx - 3, jx + 3]) {
+        const center = Math.abs(x - jx) < 1;
+        for (let z = za; z < zb; z += center ? 1 : 4) if (rand() > 0.45) g.fillRect(X(x), Z(z), 2, (center ? 1 : 2) * GPX);
+      }
+      g.fillStyle = '#44454a';
+      for (const x of [jx - 4.6, jx - 3.5, jx + 3.5, jx + 4.6]) {
+        for (let z = za; z < zb; z += 3 + rand() * 6) if (rand() < 0.6) g.fillRect(X(x + (rand() - 0.5) * 0.2), Z(z), 2, (2 + rand() * 4) * GPX);
+      }
+    }
+    // zebra crossings on all four sides of the crossing
+    g.fillStyle = '#b9b6ad';
+    const stripe = (x, z, w, h) => rand() > 0.12 && g.fillRect(X(x), Z(z), w * GPX, h * GPX);
+    for (const x of [JROAD.x0 - 2.0, JROAD.x1 + 0.4]) for (let z = CURB.n + 0.4; z < CURB.s - 0.6; z += 0.95) stripe(x, z, 1.6, 0.5);
+    for (const z of [CURB.n - 2.0, CURB.s + 0.4]) for (let x = JROAD.x0 + 0.4; x < JROAD.x1 - 0.6; x += 0.95) stripe(x, z, 0.5, 1.6);
   }
   for (let i = 0; i < 50; i++) {
     const x = MAP.x0 + 30 + rand() * 120;
@@ -501,7 +533,7 @@ function buildAvenue(scene) {
     }
     for (const z of [CURB.n + 0.3, CURB.s - 0.3]) {
       for (let x = MAP.x0; x < MAP.x1; x += 0.8) {
-        if (rand() < 0.35) continue;
+        if (rand() < 0.35 || (x > JROAD.x0 - 0.5 && x < JROAD.x1 + 0.5)) continue;
         B.lump(x, 0, z, 0.45 + rand() * 0.4, 0.08 + rand() * 0.08, 0.25, 0x8f8e8b, rand() * 3);
       }
     }
@@ -644,6 +676,31 @@ function buildAvenue(scene) {
           B.add(panel);
         }
       }
+    }
+
+    // Low blocks on the south side (two or three floors, so they don't hide
+    // the street from the camera), shopfronts facing north onto it. side:
+    // the end that's a corner on the cross road gets a facade too.
+    function southBlock(x0, x1, floors, side) {
+      const zf = WALK.s + 0.3;
+      const depth = 13;
+      const w = x1 - x0;
+      const H = floors * FH + 0.5;
+      const look = { panel: PANELS[(rand() * 5) | 0], accent: ACCENTS[(rand() * 5) | 0], broken: 0.35, holes: 1, shop: true };
+      const front = facadeMat(facadeTextures(w, floors, look, rand));
+      const end = mapMat(endTexture(depth, floors, look, rand, false));
+      const sideMat = facadeMat(facadeTextures(depth, floors, { ...look, shop: false }, rand));
+      const roof = toon(0xc6c9ce);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, depth), [side === 'east' ? sideMat : end, side === 'west' ? sideMat : end, roof, roof, end, front]);
+      m.position.set((x0 + x1) / 2, H / 2, zf + depth / 2);
+      m.castShadow = m.receiveShadow = true;
+      B.add(m);
+      B.solid(m);
+      B.block((x0 + x1) / 2, zf + depth / 2, w / 2, depth / 2);
+      // awnings, a parapet with snow
+      for (let x = x0 + 1.2; x < x1 - 1; x += 2.6) if (rand() < 0.7) B.piece(1.8, 0.06, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][(rand() * 3) | 0], x, 1.45, zf - 0.42, 0.4, 0, 0);
+      B.piece(w, 0.3, 0.2, 0x8d8b86, (x0 + x1) / 2, H + 0.15, zf + 0.1);
+      B.lump((x0 + x1) / 2, H + 0.05, zf + depth / 2, w / 2.2, 0.12, depth / 2.6, 0xd0d3d8);
     }
 
     // North side, with gaps the sun comes through.
@@ -875,10 +932,16 @@ function buildAvenue(scene) {
         const north = z < 0;
         const off = north ? -4.4 - z : z - 2.6; // keep the pair's spacing through the bend
         const sx = jx + (north ? -1 : 1) * (2 + off * 1.5);
-        curve(new THREE.Vector3(xa, y, z), new THREE.Vector3(sx, y, z), new THREE.Vector3(sx, y, north ? -20 : 20));
+        curve(new THREE.Vector3(xa, y, z), new THREE.Vector3(sx, y, z), new THREE.Vector3(sx, y, north ? -16 : 16)); // ends on a span wire
       }
       // span wires across the side streets, hung off the corner blocks
       for (const z of [-12, -16]) B.sagging(new THREE.Vector3(JUNCTION.x0 - 0.5, 6, z), new THREE.Vector3(JUNCTION.x1 + 0.5, 6, z), 0.4);
+      // the south side's blocks are low: the span there hangs off two poles
+      for (const x of [JROAD.x0 - 0.7, JROAD.x1 + 0.7]) {
+        put(B.root, cyl(0.1, 6.4, 0x6f6e6a, { seg: 8, radiusEnd: 0.14 }), x, SW + 3.2, 16);
+        B.block(x, 16, 0.2, 0.2);
+      }
+      B.sagging(new THREE.Vector3(JROAD.x0 - 0.7, 6.1, 16), new THREE.Vector3(JROAD.x1 + 0.7, 6.1, 16), 0.35);
       // street lamps on the four corners
       let idx = 40;
       for (const x of [JUNCTION.x0 + 0.8, JUNCTION.x1 - 0.8]) {
@@ -897,6 +960,59 @@ function buildAvenue(scene) {
       B.sagging(new THREE.Vector3(fx, 3 + rand() * 4, WALK.n), new THREE.Vector3(x, 4.8, CURB.n - 0.45), 0.6 + rand() * 1.2);
     }
     for (let i = 0; i < 12; i++) B.groundCable(-30 + rand() * 128, CURB.n + rand() * (CURB.s - CURB.n), rand() * Math.PI * 2, 8 + ((rand() * 10) | 0));
+
+    // --------------------------------------------------------- tram rails
+    // Two tracks set in the road, steel rails standing a little proud of a
+    // dark groove; at the intersection one track bends off into each side
+    // street. Worn: a rail section is missing here and there.
+    {
+      const GAUGE = 0.55;
+      const rail = (a, b, groove = true) => {
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const len = Math.hypot(dx, dz);
+        const yaw = -Math.atan2(dz, dx);
+        const mx = (a.x + b.x) / 2;
+        const mz = (a.z + b.z) / 2;
+        if (groove) B.piece(len + 0.02, 0.012, 0.2, 0x2a2b2f, mx, 0.008, mz, 0, yaw, 0);
+        B.piece(len + 0.02, 0.05, 0.07, 0x8d9196, mx, 0.03, mz, 0, yaw, 0);
+      };
+      // a track along a centreline polyline: two rails either side
+      const track = (pts) => {
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i];
+          const b = pts[i + 1];
+          const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+          const nx = -(b.z - a.z) / len;
+          const nz = (b.x - a.x) / len;
+          for (const s of [-1, 1]) {
+            if (rand() < 0.04) continue; // a missing section
+            rail({ x: a.x + nx * GAUGE * s, z: a.z + nz * GAUGE * s }, { x: b.x + nx * GAUGE * s, z: b.z + nz * GAUGE * s });
+          }
+        }
+      };
+      const straight = (x0, z0, x1, z1, step = 3) => {
+        const n = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / step));
+        const pts = [];
+        for (let i = 0; i <= n; i++) pts.push({ x: x0 + ((x1 - x0) * i) / n, z: z0 + ((z1 - z0) * i) / n });
+        return pts;
+      };
+      const bend = (p0, c, p2, n = 14) => {
+        const pts = [];
+        for (let i = 0; i <= n; i++) {
+          const t = i / n;
+          pts.push({ x: (1 - t) ** 2 * p0.x + 2 * (1 - t) * t * c.x + t * t * p2.x, z: (1 - t) ** 2 * p0.z + 2 * (1 - t) * t * c.z + t * t * p2.z });
+        }
+        return pts;
+      };
+      const TN = -2.25;
+      const TS = 1.55;
+      for (const z of [TN, TS]) track(straight(START_X + 1, z, MAP.x1 - 1, z));
+      const jx = (JROAD.x0 + JROAD.x1) / 2;
+      // one track turns left into the north street, the other right into the south one
+      track([...bend({ x: jx - 8, z: TN }, { x: jx - 1.6, z: TN }, { x: jx - 1.6, z: CURB.n - 4 }), ...straight(jx - 1.6, CURB.n - 4, jx - 1.6, -24).slice(1)]);
+      track([...bend({ x: jx - 8, z: TS }, { x: jx + 1.6, z: TS }, { x: jx + 1.6, z: CURB.s + 4 }), ...straight(jx + 1.6, CURB.s + 4, jx + 1.6, 24).slice(1)]);
+    }
 
     // ------------------------------------------------- the intersection
     const signals = [];
@@ -1142,10 +1258,9 @@ function buildAvenue(scene) {
     garages(81, 6, WALK.s + 4);
     // past the second checkpoint the pipes end: a row of garages closes the
     // south side of the street instead, open only where the cross road runs
-    garages(114.6, 4, WALK.s + 1.2);
-    garages(146.2, 9, WALK.s + 1.2);
-    B.block(119.25, WALK.s + 3.7, 6.2, 2.5);
-    B.block(158.6, WALK.s + 3.7, 14, 2.5);
+    southBlock(113.4, JUNCTION.x0 - 0.3, 2, 'east');
+    southBlock(JUNCTION.x1 + 0.3, 160, 2, 'west');
+    southBlock(160, 176, 3, null);
     P.fence(B, -2, 22, SW, WALK.s + 4.4);
     P.fence(B, 100, 112, SW, WALK.s + 4.4);
 
@@ -1530,15 +1645,16 @@ function buildAvenue(scene) {
       const colors = [...new Set(c.colors)].filter((col) => col !== 0xd0d3d8);
       for (let i = 0; i < 9; i++) {
         const sheet = new THREE.Mesh(new THREE.BoxGeometry(1.4 + Math.random() * 1.6, 0.12, 1 + Math.random() * 1.4), toon(colors[i % colors.length] ?? 0x6b6f72));
-        sheet.position.set(x + (Math.random() - 0.5) * 3.5, 0.15 + Math.random() * 0.5, zc + (Math.random() - 0.5) * len);
-        sheet.rotation.set((Math.random() - 0.5) * 0.9, Math.random() * 3, (Math.random() - 0.5) * 0.9);
+        // lying on the ground (or propped on each other), never hanging in the air
+        sheet.position.set(x + (Math.random() - 0.5) * 3.5, 0.08 + (i % 3) * 0.1, zc + (Math.random() - 0.5) * len);
+        sheet.rotation.set((Math.random() - 0.5) * 0.25, Math.random() * 3, (Math.random() - 0.5) * 0.25);
         sheet.castShadow = sheet.receiveShadow = true;
         heap.add(sheet);
       }
       for (let i = 0; i < 6; i++) {
         const beam = new THREE.Mesh(new THREE.BoxGeometry(2 + Math.random() * 2, 0.14, 0.14), toon(0x3a3c3f));
-        beam.position.set(x + (Math.random() - 0.5) * 3, 0.3 + Math.random() * 0.6, zc + (Math.random() - 0.5) * len);
-        beam.rotation.set(Math.random(), Math.random() * 3, (Math.random() - 0.5) * 0.8);
+        beam.position.set(x + (Math.random() - 0.5) * 3, 0.1 + Math.random() * 0.15, zc + (Math.random() - 0.5) * len);
+        beam.rotation.set(0, Math.random() * 3, (Math.random() - 0.5) * 0.15);
         heap.add(beam);
       }
       B.root.add(heap);
@@ -1562,23 +1678,19 @@ function buildAvenue(scene) {
     {
       const jx = (JUNCTION.x0 + JUNCTION.x1) / 2;
       // north: a block came down across the side street
-      rubble(jx, -21, 6, 3.6, { slabs: 7 });
-      rubble(jx - 5, -18.5, 2.4, 1.6, { slabs: 2 });
-      rubble(jx + 5.5, -19, 2, 1.3, { slabs: 2 });
-      B.solid(B.chunk(12, 6, 0.45, CONCRETE[1], jx + 0.5, 2.0, -23.5, -0.95, 0.12, 0.06));
-      B.rebar(jx + 2, 1.5, -19.5, 6);
-      B.hitBox(jx, 1.6, -21, 14, 3.2, 6);
-      B.block(jx, -21, 8.5, 2.6);
+      rubble(jx, -25.5, 6, 3.6, { slabs: 7 });
+      rubble(jx - 5, -23, 2.4, 1.6, { slabs: 2 });
+      rubble(jx + 5.5, -23.5, 2, 1.3, { slabs: 2 });
+      B.solid(B.chunk(12, 6, 0.45, CONCRETE[1], jx + 0.5, 2.0, -28, -0.95, 0.12, 0.06));
+      B.rebar(jx + 2, 1.5, -24, 6);
+      B.hitBox(jx, 1.6, -25.5, 14, 3.2, 6);
+      B.block(jx, -25.5, 8.5, 2.6);
       // south: rubble and a burnt bus nose-down in it
-      rubble(jx, 20.5, 5.4, 2.8, { slabs: 6 });
-      rubble(jx + 5, 18.5, 2.2, 1.4, { slabs: 2 });
-      B.hitBox(jx, 1.3, 20.5, 13, 2.6, 5.4);
-      B.block(jx, 20.2, 8.5, 2.4);
-      P.bus(B, jx - 2, 24, 0.6);
-      // the side streets' own sidewalk lines, so they read as streets
-      for (const x of [JUNCTION.x0 + 0.4, JUNCTION.x1 - 0.4]) {
-        for (const [za, zb] of [[-19, CURB.n - 0.4], [CURB.s + 0.4, 18.5]]) for (let z = za; z < zb; z += 0.8) if (rand() > 0.35) B.lump(x, 0, z, 0.4, 0.08, 0.3, 0x8f8e8b, rand() * 3);
-      }
+      rubble(jx, 25.5, 5.4, 2.8, { slabs: 6 });
+      rubble(jx + 5, 23.5, 2.2, 1.4, { slabs: 2 });
+      B.hitBox(jx, 1.3, 25.5, 13, 2.6, 5.4);
+      B.block(jx, 25.2, 8.5, 2.4);
+      P.bus(B, jx - 2, 29, 0.6);
     }
     const endWall = containerWall(END_X, [[WALK.n - 0.5, -3.4], [-3.4, 3.4], [3.4, WALK.s + 1.6]]);
     // past the wall the street runs on into a last heap of rubble
@@ -1605,7 +1717,7 @@ function buildAvenue(scene) {
     const [shackA, shackB] = shacks;
     const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: -21, maxZ: 9.9 };
     const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: -12, maxZ: 9.9 };
-    const B3 = { minX: shackB.x1 + 1.2, maxX: END_X + 6, minZ: -17.5, maxZ: 17.5 };
+    const B3 = { minX: shackB.x1 + 1.2, maxX: END_X + 6, minZ: -22.5, maxZ: 22.5 };
     const BARRICADE_X = 81.5;
     const S = { sector: 0, step: 0, t: 0, spawnX: 0, n: 0, shots: 0, hold: 0, boss: null, waveT: 0, strike: null };
     const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
@@ -1831,8 +1943,8 @@ function buildAvenue(scene) {
       api.prompt('Sector 3', 'The street ahead is walled off. <b>Hold the intersection!</b>', { danger: true, seconds: 6 });
     }
     // walkers climbing in over the rubble in the side streets
-    const fromNorth = (api, dx, delay = 0) => api.spawnDog(JX + dx, -17, { delay, via: [[JX + dx * 0.6, -9]] });
-    const fromSouth = (api, dx, delay = 0) => api.spawnDog(JX + dx, 17, { delay, via: [[JX + dx * 0.6, 8]] });
+    const fromNorth = (api, dx, delay = 0) => api.spawnDog(JX + dx, -20, { delay, via: [[JX + dx * 0.6, -9]] });
+    const fromSouth = (api, dx, delay = 0) => api.spawnDog(JX + dx, 20, { delay, via: [[JX + dx * 0.6, 8]] });
     function sector3(api, dt) {
       switch (S.step) {
         case 0:
@@ -1852,7 +1964,7 @@ function buildAvenue(scene) {
             }
           }
           if (S.hold <= 0) {
-            S.boss = api.spawnHound(JX, -18, { via: [[JX, -8]] });
+            S.boss = api.spawnHound(JX, -21, { via: [[JX, -8]] });
             fromSouth(api, -3, 1.5);
             fromSouth(api, 3, 2);
             api.boss(S.boss, 'Large quadruped');
@@ -1878,6 +1990,7 @@ function buildAvenue(scene) {
           // the level ends the moment the tank crosses the wall's line
           if (api.tankPos.x > END_X - 0.5) {
             api.arrow(null);
+            api.sectors(SECTORS, 3); // the last one ticked off too
             api.win('Level clear');
             go(4);
           }

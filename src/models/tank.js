@@ -626,7 +626,7 @@ export function createTank() {
       // rocket flame out of the drum's rear end (shown while boosting)
       // the drums swing round opposite ways (one clockwise, one counter), so
       // their open ends both end up facing back: the flame sits on that end
-      const turn = z < 0 ? 1 : -1;
+      const turn = z < 0 ? -1 : 1;
       drum.userData.turn = turn;
       const flame = new THREE.Group();
       flame.position.z = -turn * (DL / 2 + 0.05);
@@ -991,8 +991,9 @@ export function createTank() {
   }
   // 'normal' or 'afterburner' (hotter: blue core, pink-violet flame)
   function setFlameStyle(style) {
-    flameOuter.color.set(style === 'afterburner' ? 0xff5fd0 : 0xff8a2a);
-    flameInner.color.set(style === 'afterburner' ? 0x9fe4ff : 0xfff1b8);
+    // improved boost: still a warm flame, but the core burns blue-white
+    flameOuter.color.set(style === 'afterburner' ? 0xff8a5a : 0xff8a2a);
+    flameInner.color.set(style === 'afterburner' ? 0xa8e8ff : 0xfff1b8);
   }
   const commanderTop = new THREE.Vector3(COMMANDER.x, turretSurfaceY(COMMANDER.x, COMMANDER.z) + 0.3, COMMANDER.z);
 

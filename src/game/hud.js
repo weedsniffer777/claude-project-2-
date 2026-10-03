@@ -104,7 +104,8 @@ const CSS = `
 .hud-end .parts { display: grid; gap: 8px; justify-items: center; }
 .hud-end .parts > span { font-size: 12px; color: var(--dim); }
 .hud-end .icons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.hud-end .icon { position: relative; width: 56px; height: 42px; padding: 4px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; display: grid; place-items: center; }
+.hud-end .icon img { width: 72px; height: 48px; image-rendering: pixelated; }
+.hud-end .icon { position: relative; min-width: 56px; min-height: 42px; padding: 4px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; display: grid; place-items: center; }
 .hud-end .icon canvas { position: static; inset: auto; width: 48px; height: 30px; image-rendering: pixelated; } /* the page styles every canvas as full-screen */
 .hud-end .icon:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .hud-end .tip { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%); width: 180px; padding: 8px 10px 10px; display: none; gap: 4px; text-align: center; z-index: 2; }
@@ -566,8 +567,19 @@ export function createHud() {
       for (const p of parts) {
         const el = document.createElement('div');
         el.className = 'icon';
-        el.innerHTML = '<canvas width="16" height="10"></canvas><div class="tip panel"><b></b><span></span></div>';
-        drawIcon(el.querySelector('canvas'), p.icon);
+        el.innerHTML = '<div class="tip panel"><b></b><span></span></div>';
+        if (p.image) {
+          const img = new Image();
+          img.src = p.image;
+          img.alt = p.name;
+          el.prepend(img);
+        } else {
+          const cv = document.createElement('canvas');
+          cv.width = 16;
+          cv.height = 10;
+          drawIcon(cv, p.icon);
+          el.prepend(cv);
+        }
         el.querySelector('.tip b').textContent = p.name;
         el.querySelector('.tip span').textContent = p.text;
         icons.append(el);

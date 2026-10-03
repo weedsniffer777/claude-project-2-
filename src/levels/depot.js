@@ -132,14 +132,8 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   const WALL = 0x8a9a8e;
   const DARK = 0x6d7a72;
 
-  // floor slab inside
-  {
-    const f = new THREE.Mesh(new THREE.PlaneGeometry(L, Wd), toon(0x5d5b57));
-    f.rotation.x = -Math.PI / 2;
-    f.position.set(cx, 0.02, cz);
-    f.receiveShadow = true;
-    B.add(f);
-  }
+  let signMesh = null;
+  let signGlow = null;
   // back (north) wall: always shown
   wall(cx, z0 - 0.15, L + 0.3, 0.3, H, DARK);
   B.block(cx, z0 - 0.15, L / 2 + 0.15, 0.2);
@@ -149,9 +143,10 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   // end walls with the door openings
   const side = (Wd - DOOR) / 2;
   for (const [x, list] of [[x0 - 0.15, true], [x1 + 0.15, false]]) {
-    wall(x, z0 + side / 2, 0.3, side, H, list ? WALL : DARK);
-    wall(x, z1 - side / 2, 0.3, side, H, list ? WALL : DARK);
-    wall(x, cz, 0.3, DOOR, 0.6, list ? WALL : DARK).position.y = H - 0.3;
+    // (a touch taller than the long walls, so the corners don't share a top face)
+    wall(x, z0 + side / 2, 0.3, side, H + 0.04, list ? WALL : DARK);
+    wall(x, z1 - side / 2, 0.3, side, H + 0.04, list ? WALL : DARK);
+    wall(x, cz, 0.3, DOOR, 0.6, list ? WALL : DARK).position.y = H - 0.28;
     B.block(x, z0 + side / 2, 0.2, side / 2);
     B.block(x, z1 - side / 2, 0.2, side / 2);
   }
@@ -187,12 +182,14 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   // what makes it read from down the street: a lit sign, a beacon, work lights
   {
     // a lit sign over the door: CHECKPOINT in cold tube letters
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture() }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture(), color: 0xffffff }));
     sign.rotation.y = -Math.PI / 2;
-    sign.position.set(x0 - 0.36, H + 0.7, cz);
+    sign.position.set(x0 - 0.42, H + 0.7, cz); // clear of the backing board's face
     B.add(sign);
+    B.keep(sign);
     put(B.root, box(0.12, 0.9, 4.0, 0x2c3034), x0 - 0.3, H + 0.7, cz);
-    B.emit(new THREE.Vector3(x0 - 1.5, H, cz), COLD, 10, 8);
+    signGlow = B.emit(new THREE.Vector3(x0 - 1.5, H, cz), COLD, 10, 8);
+    signMesh = sign;
   }
   const beacon = B.keep(put(B.root, box(0.26, 0.2, 0.26, 0xffb02a, { glow: true }), cx, H + 0.95, cz));
   const beaconE = B.emit(new THREE.Vector3(cx, H + 1.4, cz), 0xffa21f, 10, 9);
@@ -216,6 +213,11 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   };
   const keepBlock = (b) => blocksRef.includes(b) || blocksRef.push(b);
   function update(dt, t) {
+    // the tube sign stutters now and then, like old neon does
+    const n = Math.sin(t * 7.3 + x0) + Math.sin(t * 2.1 + x0 * 0.3) * 1.4;
+    const on = n > -1.9 || Math.sin(t * 60) > 0;
+    signMesh.material.color.setScalar(on ? 1 : 0.35);
+    signGlow.level = on ? 1 : 0.2;
     beacon.rotation.y = t * 5;
     beaconE.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5));
     state.inDoor = THREE.MathUtils.clamp(state.inDoor + (state.openIn ? dt : -dt) * 0.9, 0, 1);

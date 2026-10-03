@@ -368,6 +368,7 @@ export function buildDepotRoom(scene) {
     placeCrane();
     for (const p of pads) {
       p.holder.clear();
+      p.holder.visible = true; // the last stop's install hid the pallets it didn't use
       p.offer = null;
       p.light.level = 1;
       p.pool.visible = true;

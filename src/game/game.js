@@ -16,7 +16,7 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, BASE_STATS } from './parts.js';
+import { PARTS, attachPart, statsFor, partModel, BASE_STATS } from './parts.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -355,8 +355,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
           [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
           'Play again',
           () => loadLevel(levelDef.id),
-          `+${run.scrap} scraps banked${total != null ? ` · ${total} total` : ''}`,
-          run.parts.map((id) => PARTS[id]),
+          `+${run.scrap} scraps${total != null ? ` · ${total} total` : ''}`,
+          partCards(),
         );
         setCursor();
       }, 900);
@@ -400,11 +400,13 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hud.damage(p, h.amount, 'big');
       if (h.killed) hud.damage(p.clone().setY(1.9), 0, 'kill');
     }
-    // a shell knocks over breakable barricades
+    // a shell wrecks whatever it lands on or next to: barricades, the gate,
+    // cars, junk, poles (not the container walls)
     for (const c of level.crushables || []) {
-      if (!c.breakable || c.armored || c.done) continue;
+      if (c.armored || c.done) continue;
       const f = c.footprint;
-      if (Math.abs(at.x - f.x) < f.hx + 1.2 && Math.abs(at.z - f.z) < f.hz + 1.2) crushing.crush(c, { x: pos.x, z: pos.z, yaw: 0 });
+      const reach = c.breakable ? 1.2 : 0.7;
+      if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) crushing.crush(c, { x: at.x - (f.x - at.x || 0.5), z: at.z - (f.z - at.z), yaw: 0 });
     }
     level.onImpact?.(at, mesh, api);
   }
@@ -424,8 +426,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
       'Retry',
       () => loadLevel(levelDef.id),
-      `Half recovered: +${kept} scraps banked${total != null ? ` · ${total} total` : ''}`,
-      run.parts.map((id) => PARTS[id]),
+      `Half recovered: +${kept} scraps${total != null ? ` · ${total} total` : ''}`,
+      partCards(),
     );
     setCursor();
     combat.explode(pos.clone().setY(1.2));
@@ -688,6 +690,52 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       wait();
     });
   }
+  // The parts fitted this run, each with a little pre-rendered picture of
+  // its model for the results screen.
+  const partShots = new Map();
+  function partCards() {
+    return run.parts.map((id) => {
+      if (!partShots.has(id)) partShots.set(id, snapshot(partModel(id)));
+      return { ...PARTS[id], image: partShots.get(id) };
+    });
+  }
+  function snapshot(model) {
+    const W = 72;
+    const H = 48;
+    const rt = new THREE.WebGLRenderTarget(W, H);
+    rt.texture.colorSpace = THREE.SRGBColorSpace; // read back display colours, not linear
+    const sc = new THREE.Scene();
+    sc.add(new THREE.HemisphereLight(0xdfe6f0, 0x504a44, 2.4));
+    const sun = new THREE.DirectionalLight(0xffe2c0, 3.2);
+    sun.position.set(-2, 4, 3);
+    sc.add(sun, model);
+    const bb = new THREE.Box3().setFromObject(model);
+    const c = bb.getCenter(new THREE.Vector3());
+    const size = bb.getSize(new THREE.Vector3()).length() * 0.5 || 1;
+    const cam = new THREE.OrthographicCamera(-size * 1.05, size * 1.05, size * 0.7, -size * 0.7, 0.1, 100);
+    cam.position.copy(c).add(new THREE.Vector3(-1, 0.85, 1).normalize().multiplyScalar(20));
+    cam.lookAt(c);
+    const was = renderer.getRenderTarget();
+    const clear = renderer.getClearColor(new THREE.Color());
+    const alpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(rt);
+    renderer.setClearColor(0x000000, 0);
+    renderer.clear();
+    renderer.render(sc, cam);
+    const px = new Uint8Array(W * H * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, W, H, px);
+    renderer.setRenderTarget(was);
+    renderer.setClearColor(clear, alpha);
+    rt.dispose();
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const img = cv.getContext('2d').createImageData(W, H);
+    for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4); // flip rows
+    cv.getContext('2d').putImageData(img, 0, 0);
+    return cv.toDataURL();
+  }
+
   // the pointer: the gun's reticle while fighting, a pixel arrow elsewhere
   function setCursor() {
     if (!canvas.isConnected) return;
@@ -907,7 +955,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
           for (let i = 0; i < 2; i++) {
             if (i && stats.afterburner && Math.random() < 0.6) continue; // burns cleaner: less smoke
             combat.puffs.spawn(n.clone().addScaledVector(back, 0.3), back.clone().multiplyScalar(4 + Math.random() * 3).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5)), {
-              color: i ? 0x6b6a6f : stats.afterburner ? (Math.random() < 0.5 ? 0xff6fd8 : 0x8fd8ff) : 0xffa040,
+              // improved boost: mostly the usual orange, hot blue/pink right at the nozzle
+              color: i ? 0x6b6a6f : stats.afterburner ? [0xffa040, 0xff9a5a, 0xff7ad0, 0x9fdcff][(Math.random() * 4) | 0] : 0xffa040,
               s0: 0.14,
               s1: i ? 0.5 : 0.28,
               life: i ? 0.7 : 0.18,
@@ -917,7 +966,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
             });
           }
           if (Math.random() < 0.5) combat.fx.spawn(n, back.clone().multiplyScalar(6).add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), { color: 0xffd36b, life: 0.3, size: 0.07, gravity: 6, glow: true });
-          combat.glow.light(n, stats.afterburner ? 0xc77dff : 0xff8a2a, 12, 0.05);
+          combat.glow.light(n, stats.afterburner ? 0xff8f7a : 0xff8a2a, 12, 0.05);
         }
         combat.shake = Math.max(combat.shake, 0.06);
       }
@@ -925,7 +974,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       // tracks kick up slush and dust behind them
       const moving = Math.abs(speed);
       if (moving > 0.8 && dt > 0) {
-        dustCarry += dt * (moving / MAX_SPEED) * 13;
+        dustCarry += dt * (moving / MAX_SPEED) * (8 + Math.random() * 10); // irregular, not a steady stream
         const c = Math.cos(yaw);
         const sn = Math.sin(yaw);
         while (dustCarry > 1) {
@@ -933,16 +982,21 @@ export function createGame({ renderer, pixel, level: startLevel }) {
           for (const side of [-1, 1]) {
             const lx = speed > 0 ? -1.85 : 1.8;
             const lz = side * 0.95;
-            const at = new THREE.Vector3(pos.x + lx * c + lz * sn, pos.y + 0.15, pos.z - lx * sn + lz * c);
+            if (Math.random() < 0.35) continue; // one track or the other, not always both
+            const jl = lx + (Math.random() - 0.5) * 0.8;
+            const jz = lz + (Math.random() - 0.5) * 0.5;
+            const at = new THREE.Vector3(pos.x + jl * c + jz * sn, pos.y + 0.06, pos.z - jl * sn + jz * c);
             const v = new THREE.Vector3(-c * Math.sign(speed) * (0.6 + Math.random()), 0.5 + Math.random() * 0.6, sn * Math.sign(speed) * (0.6 + Math.random())).add(new THREE.Vector3((Math.random() - 0.5) * 0.8, 0, (Math.random() - 0.5) * 0.8));
             combat.puffs.spawn(at, v, {
-              color: Math.random() < 0.5 ? 0xc4c3c0 : 0xa6a39c,
-              s0: 0.07,
-              s1: 0.18 + Math.random() * 0.12 + (moving / MAX_SPEED) * 0.08,
-              life: 0.45 + Math.random() * 0.25,
-              drag: 3,
-              lift: 0.35,
-              fadeAt: 0.35,
+              // dirty slush and grit: muted, flattened, never two alike
+              color: [0x8f8a80, 0x7d786f, 0x9a958b, 0x6f6b64][(Math.random() * 4) | 0],
+              s0: 0.04 + Math.random() * 0.05,
+              s1: 0.12 + Math.random() * 0.2 + (moving / MAX_SPEED) * 0.06,
+              life: 0.3 + Math.random() * 0.45,
+              drag: 2 + Math.random() * 3,
+              lift: 0.1 + Math.random() * 0.25,
+              stretch: 1.6 + Math.random() * 1.2,
+              fadeAt: 0.2 + Math.random() * 0.3,
             });
           }
         }
@@ -1031,7 +1085,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
-        if (!e.alive) run.boss = null;
+        if (!e.alive) {
+          run.boss = null;
+          hud.setBoss(null, null);
+        }
       }
 
       combat.beginShake(camera);
