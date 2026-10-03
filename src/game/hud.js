@@ -145,6 +145,11 @@ const CSS = `
 .hud-end .stats b { color: var(--ink); font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
 .hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
+.hud-pause { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: stretch; min-width: 240px; pointer-events: auto; }
+.hud-pause h2 { margin: 0 0 4px; text-align: center; font: 400 26px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
+.hud-pause button { padding: 10px 16px 11px; border: 0; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud-pause button[data-act="resume"] { color: #111; background: var(--go); box-shadow: 0 4px 0 #2f6b40; }
+.hud-pause button:hover, .hud-pause button:focus-visible { filter: brightness(1.2); outline: none; }
 .hud-end .btns { display: flex; gap: 14px; justify-content: center; }
 .hud-end button.alt { background: #2a2628; color: var(--ink); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
@@ -308,6 +313,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts acquired</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
+    <div class="hud-pause panel" hidden><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit to base</button></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -539,6 +545,15 @@ export function createHud() {
       }
     },
     cursor: CURSOR,
+    // the Esc menu: acts = { resume, restart, exit } (exit may be missing)
+    showPause(acts) {
+      const el = $('.hud-pause');
+      el.hidden = !acts;
+      if (!acts) return;
+      el.querySelector('[data-act="exit"]').hidden = !acts.exit;
+      for (const b of el.querySelectorAll('button')) b.onclick = () => acts[b.dataset.act]?.();
+      el.querySelector('[data-act="resume"]').focus();
+    },
     showContinue(fn) {
       cont.hidden = !fn;
       onContinue = fn;

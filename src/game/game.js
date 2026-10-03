@@ -144,7 +144,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       fading: false,
       auto: null,
       autoKeep: false,
+      paused: false,
     });
+    hud.showPause(null);
     hud.showContinue(null);
     hud.showPicker(null);
     speed = 0;
@@ -505,7 +507,37 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.shots++;
     combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
   }
+  // Esc: pause (and resume)
+  function setPaused(on) {
+    if (on && (run.over || run.fading)) return;
+    run.paused = on;
+    keys.clear();
+    hud.showPause(
+      on
+        ? {
+            resume: () => setPaused(false),
+            restart: () => {
+              setPaused(false);
+              loadLevel(levelDef.id);
+            },
+            exit: onExit
+              ? () => {
+                  setPaused(false);
+                  onExit();
+                }
+              : null,
+          }
+        : null,
+    );
+    setCursor();
+  }
   const onKeyDown = (e) => {
+    if (e.code === 'Escape') {
+      const devMenu = document.querySelector('.dk-menu');
+      if (!devMenu || devMenu.hidden) setPaused(!run.paused); // (Esc closes the dev kit first)
+      return;
+    }
+    if (run.paused) return;
     if (e.code === 'Space') {
       e.preventDefault();
       fire();
@@ -778,7 +810,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the pointer: the gun's reticle while fighting, a pixel arrow elsewhere
   function setCursor() {
     if (!canvas.isConnected) return;
-    canvas.style.cursor = run.over || run.mode === 'depot' ? hud.cursor : 'none';
+    canvas.style.cursor = run.over || run.paused || run.mode === 'depot' ? hud.cursor : 'none';
   }
 
   // second roof MG (Twin MG part): turns on its own and takes the nearest
@@ -877,6 +909,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     frame(realDt, t) {
       if (debug?.timeScale) realDt *= debug.timeScale; // tests only
+      if (run.paused) {
+        // the world holds still under the menu
+        pixel.render(scene, camera);
+        hud.update(0, camera, canvas);
+        return;
+      }
       // world time: frozen for a beat on a cannon kill, crawling under a
       // tutorial spotlight
       let dt = realDt;
@@ -1068,7 +1106,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
 
       // machines
-      enemies.update(dt, t, { tankPos: pos, blocks, heightAt: level.heightAt, onTankHit: tankHit });
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, heightAt: level.heightAt, onTankHit: tankHit });
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
       mgActive = !!mgTarget;

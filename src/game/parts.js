@@ -68,9 +68,6 @@ export const PARTS = {
       const g = new THREE.Group();
       put(g, box(0.75, 0.42, 1.3, DARKOLIVE, { r: 0.04 }), -1.15, 0.24, 0);
       put(g, box(0.7, 0.05, 1.24, OLIVE, { r: 0.02 }), -1.15, 0.47, 0); // lid
-      put(g, box(0.06, 0.32, 1.32, DARK, { r: 0.01 }), -1.53, 0.24, 0); // rear hatch seam
-      for (const z of [-0.4, 0.4]) put(g, box(0.1, 0.06, 0.14, STEEL, { r: 0.01 }), -1.56, 0.36, z); // hinges
-      for (const z of [-0.68, 0.68]) put(g, box(0.6, 0.3, 0.04, DARK, { r: 0.01 }), -1.15, 0.24, z); // side ribs
       t.turret.add(g);
       return g;
     },
@@ -207,11 +204,32 @@ export const PARTS = {
       return g;
     },
     model() {
+      // one of the T-55's own rear drums, re-rigged: rolled rims, straps
+      // and buckles, the filler cap; on one end a rocket nozzle bolted on
       const g = new THREE.Group();
-      put(g, cyl(0.4, 1.0, OLIVE, { axis: 'x', seg: 16 }), 0, 0.42, 0);
-      put(g, cyl(0.42, 0.12, 0x3b3f6a, { axis: 'x', seg: 16 }), -0.55, 0.42, 0); // heat-blued nozzle ring
-      put(g, cyl(0.3, 0.13, 0x1d1f22, { axis: 'x', seg: 14 }), -0.56, 0.42, 0); // cold, dark throat
-      for (const z of [-0.25, 0.25]) put(g, box(0.5, 0.06, 0.06, STEEL, { r: 0.01 }), -0.2, 0.86, z); // mounting straps
+      const DR = 0.41;
+      const DL = 1.0;
+      const y = DR + 0.02;
+      put(g, cyl(DR, DL, OLIVE, { axis: 'x', seg: 20 }), 0, y, 0);
+      for (const s of [-1, 1]) {
+        put(g, cyl(DR + 0.014, 0.05, DARKOLIVE, { axis: 'x', seg: 20 }), s * (DL / 2 - 0.03), y, 0); // rolled rims
+        put(g, cyl(DR + 0.01, 0.04, DARK, { axis: 'x', seg: 20 }), s * DL * 0.24, y, 0); // straps
+        put(g, box(0.07, 0.07, 0.09, STEEL, { r: 0.014 }), s * DL * 0.24, y + DR + 0.02, 0); // buckles
+      }
+      put(g, cyl(0.075, 0.03, DARKOLIVE, { axis: 'x', seg: 10 }), DL / 2 + 0.02, y + 0.22, 0.1); // filler cap
+      // the engine end: a mounting collar, a flared bell, a dark throat
+      const end = -DL / 2;
+      put(g, cyl(DR - 0.04, 0.12, STEEL, { axis: 'x', seg: 18 }), end - 0.05, y, 0);
+      const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.2, 0.42, 16, 1, true), toon(0x3b3f6a));
+      bell.material.side = THREE.DoubleSide;
+      bell.rotation.z = Math.PI / 2; // wide end facing out the back (-x)
+      bell.position.set(end - 0.31, y, 0);
+      g.add(bell);
+      put(g, cyl(0.19, 0.04, 0x1d1f22, { axis: 'x', seg: 14 }), end - 0.12, y, 0);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        put(g, box(0.34, 0.03, 0.03, STEEL, { r: 0.005 }), end - 0.2, y + Math.cos(a) * 0.27, Math.sin(a) * 0.27); // braces
+      }
       return g;
     },
   },

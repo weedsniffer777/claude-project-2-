@@ -20,6 +20,9 @@ const DOG = {
   box: { hx: 0.55, hz: 0.3 },
   scale: 1,
   scrap: 3,
+  windup: 0.6, // seconds the red firing funnel shows before a burst
+  spread: 0.06, // radians either side
+  boltSpeed: 22,
 };
 
 // The large quadruped: the zone's boss, a walker twice the size that comes
@@ -40,7 +43,19 @@ const HOUND = {
   box: { hx: 1.2, hz: 0.66 },
   scale: 2.2,
   scrap: 30,
+  windup: 0.9,
+  spread: 0.1,
+  boltSpeed: 20,
 };
+
+// The red funnel a machine shows while winding up a burst: where the rounds
+// will go. Unit length along +x, opening to ±0.5; scaled per shot.
+const funnelGeo = (() => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, -0.5, 1, 0, 0.5], 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25], 3));
+  return g;
+})();
 
 export class Enemies {
   constructor(scene, combat) {
@@ -49,6 +64,7 @@ export class Enemies {
     this.list = [];
     this.parts = [];
     this.killed = 0;
+    this.bolts = []; // rounds in flight
     this.hitMat = new THREE.MeshBasicMaterial({ visible: false });
   }
 
@@ -100,6 +116,14 @@ export class Enemies {
       noclip,
     };
     hit.userData.enemy = e;
+    // the firing funnel, on the ground in front of it
+    e.funnel = new THREE.Mesh(funnelGeo, new THREE.MeshBasicMaterial({ color: 0xff3b2f, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    e.funnel.visible = false;
+    e.funnel.frustumCulled = false;
+    this.scene.add(e.funnel);
+    e.windup = 0;
+    e.lock = null;
+    e.funnelK = 0;
     this.list.push(e);
     return e;
   }
@@ -144,6 +168,9 @@ export class Enemies {
 
   kill(e, blastFrom = null) {
     e.alive = false;
+    e.funnel.visible = false;
+    e.burstLeft = 0;
+    e.windup = 0;
     e.model.group.traverse((o) => o.layers.disable(ENEMY_LAYER)); // wrecks lose the outline
     e.model.kill();
     e.hit.removeFromParent();
@@ -251,6 +278,7 @@ export class Enemies {
   update(dt, t, ctx) {
     const { tankPos, blocks } = ctx;
     this.updateParts(dt, ctx.heightAt);
+    this.updateBolts(dt, ctx);
     for (const e of this.list) {
       if (e.delay > 0) {
         e.delay -= dt;
@@ -342,33 +370,91 @@ export class Enemies {
       let diff = facing - g.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       g.rotation.y += diff * Math.min(1, dt * 8);
-      let aimYaw = Math.atan2(-tz, tx) - g.rotation.y;
+      // the rifle holds on the locked line while it winds up and fires
+      const locked = e.lock && (e.windup > 0 || e.burstLeft > 0);
+      let aimYaw = (locked ? Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x) : Math.atan2(-tz, tx)) - g.rotation.y;
       aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
 
-      // shooting: bursts once in range and roughly facing the tank
+      // shooting: in range, it locks onto where the tank is (and a little of
+      // where it's heading), shows a red funnel while it winds up, then fires
+      // a burst of real rounds down that line. Drive out of the funnel and
+      // they miss.
       e.recoil = Math.max(0, e.recoil - dt * 8);
       e.fireTimer -= dt;
-      if (dist < DOG.range + 1.5) {
-        if (e.burstLeft <= 0 && e.fireTimer <= 0) {
+      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5) {
+        e.windup = DOG.windup;
+        const lead = ctx.tankVel || { x: 0, z: 0 };
+        e.lock = new THREE.Vector3(tankPos.x + lead.x * 0.2, 0, tankPos.z + lead.z * 0.2);
+      }
+      if (e.windup > 0) {
+        e.windup -= dt;
+        if (e.windup <= 0) {
           e.burstLeft = DOG.burst;
           e.fireTimer = 0;
         }
-        if (e.burstLeft > 0 && e.fireTimer <= 0) {
-          e.burstLeft--;
-          e.fireTimer = e.burstLeft > 0 ? DOG.burstGap : DOG.reload + Math.random() * 0.6;
-          e.recoil = 1;
-          const from = e.model.muzzle();
-          const hit = Math.random() < DOG.accuracy;
-          const to = hit
-            ? new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 1.6, 0.7 + Math.random() * 0.7, tankPos.z + (Math.random() - 0.5) * 1.2)
-            : new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 5, 0.05, tankPos.z + (Math.random() - 0.5) * 5);
-          this.combat.enemyShot(from, to, hit);
-          if (hit) ctx.onTankHit?.(DOG.damage, to);
-          if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
-        }
+      }
+      if (e.burstLeft > 0 && e.fireTimer <= 0) {
+        e.burstLeft--;
+        e.fireTimer = e.burstLeft > 0 ? DOG.burstGap : DOG.reload + Math.random() * 0.6;
+        e.recoil = 1;
+        const from = e.model.muzzle();
+        const dir = new THREE.Vector3(e.lock.x - from.x, 0, e.lock.z - from.z).normalize();
+        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 2 * DOG.spread);
+        const reach = Math.hypot(e.lock.x - from.x, e.lock.z - from.z) + 6;
+        const time = reach / DOG.boltSpeed;
+        const vel = dir.multiplyScalar(DOG.boltSpeed);
+        vel.y = (0.25 - from.y) / time; // dipping down to hit the ground past the target
+        this.bolts.push({ pos: from.clone(), vel, life: time, damage: DOG.damage });
+        this.combat.glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
+        this.combat.glow.light(from, 0xff4a30, 6, 0.06);
+        if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
+      }
+      // the funnel: brightening through the wind-up, flaring on the burst
+      const showing = e.windup > 0 || e.burstLeft > 0;
+      e.funnelK += ((showing ? 1 : 0) - e.funnelK) * Math.min(1, dt * (showing ? 10 : 6));
+      e.funnel.visible = e.funnelK > 0.02 && !!e.lock;
+      if (e.funnel.visible) {
+        const from = e.model.muzzle();
+        const len = Math.hypot(e.lock.x - from.x, e.lock.z - from.z) + 3;
+        const width = Math.tan(DOG.spread) * 2 * len + 0.9 * e.stats.scale;
+        e.funnel.position.set(from.x, (ctx.heightAt ? ctx.heightAt(from.x, from.z) : 0) + 0.06, from.z);
+        e.funnel.rotation.y = Math.atan2(-(e.lock.z - from.z), e.lock.x - from.x);
+        e.funnel.scale.set(len, 1, width);
+        const pulse = e.windup > 0 ? 0.5 + 0.5 * Math.sin((1 - e.windup / DOG.windup) * Math.PI * 6) : 1;
+        e.funnel.material.opacity = e.funnelK * (e.windup > 0 ? 0.18 + 0.2 * pulse * (1 - e.windup / DOG.windup) : 0.45);
       }
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
       e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil });
+    }
+  }
+
+  // Rounds in flight: red streaks; a round that passes through the tank's
+  // footprint (low enough) hits it, the rest go on into the ground.
+  updateBolts(dt, ctx) {
+    const tb = ctx.tankBox;
+    for (let i = this.bolts.length - 1; i >= 0; i--) {
+      const b = this.bolts[i];
+      const prev = b.pos.clone();
+      b.pos.addScaledVector(b.vel, dt);
+      b.life -= dt;
+      this.combat.glow.tracer(prev, b.pos, 0xff3b2f, 0.07, 0.07);
+      let hit = false;
+      if (tb && b.pos.y < 1.8) {
+        const dx = b.pos.x - tb.x;
+        const dz = b.pos.z - tb.z;
+        const c = Math.cos(tb.yaw);
+        const sn = Math.sin(tb.yaw);
+        hit = Math.abs(dx * c - dz * sn) < tb.hx + 0.1 && Math.abs(dx * sn + dz * c) < tb.hz + 0.1;
+      }
+      if (hit) {
+        this.combat.glow.flash(b.pos, 0xffd9a0, 0.06, 0.3, 0.06);
+        this.combat.fx.burst(b.pos, { count: 6, speed: 4, color: 0xffd36b, life: 0.2, size: 0.06, gravity: 9 });
+        ctx.onTankHit?.(b.damage, b.pos);
+        this.bolts.splice(i, 1);
+      } else if (b.life <= 0 || b.pos.y <= 0.05) {
+        this.combat.fx.burst(b.pos.clone().setY(0.08), { count: 3, speed: 2.5, color: 0x8d8b86, glow: false, life: 0.3, size: 0.06, gravity: 9 });
+        this.bolts.splice(i, 1);
+      }
     }
   }
 
@@ -378,7 +464,11 @@ export class Enemies {
   }
 
   dispose() {
-    for (const e of this.list) e.model.group.removeFromParent();
+    for (const e of this.list) {
+      e.model.group.removeFromParent();
+      e.funnel.removeFromParent();
+    }
+    this.bolts = [];
     for (const p of this.parts) p.m.removeFromParent();
     this.list = [];
     this.parts = [];

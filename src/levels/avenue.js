@@ -1491,6 +1491,7 @@ function buildAvenue(scene) {
       warn.position.set(-0.32, 1.45, 0);
       warn.rotation.set(0, -Math.PI / 2, 0.06);
       gate.leaves[0].hinge.add(warn);
+      B.keep(warn); // falls with its leaf (added after the leaf was marked dynamic)
       gate.blocks.push({ x: GX, z: 0, hx: 0.3, hz: 2.5, yaw: 0 });
       B.blocks.push(...gate.blocks);
 
@@ -1921,24 +1922,27 @@ function buildAvenue(scene) {
             go(6);
           }
           break;
+        // the last stretch: an arrow on up the street; passing it brings the
+        // last few walkers out ahead, by the checkpoint (none from behind),
+        // and once they're down the arrow moves on to the checkpoint door
         case 6:
-          if (api.enemiesAlive === 0 && S.t > 3 && x > 22) {
-            api.spawnDog(47, -8.4, { delay: 0.3 });
-            api.spawnDog(47, 5.6, { delay: 0.6 });
-            api.spawnDog(45, 0, { delay: 0.9 });
-            const out = [[22, -9], [21, -3]];
-            api.spawnDog(22, -20, { delay: 2, via: out });
-            api.spawnDog(23, -20.5, { delay: 2.4, via: out });
-            api.prompt('Contact', 'Walkers ahead, and more out of the side street!', { danger: true, seconds: 5 });
-            go(7);
-          } else if (api.enemiesAlive === 0 && S.t > 3 && S.n === 0) {
+          if (api.enemiesAlive === 0 && S.t > 2 && S.n === 0) {
             S.n = 1;
             api.prompt('Orders', 'Push on up the street.');
-            api.arrow(new THREE.Vector3(30, 0.4, 0), 'This way');
+            api.arrow(new THREE.Vector3(32, 0.4, 0), 'This way');
+          }
+          if (S.n === 1 && x > 30) {
+            api.arrow(null);
+            api.spawnDog(47, -8.4, { delay: 0.2 });
+            api.spawnDog(47.5, 5.6, { delay: 0.5 });
+            api.spawnDog(45, 0, { delay: 0.8 });
+            api.spawnDog(46, -4, { delay: 1.2 });
+            api.prompt('Contact', 'Walkers at the checkpoint! Clear them out.', { danger: true, seconds: 5 });
+            go(7);
           }
           break;
         case 7:
-          if (api.enemiesAlive === 0 && S.t > 3) {
+          if (api.enemiesAlive === 0 && S.t > 1) {
             openShack(api, shackA, 'Street clear. Roll into the <b>checkpoint</b> for repairs and parts.');
             go(8);
           }
