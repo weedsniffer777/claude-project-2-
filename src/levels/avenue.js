@@ -23,7 +23,7 @@ import { buildDepotRoom } from './depotRoom.js';
 const FH = 1.35; // floor height
 const PX = 12; // facade texels per world unit
 const GPX = 10; // ground texels per world unit
-const MAP = { x0: -80, x1: 176, z0: -46, z1: 40 }; // ground extent
+const MAP = { x0: -80, x1: 176, z0: -84, z1: 50 }; // ground extent
 const RIVER = { x0: 60, x1: 78, y: -3.4 }; // the river the avenue bridges
 const BRIDGE = { n: -10.4, s: 9.8 }; // deck edges
 const GX = 100; // the gate across the street
@@ -34,6 +34,8 @@ const SW = 0.16; // sidewalk height
 const CROSS = { x0: 17, x1: 27 }; // the cross street running north
 const JUNCTION = { x0: 128, x1: 144 }; // the intersection at the end of the zone
 const END_X = 156; // the shipping-container wall the airstrike opens
+// the open square on the far corner of the intersection: the fight's arena
+const PLAZA = { x0: 144, x1: 155, z0: -25 };
 const SHACKS = [{ x0: 50, x1: 57.6 }, { x0: 105.4, x1: 113 }]; // checkpoint shacks across the street
 
 const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
@@ -505,14 +507,15 @@ function buildAvenue(scene) {
     slab(CROSS.x1, RIVER.x0, -16, CURB.n);
     slab(RIVER.x0, RIVER.x1, BRIDGE.n, CURB.n);
     slab(RIVER.x1, JUNCTION.x0, -16, CURB.n);
-    slab(JUNCTION.x1, MAP.x1, -16, CURB.n);
+    slab(JUNCTION.x1, PLAZA.x1, PLAZA.z0 - 1.5, CURB.n); // the plaza: one wide paved square
+    slab(PLAZA.x1, MAP.x1, -16, CURB.n);
     slab(MAP.x0, RIVER.x0, CURB.s, MAP.z1);
     slab(RIVER.x0, RIVER.x1, CURB.s, BRIDGE.s);
     slab(RIVER.x1, JUNCTION.x0, CURB.s, MAP.z1);
     slab(JUNCTION.x1, MAP.x1, CURB.s, MAP.z1);
     // the cross road's own sidewalks
     for (const [xa, xb] of [[JUNCTION.x0, JROAD.x0], [JROAD.x1, JUNCTION.x1]]) {
-      slab(xa, xb, -30, CURB.n);
+      slab(xa, xb, MAP.z0, CURB.n);
       slab(xa, xb, CURB.s, MAP.z1);
     }
 
@@ -521,14 +524,15 @@ function buildAvenue(scene) {
       for (let x = MAP.x0; x < MAP.x1; x += 0.55) {
         if (dir < 0 && x > CROSS.x0 - 0.5 && x < CROSS.x1 + 0.5) continue;
         if (x > JUNCTION.x0 - 0.5 && x < JUNCTION.x1 + 0.5) continue;
+        if (dir < 0 && x > PLAZA.x0 && x < PLAZA.x1 && rand() < 0.75) continue; // the plaza's edge: mostly cleared
         if (rand() < 0.12) x += 2;
         B.lump(x, SW, z + dir * rand() * 0.25, 0.5 + rand() * 0.4, 0.2 + rand() * 0.18, 0.35 + rand() * 0.2, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
       }
     }
     // snow banks along the cross road's curbs too
     for (const [x, dir] of [[JROAD.x0 - 0.35, -1], [JROAD.x1 + 0.35, 1]]) {
-      for (const [za, zb] of [[-19, CURB.n - 0.6], [CURB.s + 0.6, 19]]) {
-        for (let z = za; z < zb; z += 0.55) B.lump(x + dir * rand() * 0.25, SW, z, 0.35 + rand() * 0.2, 0.2 + rand() * 0.18, 0.5 + rand() * 0.4, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
+      for (const [za, zb] of [[MAP.z0 + 2, CURB.n - 0.6], [CURB.s + 0.6, MAP.z1 - 2]]) {
+        for (let z = za; z < zb; z += 0.55) if (!(dir > 0 && z > PLAZA.z0 && z < 0 && rand() < 0.75)) B.lump(x + dir * rand() * 0.25, SW, z, 0.35 + rand() * 0.2, 0.2 + rand() * 0.18, 0.5 + rand() * 0.4, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
       }
     }
     for (const z of [CURB.n + 0.3, CURB.s - 0.3]) {
@@ -711,8 +715,17 @@ function buildAvenue(scene) {
     building({ x0: 44, x1: 58, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
     building({ x0: 80, x1: 97, floors: 9, panel: PANELS[4], accent: ACCENTS[4], holes: 3, broken: 0.4, pierce: 3 });
     building({ x0: 103, x1: JUNCTION.x0 - 0.5, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 2, sideFacade: 'east' });
-    building({ x0: JUNCTION.x1 + 0.5, x1: 162, floors: 7, panel: PANELS[3], accent: ACCENTS[0], holes: 4, broken: 0.45, pierce: 2, sideFacade: 'west' });
-    building({ x0: 162, x1: 176, floors: 10, panel: PANELS[2], accent: ACCENTS[1], holes: 3, pierce: 2 });
+    // the plaza's far side: a block set back behind its own sidewalk, and the
+    // block beyond it standing on the avenue again
+    building({ x0: JUNCTION.x1 + 0.5, x1: PLAZA.x1, zf: PLAZA.z0 - 1.5, depth: 12, floors: 8, panel: PANELS[3], accent: ACCENTS[0], holes: 3, broken: 0.4, pierce: 0, sideFacade: 'west' });
+    building({ x0: PLAZA.x1, x1: 176, floors: 9, panel: PANELS[2], accent: ACCENTS[1], holes: 3, pierce: 2, sideFacade: 'west', depth: 16 });
+    // blocks lining the north side street on out, past where any sight reaches
+    for (const [zf, depth, floors, k] of [[-23.5, 14, 8, 0], [-38, 16, 10, 1], [-55, 15, 7, 2], [-71, 13, 9, 3]]) {
+      building({ x0: 110, x1: JUNCTION.x0 - 0.5, zf, depth, floors, panel: PANELS[k % 5], accent: ACCENTS[(k + 2) % 5], holes: 3, broken: 0.35, pierce: 0, sideFacade: 'east' });
+    }
+    for (const [zf, depth, floors, k] of [[-39, 15, 9, 1], [-55, 15, 8, 4], [-71, 13, 10, 2]]) {
+      building({ x0: JUNCTION.x1 + 0.5, x1: 160, zf, depth, floors, panel: PANELS[k % 5], accent: ACCENTS[(k + 1) % 5], holes: 3, broken: 0.35, pierce: 0, sideFacade: 'west' });
+    }
     // west of the start: more blocks so the street doesn't end in a void
     building({ x0: -78, x1: -44, floors: 9, panel: PANELS[3], accent: ACCENTS[2], holes: 3, pierce: 0 });
     building({ x0: 8, x1: 36, zf: -29, depth: 8, floors: 2, panel: PANELS[2], broken: 0.6, pierce: 0 });
@@ -733,7 +746,7 @@ function buildAvenue(scene) {
     // tank slides along a straight edge instead of snagging on heaps)
     for (const [x, r] of [[-24, 1.1], [-4, 0.8], [33, 1.3], [86, 1.0]]) rubble(x, WALK.n + 0.35, r, 0.8);
     // the north edge of the drivable street: one straight invisible rail
-    for (const [x0, x1] of [[START_X, CROSS.x0 - 0.6], [CROSS.x1 + 0.6, RIVER.x0], [RIVER.x1, JUNCTION.x0 - 0.6], [JUNCTION.x1 + 0.6, 176]]) B.block((x0 + x1) / 2, WALK.n + 0.55, (x1 - x0) / 2, 0.3);
+    for (const [x0, x1] of [[START_X, CROSS.x0 - 0.6], [CROSS.x1 + 0.6, RIVER.x0], [RIVER.x1, JUNCTION.x0 - 0.6], [PLAZA.x1, 176]]) B.block((x0 + x1) / 2, WALK.n + 0.55, (x1 - x0) / 2, 0.3);
 
     // Containers: stacked into walls where the street is closed off.
     const ribs = (() => {
@@ -952,7 +965,7 @@ function buildAvenue(scene) {
         }
       }
     }
-    const FACADES = [[-78, -44], [-40, -20], [-15, 39], [44, 58], [80, 97], [103, JUNCTION.x0 - 0.5], [JUNCTION.x1 + 0.5, 176]];
+    const FACADES = [[-78, -44], [-40, -20], [-15, 39], [44, 58], [80, 97], [103, JUNCTION.x0 - 0.5], [PLAZA.x1 + 0.5, 176]];
     for (const x of poleXs) {
       if (rand() < 0.5) continue;
       const fx = x + (rand() - 0.5) * 4;
@@ -1575,6 +1588,7 @@ function buildAvenue(scene) {
     // Wrecks, jersey blocks and planks nailed across: a boost ram or one
     // shell from the main gun bursts a section. (Shipping containers are
     // for what can't be broken through.)
+    const barricadeParts = [];
     function barricade(x, sections) {
       for (const [z0, z1] of sections) {
         const zc = (z0 + z1) / 2;
@@ -1603,6 +1617,7 @@ function buildAvenue(scene) {
           },
           { kind: 'prop', heavy: true, breakable: true, scrap: 3, onBreak: () => burst(new THREE.Vector3(x, 1.2, zc)) },
         );
+        barricadeParts.push(B.crushables[B.crushables.length - 1]);
       }
     }
     // a section going up: a blast, then it scatters (the default break)
@@ -1691,6 +1706,31 @@ function buildAvenue(scene) {
       B.hitBox(jx, 1.3, 25.5, 13, 2.6, 5.4);
       B.block(jx, 25.2, 8.5, 2.4);
       P.bus(B, jx - 2, 29, 0.6);
+      // the plaza's back edge, in line with the rubble: containers, heaps,
+      // jersey blocks and hedgehogs against the block behind
+      const py = SW;
+      const back = PLAZA.z0 + 0.6;
+      container(PLAZA.x0 + 3.5, py, back, 0, CONTAINERS[1]);
+      container(PLAZA.x0 + 3.3, py + 2.6, back + 0.2, 0.06, CONTAINERS[3]);
+      B.block(PLAZA.x0 + 3.5, back, 3.1, 1.3);
+      rubble(PLAZA.x0 + 8.5, back + 0.3, 1.8, 1.4, { solid: true });
+      for (let x = PLAZA.x0 + 6; x < PLAZA.x1 - 0.5; x += 1.7) {
+        if (Math.abs(x - (PLAZA.x0 + 8.5)) < 2) continue;
+        const j = put(B.root, box(1.6, 0.9, 0.7, 0x9a978f, { r: 0.06 }), x, py + 0.45, back - 0.3);
+        j.rotation.y = (rand() - 0.5) * 0.15;
+        B.solid(j);
+      }
+      B.block((PLAZA.x0 + PLAZA.x1) / 2 + 2.5, back - 0.3, (PLAZA.x1 - PLAZA.x0) / 2 - 2.5, 0.45);
+      // a few things left about on the square itself
+      B.crushable(() => P.car(B, PLAZA.x0 + 6.5, -15, 0.7, { kind: 'sedan', paint: BURNT_PAINT[2] }), { kind: 'car', scrap: 2 });
+      B.crushable(() => P.crates(B, PLAZA.x1 - 2.5, py, -19), { kind: 'prop', scrap: 2 });
+      B.crushable(() => P.bench(B, PLAZA.x0 + 2.5, py, -12.5, 0.3), { kind: 'prop' });
+      B.crushable(() => P.bin(B, PLAZA.x0 + 3.6, py, -12.2, { tipped: true }), { kind: 'prop', scrap: 1 });
+      // the north street beyond the rubble: more wrecks and heaps on into the dusk
+      for (const [x, z, r] of [[jx - 3, -36, 1.6], [jx + 3.5, -48, 2.2], [jx - 2, -60, 1.8], [jx + 2, -74, 2.4]]) rubble(x, z, r, r * 0.7, { slabs: 2 });
+      P.car(B, jx + 2.5, -41, 1.9, { kind: 'van', paint: 0x6b7458, solidBlock: false });
+      P.car(B, jx - 2.5, -53, 1.2, { kind: 'sedan', paint: BURNT_PAINT[1], solidBlock: false });
+      P.car(B, jx + 1.5, -66, 1.6, { kind: 'hatch', paint: BURNT_PAINT[4], solidBlock: false });
     }
     const endWall = containerWall(END_X, [[WALK.n - 0.5, -3.4], [-3.4, 3.4], [3.4, WALK.s + 1.6]]);
     // past the wall the street runs on into a last heap of rubble
@@ -1820,7 +1860,7 @@ function buildAvenue(scene) {
             const out = [[22, -9], [18, -3]];
             api.spawnDog(22, -19, { delay: 2.5, via: out });
             api.spawnDog(23.5, -19.5, { delay: 3, via: out });
-            api.prompt('Contact', 'More of them! Kill them in quick succession for a <b>chain</b>: more scrap per kill.', { danger: true });
+            api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
             go(6);
           }
           break;
@@ -1875,7 +1915,7 @@ function buildAvenue(scene) {
             api.prompt('Boost', api.touch ? 'A barricade! Tap the <b>boost</b> button to ram it down, or blast it with the cannon.' : 'A barricade! Press <kbd>Shift</kbd> (or right-click) to <b>boost</b> and ram it down, or blast it with the cannon.', { go: true });
             api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Break it!');
             S.n = run.shots;
-            api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || run.shots > S.n, { maxTime: 15 });
+            api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || run.shots > S.n || barricadeParts.some((c) => c.done));
             go(1);
           }
           break;

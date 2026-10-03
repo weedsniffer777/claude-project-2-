@@ -228,8 +228,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     },
     // Slow the game and darken the screen except round the targets until
     // `until()` says the player has done the thing.
-    spotlight(spec, until, { maxTime = 12 } = {}) {
-      run.spot = { until, t: 0, maxTime };
+    spotlight(spec, until, { maxTime = 3 } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3) }; // never holds the game up for long
       hud.setSpot(spec);
     },
     get spotlit() {
@@ -406,7 +406,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       if (c.armored || c.done) continue;
       const f = c.footprint;
       const reach = c.breakable ? 1.2 : 0.7;
-      if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) crushing.crush(c, { x: at.x - (f.x - at.x || 0.5), z: at.z - (f.z - at.z), yaw: 0 });
+      if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) {
+        crushing.crush(c, { x: at.x - (f.x - at.x || 0.5), z: at.z - (f.z - at.z), yaw: 0 });
+        if (c.scrap) pickups.spawn(new THREE.Vector3(f.x, 0.8, f.z), c.scrap, 'scrap', 1);
+      }
     }
     level.onImpact?.(at, mesh, api);
   }

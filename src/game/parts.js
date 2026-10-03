@@ -196,8 +196,16 @@ export const PARTS = {
       const g = new THREE.Group();
       put(g, cyl(0.4, 1.0, OLIVE, { axis: 'x', seg: 16 }), 0, 0.42, 0);
       put(g, cyl(0.42, 0.12, 0x3b3f6a, { axis: 'x', seg: 16 }), -0.55, 0.42, 0); // heat-blued nozzle ring
-      put(g, cyl(0.26, 0.05, 0x9fe4ff, { axis: 'x', seg: 12, glow: true }), -0.62, 0.42, 0);
-      put(g, cyl(0.14, 0.06, 0xff5fd0, { axis: 'x', seg: 10, glow: true }), -0.65, 0.42, 0);
+      // the flame out the back: a warm outer plume round a blue-white core
+      const cone = (r, len, color) => {
+        const m = new THREE.Mesh(new THREE.ConeGeometry(r, len, 10), new THREE.MeshBasicMaterial({ color }));
+        m.rotation.z = Math.PI / 2; // tip pointing back (-x)
+        m.position.set(-0.6 - len / 2, 0.42, 0);
+        g.add(m);
+      };
+      cone(0.34, 1.3, 0xff8a4a);
+      cone(0.24, 1.0, 0xffc070);
+      cone(0.13, 0.75, 0xa8e8ff);
       return g;
     },
   },
@@ -217,8 +225,11 @@ export const PARTS = {
       return g;
     },
     model() {
-      const g = sightHead();
-      g.position.y = 0.05;
+      const g = new THREE.Group();
+      const head = sightHead();
+      head.rotation.y = -Math.PI * 0.75; // lens toward the camera (and the results picture)
+      head.position.y = 0.05;
+      g.add(head);
       return g;
     },
   },
@@ -262,18 +273,23 @@ export const PARTS = {
 // small ones in a recessed face, an armoured shutter swung open to the side.
 function sightHead() {
   const g = new THREE.Group();
-  const SAND = 0x9a8a62;
-  put(g, box(0.62, 0.5, 0.52, SAND, { r: 0.05 }), 0, 0.25, 0); // housing
-  put(g, box(0.06, 0.4, 0.4, 0x1d1f22, { r: 0.02 }), 0.3, 0.25, 0); // recessed face
-  put(g, cyl(0.14, 0.04, 0x2f5fd0, { axis: 'x', seg: 14, glow: true }), 0.33, 0.2, 0.04); // main lens
-  put(g, cyl(0.09, 0.045, 0x8fd8ff, { axis: 'x', seg: 12, glow: true }), 0.335, 0.2, 0.04);
-  put(g, cyl(0.05, 0.04, 0x5fe6a0, { axis: 'x', seg: 10, glow: true }), 0.33, 0.37, -0.11);
-  put(g, cyl(0.04, 0.04, 0x1d1f22, { axis: 'x', seg: 10 }), 0.33, 0.37, 0.12);
-  const shutter = put(g, box(0.05, 0.46, 0.3, 0x3a3c3a, { r: 0.02 }), 0.36, 0.25, 0.36); // swung open
-  shutter.rotation.y = -1.1;
-  put(g, box(0.5, 0.04, 0.5, 0x7d7050, { r: 0.01 }), 0, 0.52, 0); // top plate
-  put(g, cyl(0.06, 0.12, STEEL, { axis: 'z', seg: 8 }), -0.05, 0.3, -0.29); // side bolt-on
-  put(g, box(0.3, 0.1, 0.36, DARK, { r: 0.02 }), -0.05, 0.02, 0); // base ring
+  const SAND = 0x8f8358;
+  const DARKSAND = 0x6f6644;
+  put(g, box(0.34, 0.1, 0.42, DARK, { r: 0.02 }), -0.05, 0.05, 0); // traverse ring
+  put(g, box(0.6, 0.46, 0.5, SAND, { r: 0.05 }), 0, 0.33, 0); // housing
+  put(g, box(0.5, 0.06, 0.52, DARKSAND, { r: 0.02 }), -0.03, 0.58, 0); // brow plate over the face
+  // armoured face: a frame round a dark window, the glass set back in it
+  put(g, box(0.06, 0.4, 0.42, DARKSAND, { r: 0.02 }), 0.31, 0.33, 0);
+  put(g, box(0.03, 0.32, 0.34, 0x16181b), 0.34, 0.33, 0);
+  put(g, cyl(0.12, 0.04, 0x2f5fd0, { axis: 'x', seg: 14, glow: true }), 0.355, 0.3, 0.05); // main lens
+  put(g, cyl(0.07, 0.045, 0x9fe4ff, { axis: 'x', seg: 12, glow: true }), 0.36, 0.3, 0.05);
+  put(g, cyl(0.045, 0.04, 0x5fe6a0, { axis: 'x', seg: 10, glow: true }), 0.355, 0.42, -0.1); // rangefinder
+  // shutter hinged on the face's edge, swung open
+  const hinge = new THREE.Group();
+  hinge.position.set(0.34, 0.33, 0.21);
+  hinge.rotation.y = -1.25;
+  put(hinge, box(0.04, 0.38, 0.36, DARKSAND, { r: 0.015 }), 0.02, 0, 0.18);
+  g.add(hinge);
   return g;
 }
 
