@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
+import { tankDef } from './tanks.js';
 
 export const BASE_STATS = {
   maxHp: 100,
@@ -21,6 +22,11 @@ export const BASE_STATS = {
   boostSpeed: 1, // x the base boost speed
   boostTime: 1.0,
   boostCooldown: 6,
+  speed: 1, // x the base driving speed
+  mag: 0, // autocannon: rounds per magazine (0: a single-shot gun)
+  magReload: 0,
+  pierceDamage: 140,
+  pierceCooldown: 12,
   afterburner: false,
 };
 
@@ -357,8 +363,8 @@ export function attachPart(tank, id) {
   return g;
 }
 
-export function statsFor(parts) {
-  const s = { ...BASE_STATS };
+export function statsFor(parts, tank = 'battle') {
+  const s = { ...BASE_STATS, ...tankDef(tank).stats };
   for (const id of parts) PARTS[id].apply(s);
   return s;
 }

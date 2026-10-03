@@ -32,12 +32,33 @@ export class CombatFx {
   // shell flies along the gun's bearing to the aim distance and height, and
   // stops at the first collider in its way. Returns false if the tank
   // could not fire.
-  fireCannon(tank, aimPoint, colliders = []) {
+  // small: an autocannon round (a sharp little flash, a light shell, a
+  // small hit), otherwise the main gun's big show
+  fireCannon(tank, aimPoint, colliders = [], { small = false } = {}) {
     const shot = tank.fire();
     if (!shot) return false;
     const { glow, puffs, fx } = this;
     const { position: m, direction: d, breech } = shot;
     const { u, v } = basis(d);
+    if (small) {
+      glow.flash(m, 0xfff6d6, 0.07, 0.3, 0.04);
+      glow.spike(m, d, 0xfff0b0, 1.0, 0.14, 0.06);
+      for (const s of [-1, 1]) glow.spike(m, d.clone().addScaledVector(u, s * 0.9).normalize(), 0xffc24a, 0.4, 0.08, 0.05);
+      glow.light(m, 0xffa24a, 14, 0.07);
+      for (let i = 0; i < 2; i++) puffs.spawn(m.clone().addScaledVector(d, 0.2 + i * 0.2), d.clone().multiplyScalar(4 - i), { color: 0xe2e2d8, s0: 0.06, s1: 0.18, life: 0.3, drag: 4, lift: 1, fadeAt: 0.3 });
+      this.shake = Math.max(this.shake, 0.03);
+      const { target, hit } = this.traceShot(m, d, breech, aimPoint, colliders);
+      if (target.clone().sub(m).dot(d) <= 0.05) {
+        this.smallHit(target, hit?.normal, hit?.mesh);
+        return true;
+      }
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.55), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
+      mesh.position.copy(m);
+      mesh.lookAt(target);
+      this.scene.add(mesh);
+      this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), small: true });
+      return true;
+    }
 
     // starburst: one long blade forward, shorter blades fanning out
     glow.flash(m, 0xfff6d6, 0.12, 0.55, 0.05);
@@ -146,6 +167,18 @@ export class CombatFx {
   }
 
   // at: impact point; normal/mesh: the surface hit (null for an airburst).
+  // an autocannon round landing: a pop of sparks, a small flash and puff
+  smallHit(at, normal = null, mesh = null) {
+    this.onImpact?.(at, mesh, true);
+    const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    const p = at.clone().addScaledVector(n, 0.15);
+    this.glow.flash(p, 0xfff3c4, 0.12, 0.6, 0.06);
+    this.glow.light(p, 0xff9a4a, 18, 0.08);
+    this.fx.burst(p, { count: 8, speed: 5, color: 0xffd36b, life: 0.22, size: 0.06, gravity: 10 });
+    for (let i = 0; i < 3; i++) this.puffs.spawn(p, n.clone().multiplyScalar(1.2).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.3, (Math.random() - 0.5) * 1.5)), { color: 0x8f8b84, s0: 0.08, s1: 0.26, life: 0.45, drag: 3, lift: 0.8, fadeAt: 0.3 });
+    this.shake = Math.max(this.shake, 0.04);
+  }
+
   explode(at, normal = null, mesh = null) {
     this.onImpact?.(at, mesh);
     const { fx, glow, puffs, debris, craters } = this;
@@ -214,9 +247,10 @@ export class CombatFx {
       const prev = s.mesh.position.clone();
       s.travelled = Math.min(s.total, s.travelled + SHELL_SPEED * dt);
       s.mesh.position.lerpVectors(s.from, s.target, s.travelled / s.total);
-      this.glow.tracer(prev, s.mesh.position, 0xffd27a, 0.12, 0.12); // hot trail
+      this.glow.tracer(prev, s.mesh.position, 0xffd27a, s.small ? 0.06 : 0.12, s.small ? 0.08 : 0.12); // hot trail
       if (s.travelled >= s.total) {
-        this.explode(s.target, s.hit?.normal, s.hit?.mesh);
+        if (s.small) this.smallHit(s.target, s.hit?.normal, s.hit?.mesh);
+        else this.explode(s.target, s.hit?.normal, s.hit?.mesh);
         this.removeShell(i);
       }
     }

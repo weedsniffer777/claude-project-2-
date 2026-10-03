@@ -7,6 +7,11 @@ const K = {
   owned: 'scavenger.owned',
   loadout: 'scavenger.loadout.',
   cleared: 'scavenger.cleared',
+  tank: 'scavenger.tank',
+  tanks: 'scavenger.tanks',
+  seen: 'scavenger.seen',
+  tutorial: 'scavenger.tutorial',
+  difficulty: 'scavenger.difficulty',
 };
 function read(key, fallback) {
   try {
@@ -38,9 +43,33 @@ export const save = {
   },
   loadout: (tank = 'battle') => read(K.loadout + tank, []),
   setLoadout: (parts, tank = 'battle') => write(K.loadout + tank, [...parts]),
+  // the tank you drive, and the ones you have
+  tank() {
+    const id = read(K.tank, 'battle');
+    return save.tanks().includes(id) ? id : 'battle';
+  },
+  setTank: (id) => write(K.tank, id),
+  tanks: () => read(K.tanks, ['battle']),
+  unlockTank(id) {
+    const list = save.tanks();
+    if (!list.includes(id)) write(K.tanks, [...list, id]);
+  },
+  // news for the base's "New!" popup: [{ kind: 'tank' | 'part', id }]
+  news: () => read(K.seen, []),
+  addNews(items) {
+    write(K.seen, [...save.news(), ...items]);
+  },
+  clearNews: () => write(K.seen, []),
+  tutorialDone: () => read(K.tutorial, false),
+  setTutorialDone: (v = true) => write(K.tutorial, v),
+  difficulty: () => read(K.difficulty, 'easy'),
+  setDifficulty: (d) => write(K.difficulty, d),
   cleared: () => read(K.cleared, []),
+  // level ids, or 'id:hard' for a hard clear; returns true on a first clear
   clear(level) {
     const list = save.cleared();
-    if (!list.includes(level)) write(K.cleared, [...list, level]);
+    if (list.includes(level)) return false;
+    write(K.cleared, [...list, level]);
+    return true;
   },
 };
