@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
+import { turretSurfaceY } from '../models/tank.js';
 
 export const BASE_STATS = {
   maxHp: 100,
@@ -32,7 +33,6 @@ const DARK = 0x262b32;
 
 // icon: 16x10 pixel art for the end screen ('.' clear, '#' bone, '+' amber,
 // '-' steel, '*' cyan, '%' pink)
-const ERA_TAN = 0xb59d63;
 const ERA_EDGE = 0x3a3626;
 export const PARTS = {
   dozer: {
@@ -107,39 +107,76 @@ export const PARTS = {
       s.armor *= 0.7;
     },
     build(t) {
-      // T-72 style: a grid of green tiles over the glacis, and on the turret
-      // a sharp clamshell V of tiles fanning back from the gun mantlet
+      // a T-72 style conversion: shingled rows of bricks over the whole
+      // upper glacis, skirt plates with bricks over the front of the tracks,
+      // and on the turret the "crab": two rows of bricks wrapping round its
+      // front either side of the gun, the upper row raised on brackets and
+      // tipped forward like a clamshell
       const G = 0x56653a;
       const EDGE = 0x333d22;
+      const BRACKET = 0x2b3020;
       const g = new THREE.Group();
-      for (let r = 0; r < 2; r++) {
+      const brick = (parent, w, h, d, x, y, z) => {
+        const b = put(parent, box(w, h, d, G, { r: 0.012 }), x, y, z);
+        put(b, box(w + 0.005, 0.02, 0.02, EDGE), 0, h / 2, d / 2 - 0.01); // its seam
+        put(b, box(0.025, 0.012, 0.025, EDGE), w * 0.3, h / 2 + 0.006, 0); // bolt heads
+        put(b, box(0.025, 0.012, 0.025, EDGE), -w * 0.3, h / 2 + 0.006, 0);
+        return b;
+      };
+      // glacis: laid in the plane of the plate, each row stepping out
+      const gl = new THREE.Group();
+      gl.position.set(1.105, 1.075, 0);
+      gl.rotation.z = -0.489;
+      for (let r = 0; r < 3; r++) {
         for (let i = 0; i < 6; i++) {
-          const z = -0.72 + i * 0.29;
-          const tile = put(g, box(0.3, 0.07, 0.26, G, { r: 0.01 }), 1.42 + r * 0.26, 0.93 + r * 0.12, z);
-          tile.rotation.z = -0.42;
-          put(g, box(0.31, 0.02, 0.02, EDGE), 1.42 + r * 0.26, 0.97 + r * 0.12, z + 0.135).rotation.z = -0.42;
+          const z = -0.6 + i * 0.24;
+          if (r === 0 && z < -0.25 && z > -0.55) continue; // the driver's hatch stays clear
+          brick(gl, 0.28, 0.07, 0.22, 0.15 + r * 0.29, 0.045, z).rotation.z = 0.1;
         }
       }
-      t.chassis.add(g);
-      const tg = new THREE.Group();
-      for (const side of [-1, 1]) {
-        // each arm of the V: tiles stepping back and out from the mantlet,
-        // tipped up toward the front like a raised clam shell
-        for (let i = 0; i < 5; i++) {
-          const holder = new THREE.Group();
-          holder.position.set(0.82 - i * 0.17, 0.33 + i * 0.012, side * (0.24 + i * 0.13));
-          holder.rotation.y = side * -0.62;
-          const tile = put(holder, box(0.32, 0.07, 0.22, G, { r: 0.01 }), 0, 0, 0);
-          tile.rotation.z = 0.32;
-          put(holder, box(0.33, 0.02, 0.02, EDGE), 0, 0.045, 0.11).rotation.z = 0.32;
-          tg.add(holder);
-        }
-        // and a short row down each cheek
+      g.add(gl);
+      // skirt plates hung from the fender edge, three bricks on each
+      for (const s of [-1, 1]) {
+        const sk = new THREE.Group();
+        sk.position.set(1.15, 0.8, s * 1.16);
+        put(sk, box(1.1, 0.36, 0.04, 0x3e4a2c, { r: 0.01 }), 0, 0, 0);
         for (let i = 0; i < 3; i++) {
+          const b = brick(sk, 0.3, 0.06, 0.24, -0.36 + i * 0.36, 0, s * 0.05);
+          b.rotation.x = (s * Math.PI) / 2;
+        }
+        g.add(sk);
+      }
+      t.chassis.add(g);
+
+      // the turret's crab
+      const tg = new THREE.Group();
+      const SX = 1.08;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 5; i++) {
+          const a = side * (0.34 + i * 0.25);
+          // lower row: upright bricks round the cheek, low on the skirt
+          {
+            const rr = 0.99;
+            const holder = new THREE.Group();
+            holder.position.set(SX * rr * Math.cos(a), 0.17, rr * Math.sin(a));
+            holder.rotation.y = -a;
+            const b = brick(holder, 0.22, 0.07, 0.26, 0, 0, 0);
+            b.rotation.z = Math.PI / 2 - 0.35; // standing, leaning back onto the turret
+            tg.add(holder);
+          }
+        }
+        // upper row: two straight arms of bricks on brackets over the roof,
+        // a V opening back from just behind the mantlet, each brick tipped
+        // forward
+        for (let i = 0; i < 5; i++) {
+          const k = i / 4;
+          const x = 0.76 - 0.72 * k;
+          const z = side * (0.25 + 0.6 * k);
           const holder = new THREE.Group();
-          holder.rotation.y = side * (0.55 + i * 0.22);
-          holder.position.y = 0.13;
-          put(holder, box(0.08, 0.17, 0.24, G, { r: 0.01 }), 1.0, 0, 0).rotation.z = -0.2;
+          holder.position.set(x, turretSurfaceY(x, z) + 0.1, z);
+          holder.rotation.y = -Math.atan2(side * 0.72, 0.6); // facing out and forward
+          put(holder, box(0.05, 0.12, 0.18, BRACKET, { r: 0.01 }), 0.02, -0.06, 0);
+          brick(holder, 0.3, 0.075, 0.27, 0, 0.01, 0).rotation.z = -0.42;
           tg.add(holder);
         }
       }
@@ -152,7 +189,7 @@ export const PARTS = {
       const plate = put(g, box(1.3, 0.08, 0.9, OLIVE, { r: 0.02 }), 0, 0.3, 0);
       plate.rotation.z = 0.35;
       for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
-        const b = put(plate, box(0.36, 0.14, 0.36, ERA_TAN, { r: 0.02 }), -0.42 + c * 0.42, 0.11, -0.2 + r * 0.42);
+        const b = put(plate, box(0.36, 0.14, 0.36, 0x56653a, { r: 0.02 }), -0.42 + c * 0.42, 0.11, -0.2 + r * 0.42);
         b.userData.era = true;
       }
       return g;

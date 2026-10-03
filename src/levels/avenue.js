@@ -1106,7 +1106,7 @@ function buildAvenue(scene) {
     wreck(1.5, 4.8, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1], flipped: true });
     wreck(11, -5.4, -0.35, { kind: 'sedan', paint: BURNT_PAINT[2] });
     wreck(24.5, 4.5, 0.55, { kind: 'van', paint: 0x6b7458 });
-    P.bus(B, 33, -2.4, 0.18);
+    P.tram(B, 34.5, -2.6, 0.12, { trailer: true, tilt: 0.05 });
     wreck(45, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
     wreck(67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
     wreck(72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
@@ -1500,19 +1500,8 @@ function buildAvenue(scene) {
         if (Math.abs(z) > 7) continue;
         B.lump(GX - 1.5, 0.16 + (i % 3) * 0.28, z, 0.38, 0.16, 0.22, 0x7d7158);
       }
-      function hedgehog(x, z) {
-        const g = new THREE.Group();
-        put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, 0, 0.62);
-        put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, Math.PI / 2, 0.62);
-        put(g, box(0.14, 0.14, 1.8, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0.62, 0.6, 0);
-        g.position.set(x, heightAt(x, z), z);
-        g.rotation.y = rand() * 3;
-        B.add(g);
-        B.hitBox(x, 0.5, z, 1.4, 1.0, 1.4);
-        B.block(x, z, 0.7, 0.7);
-      }
-      // spaced so there is always a way round, never a pocket to get stuck in
-      for (const [x, z] of [[86, -4.4], [89, 3.2], [93.5, 4.4], [94, -5.8]]) hedgehog(x, z);
+      // (no obstacles between the barricade and the gate: the first boost
+      // runs on clear road all the way to it)
       // floodlight tower: cold white over the approach
       const tx = GX - 2.4;
       const tz = WALK.s - 0.4;
@@ -1704,7 +1693,6 @@ function buildAvenue(scene) {
       rubble(jx, -25.5, 6, 3.6, { slabs: 7 });
       rubble(jx - 5, -23, 2.4, 1.6, { slabs: 2 });
       rubble(jx + 5.5, -23.5, 2, 1.3, { slabs: 2 });
-      B.solid(B.chunk(12, 6, 0.45, CONCRETE[1], jx + 0.5, 2.0, -28, -0.95, 0.12, 0.06));
       B.rebar(jx + 2, 1.5, -24, 6);
       B.hitBox(jx, 1.6, -25.5, 14, 3.2, 6);
       B.block(jx, -25.5, 8.5, 2.6);
@@ -1713,7 +1701,7 @@ function buildAvenue(scene) {
       rubble(jx + 5, 23.5, 2.2, 1.4, { slabs: 2 });
       B.hitBox(jx, 1.3, 25.5, 13, 2.6, 5.4);
       B.block(jx, 25.2, 8.5, 2.4);
-      P.bus(B, jx - 2, 29, 0.6);
+      P.tram(B, jx - 2, 29, 0.6, { nose: -0.14, tilt: 0.1, burn: 0.9 });
       // both plazas: the back edge in line with the rubble (containers, a
       // heap, jersey blocks in front of the block behind), and in line with
       // the end wall a row of hedgehogs and broken concrete across the square
@@ -1744,7 +1732,7 @@ function buildAvenue(scene) {
         // a dead tram and a container on one side, containers single and
         // doubled with a heap between on the other, hedgehogs at the foot
         if (side < 0) {
-          P.bus(B, END_X, -14.6, Math.PI / 2 + 0.06);
+          P.tram(B, END_X, -14.6, Math.PI / 2 + 0.06, { tilt: -0.06 });
           container(END_X + 0.2, py, -21, Math.PI / 2, CONTAINERS[2]);
           B.block(END_X + 0.2, -21, 1.25, 3);
           rubble(END_X - 0.8, -18, 1.3, 1.2, { slabs: 2 });
@@ -1909,41 +1897,42 @@ function buildAvenue(scene) {
           }
           if (api.enemiesAlive === 0 && S.t > 2 && run.drops === 0) go(5);
           break;
+        // then two groups, each spawned well ahead up the street (none out of
+        // side streets behind: nothing to wait around for)
         case 5:
           if (api.enemiesAlive === 0 && S.t > 1.5) {
             api.arrow(null);
-            api.spawnDog(40, -5.5, { delay: 0.5 });
-            api.spawnDog(41, 4.5, { delay: 1.0 });
-            api.spawnDog(43, 0, { delay: 1.4 });
-            const out = [[22, -9], [18, -3]];
-            api.spawnDog(22, -19, { delay: 2.5, via: out });
-            api.spawnDog(23.5, -19.5, { delay: 3, via: out });
+            const gx = Math.min(38, Math.max(x + 17, 30));
+            api.spawnDog(gx, -5.5, { delay: 0.3 });
+            api.spawnDog(gx + 1, 4.5, { delay: 0.7 });
+            api.spawnDog(gx + 2.5, -0.5, { delay: 1.1 });
             api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
             go(6);
           }
           break;
         // the last stretch: an arrow on up the street; passing it brings the
-        // last few walkers out ahead, by the checkpoint (none from behind),
-        // and once they're down the arrow moves on to the checkpoint door
+        // last group out by the checkpoint, and the checkpoint opens as you
+        // close in, whether or not they're all down (whatever's left behind
+        // stays behind when you go in)
         case 6:
-          if (api.enemiesAlive === 0 && S.t > 2 && S.n === 0) {
+          if (api.enemiesAlive === 0 && S.t > 1.5 && S.n === 0) {
             S.n = 1;
             api.prompt('Orders', 'Push on up the street.');
             api.arrow(new THREE.Vector3(32, 0.4, 0), 'This way');
           }
-          if (S.n === 1 && x > 30) {
+          if (x > 30 || (S.n === 1 && x > 28)) {
             api.arrow(null);
-            api.spawnDog(47, -8.4, { delay: 0.2 });
-            api.spawnDog(47.5, 5.6, { delay: 0.5 });
-            api.spawnDog(45, 0, { delay: 0.8 });
-            api.spawnDog(46, -4, { delay: 1.2 });
-            api.prompt('Contact', 'Walkers at the checkpoint! Clear them out.', { danger: true, seconds: 5 });
+            const gx = Math.max(45, x + 15);
+            api.spawnDog(gx + 2, -6.4, { delay: 0.2 });
+            api.spawnDog(gx + 2.5, 5.2, { delay: 0.5 });
+            api.spawnDog(gx, 0, { delay: 0.8 });
+            api.prompt('Contact', 'Walkers at the checkpoint!', { danger: true, seconds: 4 });
             go(7);
           }
           break;
         case 7:
-          if (api.enemiesAlive === 0 && S.t > 1) {
-            openShack(api, shackA, 'Street clear. Roll into the <b>checkpoint</b> for repairs and parts.');
+          if (x > 40 || (api.enemiesAlive === 0 && S.t > 1)) {
+            openShack(api, shackA, 'Roll into the <b>checkpoint</b> for repairs and parts.');
             go(8);
           }
           break;

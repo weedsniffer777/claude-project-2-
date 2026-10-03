@@ -311,6 +311,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.auto = new THREE.Vector3(shack.x0 + 3, 0, pos.z * 0.5);
       setCursor();
       api.transition(() => {
+        enemies.retire(); // whatever was left behind stays behind
         room.reset();
         room.setOffers(offers);
         level.bounds = room.bounds;
@@ -754,7 +755,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const partShots = new Map();
   function partCards() {
     return run.parts.map((id) => {
-      if (!partShots.has(id)) partShots.set(id, snapshot(partModel(id), 72, 48, PARTS[id].badge === 'up' ? upArrow : null));
+      if (!partShots.has(id)) partShots.set(id, id === 'afterburner' ? boostPicture(true, 'afterburner', 72, 48, bigUpArrow).toDataURL() : snapshot(partModel(id), 72, 48, PARTS[id].badge === 'up' ? upArrow : null));
       return { ...PARTS[id], image: partShots.get(id) };
     });
   }
@@ -771,7 +772,42 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     g.fillStyle = '#ffffff';
     rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'X' && g.fillRect(x + i, y + j, 1, 1)));
   }
+  // a big white arrow up the right side: an improved version of an ability
+  function bigUpArrow(g, W, H) {
+    const s = Math.max(1, Math.floor(H / 22));
+    const rows = ['.....X.....', '....XXX....', '...XXXXX...', '..XXXXXXX..', '.XXXXXXXXX.', 'XXXXXXXXXXX', '...XXXXX...', '...XXXXX...', '...XXXXX...', '...XXXXX...', '...XXXXX...'];
+    const x = W - rows[0].length * s - 3;
+    const y = Math.round((H - rows.length * s) / 2);
+    for (const [col, pad] of [['#000', 1], ['#ffffff', 0]]) {
+      g.fillStyle = col;
+      rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'X' && g.fillRect(x + i * s - pad, y + j * s - pad, s + pad * 2, s + pad * 2)));
+    }
+  }
+  // The boost, close up from the side: the tank's own rear drum swung out,
+  // idle or firing (in the normal or the improved flame). Drawn once each.
+  const boostPics = new Map();
+  let boostTank = null;
+  function boostPicture(firing, style = 'normal', W = 32, H = 32, decorate = null) {
+    const key = `${firing}|${style}|${W}|${H}|${!!decorate}`;
+    if (boostPics.has(key)) return boostPics.get(key);
+    boostTank ??= createTank();
+    const tk = boostTank;
+    tk.setFlameStyle(style);
+    tk.setRocket(1, firing, 0.3);
+    tk.group.updateWorldMatrix(true, true);
+    const nozzle = tk.rocketNozzles().reduce((a, b) => (b.z > a.z ? b : a)); // the near drum
+    const target = nozzle.clone().add(new THREE.Vector3(firing ? 0.15 : 0.45, 0.05, 0));
+    const half = firing ? 0.95 : 0.75;
+    const pic = snapshotCanvas(tk.group, W, H, decorate, { target, dir: new THREE.Vector3(0.12, 0.3, 1), half, aspectFit: true });
+    boostPics.set(key, pic);
+    return pic;
+  }
   function snapshot(model, W = 72, H = 48, decorate = null) {
+    return snapshotCanvas(model, W, H, decorate).toDataURL();
+  }
+  // view: optional { target, dir, half } framing a close-up instead of the
+  // whole model
+  function snapshotCanvas(model, W = 72, H = 48, decorate = null, view = null) {
     const rt = new THREE.WebGLRenderTarget(W, H);
     rt.texture.colorSpace = THREE.SRGBColorSpace; // read back display colours, not linear
     const sc = new THREE.Scene();
@@ -780,10 +816,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     sun.position.set(-2, 4, 3);
     sc.add(sun, model);
     const bb = new THREE.Box3().setFromObject(model);
-    const c = bb.getCenter(new THREE.Vector3());
-    const size = bb.getSize(new THREE.Vector3()).length() * 0.5 || 1;
-    const cam = new THREE.OrthographicCamera(-size * 1.05, size * 1.05, size * 0.7, -size * 0.7, 0.1, 100);
-    cam.position.copy(c).add(new THREE.Vector3(-1, 0.85, 1).normalize().multiplyScalar(20));
+    const c = view ? view.target : bb.getCenter(new THREE.Vector3());
+    const size = view ? view.half : bb.getSize(new THREE.Vector3()).length() * 0.5 || 1;
+    const cam = view ? new THREE.OrthographicCamera((-size * W) / H, (size * W) / H, size, -size, 0.1, 100) : new THREE.OrthographicCamera(-size * 1.05, size * 1.05, size * 0.7, -size * 0.7, 0.1, 100);
+    cam.position.copy(c).add((view ? view.dir.clone() : new THREE.Vector3(-1, 0.85, 1)).normalize().multiplyScalar(20));
     cam.lookAt(c);
     const was = renderer.getRenderTarget();
     const clear = renderer.getClearColor(new THREE.Color());
@@ -804,7 +840,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4); // flip rows
     cv.getContext('2d').putImageData(img, 0, 0);
     decorate?.(cv.getContext('2d'), W, H);
-    return cv.toDataURL();
+    sc.remove(model);
+    return cv;
   }
 
   // the pointer: the gun's reticle while fighting, a pixel arrow elsewhere
@@ -1159,7 +1196,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (client) hud.setReticle(client[0], client[1], reload);
       if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
-      hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting } : null);
+      hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
@@ -1185,6 +1222,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     // for tests and dev tools
     debug: (debug = {
+      boostPicture: (...a) => boostPicture(...a).toDataURL(),
       tank,
       skipRender: false,
       timeScale: 0,

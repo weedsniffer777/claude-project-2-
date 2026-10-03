@@ -121,7 +121,7 @@ const COMMANDER = { x: -0.15, z: -0.42 };
 export const SLOT_NAMES = ['tracks', 'armor', 'engine', 'gun', 'mg', 'sights', 'module'];
 
 // Turret surface height (turret-local) at (x, z), so fittings sit on the dome.
-function turretSurfaceY(x, z) {
+export function turretSurfaceY(x, z) {
   const { R0, R1, h1, D, p, sx, base } = TURRET;
   const rho = Math.hypot(x / sx, z);
   if (rho <= R1) return base + h1 + D * Math.pow(1 - Math.pow(rho / R1, p), 1 / p);
@@ -130,7 +130,7 @@ function turretSurfaceY(x, z) {
 }
 
 // x of the turret's front surface at turret-local height y and side offset z.
-function turretFrontX(y, z) {
+export function turretFrontX(y, z) {
   const { R0, R1, h1, D, p, sx, base } = TURRET;
   const yp = y - base;
   const rho = yp > h1 ? R1 * Math.pow(1 - Math.pow(Math.min(1, (yp - h1) / D), p), 1 / p) : R0 - (yp / h1) * (R0 - R1);

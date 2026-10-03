@@ -56,6 +56,9 @@ const funnelGeo = (() => {
   g.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25], 3));
   return g;
 })();
+// its outline: a crisp red edge drawn over the soft fill, so it still reads
+// against the machines' own red glow
+const funnelEdgeGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, -0.5), new THREE.Vector3(1, 0, 0.5)]);
 
 export class Enemies {
   constructor(scene, combat) {
@@ -120,6 +123,10 @@ export class Enemies {
     e.funnel = new THREE.Mesh(funnelGeo, new THREE.MeshBasicMaterial({ color: 0xff3b2f, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
     e.funnel.visible = false;
     e.funnel.frustumCulled = false;
+    e.funnelEdge = new THREE.LineLoop(funnelEdgeGeo, new THREE.LineBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0, depthWrite: false }));
+    e.funnelEdge.position.y = 0.02;
+    e.funnelEdge.frustumCulled = false;
+    e.funnel.add(e.funnelEdge);
     this.scene.add(e.funnel);
     e.windup = 0;
     e.lock = null;
@@ -404,7 +411,7 @@ export class Enemies {
         const time = reach / DOG.boltSpeed;
         const vel = dir.multiplyScalar(DOG.boltSpeed);
         vel.y = (0.25 - from.y) / time; // dipping down to hit the ground past the target
-        this.bolts.push({ pos: from.clone(), vel, life: time, damage: DOG.damage });
+        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: DOG.damage });
         this.combat.glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
         this.combat.glow.light(from, 0xff4a30, 6, 0.06);
         if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
@@ -421,7 +428,8 @@ export class Enemies {
         e.funnel.rotation.y = Math.atan2(-(e.lock.z - from.z), e.lock.x - from.x);
         e.funnel.scale.set(len, 1, width);
         const pulse = e.windup > 0 ? 0.5 + 0.5 * Math.sin((1 - e.windup / DOG.windup) * Math.PI * 6) : 1;
-        e.funnel.material.opacity = e.funnelK * (e.windup > 0 ? 0.18 + 0.2 * pulse * (1 - e.windup / DOG.windup) : 0.45);
+        e.funnel.material.opacity = e.funnelK * (e.windup > 0 ? 0.22 + 0.25 * pulse * (1 - e.windup / DOG.windup) : 0.5);
+        e.funnelEdge.material.opacity = e.funnelK * (e.windup > 0 ? 0.65 + 0.35 * pulse : 1);
       }
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
       e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil });
@@ -434,10 +442,14 @@ export class Enemies {
     const tb = ctx.tankBox;
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
-      const prev = b.pos.clone();
       b.pos.addScaledVector(b.vel, dt);
       b.life -= dt;
-      this.combat.glow.tracer(prev, b.pos, 0xff3b2f, 0.07, 0.07);
+      // a long bright streak with a hot core, so a round in flight is easy to
+      // see (and to dodge)
+      const tail = b.pos.clone().addScaledVector(b.vel, -0.055);
+      if (b.pos.distanceToSquared(b.origin) < 0.055 * 0.055 * b.vel.lengthSq()) tail.copy(b.origin);
+      this.combat.glow.tracer(tail, b.pos, 0xff2414, 0.16, 0.04);
+      this.combat.glow.tracer(tail.lerp(b.pos, 0.4), b.pos, 0xffb8a0, 0.06, 0.04);
       let hit = false;
       if (tb && b.pos.y < 1.8) {
         const dx = b.pos.x - tb.x;
@@ -461,6 +473,18 @@ export class Enemies {
   // the machine under the reticle gets a white outline
   setHover(target) {
     for (const e of this.list) e.model.setOutline(e === target && e.alive);
+  }
+
+  // drop every machine still standing (left behind when the tank goes into
+  // a checkpoint); wrecks stay
+  retire() {
+    for (const e of this.list) {
+      if (!e.alive) continue;
+      e.model.group.removeFromParent();
+      e.funnel.removeFromParent();
+    }
+    this.list = this.list.filter((e) => !e.alive);
+    this.bolts = [];
   }
 
   dispose() {

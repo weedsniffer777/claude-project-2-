@@ -194,39 +194,30 @@ function drawStick(base, knob) {
   }
 }
 
-// Boost ability icon (16x16 canvas, drawn as pixel art): a drum on its side
-// with a flame out the back; the cooldown fills it from the bottom. (Ability
-// icons are their own drawings, separate from the part models.)
-function drawAbility(c, k, lit) {
+// Boost ability icon (32x32 canvas, pixel art): a close-up picture of the
+// boost on the tank (idle, or firing while it burns) in a frame; while it
+// recharges the part still to fill stays dark, filling from the bottom.
+function drawAbility(c, k, lit, art) {
   const g = c.getContext('2d');
-  g.clearRect(0, 0, 16, 16);
+  g.clearRect(0, 0, 32, 32);
   g.fillStyle = '#000';
-  g.fillRect(0, 0, 16, 16);
+  g.fillRect(0, 0, 32, 32);
   g.fillStyle = k >= 1 ? '#f1e9d8' : '#6d655a';
-  g.fillRect(1, 1, 14, 14);
-  g.fillStyle = '#141214';
-  g.fillRect(2, 2, 12, 12);
-  const h = Math.round(12 * Math.min(1, k));
-  g.fillStyle = k >= 1 ? '#2b3a2d' : '#3a3022';
-  g.fillRect(2, 14 - h, 12, h);
-  g.fillStyle = k >= 1 ? '#7d8f5c' : '#55603f';
-  g.fillRect(6, 5, 7, 6);
-  g.fillStyle = '#3d4a2c';
-  g.fillRect(8, 5, 1, 6);
-  g.fillRect(11, 5, 1, 6);
-  g.fillStyle = '#9fb07a';
-  g.fillRect(6, 5, 7, 1);
-  if (k >= 1 || lit) {
-    g.fillStyle = '#ff8a2a';
-    g.fillRect(3, 6, 3, 4);
-    g.fillStyle = '#fff1b8';
-    g.fillRect(4, 7, 2, 2);
-    if (lit) {
-      g.fillStyle = '#ffb347';
-      g.fillRect(2, 7, 1, 2);
-    }
+  g.fillRect(1, 1, 30, 30);
+  g.fillStyle = '#1d1b1e';
+  g.fillRect(3, 3, 26, 26);
+  if (art) g.drawImage(art, 3, 3, 26, 26);
+  const h = Math.round(26 * (1 - Math.min(1, k)));
+  if (h > 0 && !lit) {
+    g.fillStyle = '#000000b0';
+    g.fillRect(3, 3, 26, h);
   }
 }
+
+// a stable id per picture (so the icon redraws when the picture changes)
+const artIds = new WeakMap();
+let artNext = 0;
+const artId = (o) => artIds.get(o) ?? (artIds.set(o, ++artNext), artNext);
 
 // A part's pixel icon (rows of characters, one per pixel).
 const ICON_INK = { '#': '#f1e9d8', '+': '#ffb347', '-': '#8a9097', '*': '#5fe6ff', '%': '#ff6fd8' };
@@ -299,7 +290,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-ability" hidden><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -502,10 +493,10 @@ export function createHud() {
     setAbility(state) {
       ability.hidden = !state;
       if (!state) return;
-      const key = `${Math.round(state.k * 12)}|${state.lit}`;
+      const key = `${Math.round(state.k * 26)}|${state.lit}|${state.art?.width}|${state.art && artId(state.art)}`;
       if (key !== abilityKey) {
         abilityKey = key;
-        drawAbility(abilityCanvas, state.k, state.lit);
+        drawAbility(abilityCanvas, state.k, state.lit, state.art);
       }
       ability.classList.toggle('ready', state.k >= 1 && !state.lit);
       const cooling = state.left > 0 && !state.lit;

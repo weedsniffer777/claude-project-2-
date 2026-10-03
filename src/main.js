@@ -74,7 +74,22 @@ function countFrame(dt) {
 }
 
 const devkit = createDevKit({
-  tools: [{ id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) }],
+  tools: [
+    { id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) },
+    {
+      id: 'reset-data',
+      label: 'Reset saved data',
+      detail: 'Clears banked scraps and all saved progress',
+      open: () => {
+        try {
+          for (const k of Object.keys(localStorage)) if (k.startsWith('scavenger.')) localStorage.removeItem(k);
+        } catch {
+          // storage blocked: nothing saved to clear
+        }
+        hub.refresh();
+      },
+    },
+  ],
   settings: [
     {
       id: 'level',

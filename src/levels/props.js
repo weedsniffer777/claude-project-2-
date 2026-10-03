@@ -245,6 +245,183 @@ export function bus(B, x, z, yaw) {
   return g;
 }
 
+// Paint that went through a fire: the livery still there in places, char
+// and soot over the rest, rust blooming through, streaks running down.
+const tramPaintCache = new Map();
+function tramPaint(color, burn, rand) {
+  const key = `${color}|${burn}`;
+  if (tramPaintCache.has(key)) return tramPaintCache.get(key);
+  const [c, g] = canvas(64, 64);
+  g.fillStyle = `#${new THREE.Color(color).getHexString()}`;
+  g.fillRect(0, 0, 64, 64);
+  const faded = `#${new THREE.Color(color).lerp(new THREE.Color(0x8a8578), 0.35).getHexString()}`;
+  g.fillStyle = faded;
+  for (let i = 0; i < 10; i++) blob(g, rand() * 64, rand() * 64, 3 + rand() * 6, 2 + rand() * 5, rand);
+  for (const [col, n, size] of [['#6d4a32', 6 + burn * 8, 2.5], ['#3d3632', 8 * burn, 6], ['#2a2624', 10 * burn, 7], ['#4a4440', 6 * burn, 4]]) {
+    g.fillStyle = col;
+    for (let i = 0; i < n; i++) blob(g, rand() * 64, rand() * 64, 1 + rand() * size, 1 + rand() * size * 0.8, rand);
+  }
+  // soot streaks running down
+  for (let i = 0; i < 14 * burn + 3; i++) {
+    g.fillStyle = rand() < 0.6 ? '#1c1a1966' : '#5e443455';
+    g.fillRect((rand() * 64) | 0, (rand() * 40) | 0, 1 + ((rand() * 2) | 0), 6 + rand() * 18);
+  }
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = rand() < 0.5 ? '#00000026' : '#ffffff12';
+    g.fillRect((rand() * 64) | 0, (rand() * 64) | 0, 1, 1);
+  }
+  const t = tex(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(0.35, 0.35);
+  const m = new THREE.MeshToonMaterial({ map: t, gradientMap });
+  tramPaintCache.set(key, m);
+  return m;
+}
+
+// A plan-view outline (x along the car, z across) raised from y0 by h.
+function planSlab(points, y0, h, material) {
+  const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, curveSegments: 3 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, y0, 0);
+  const m = new THREE.Mesh(geo, material);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+// the car's outline in plan, rounded off toward both ends
+function tramPlan(L, W, inset = 0) {
+  const a = L / 2 - inset;
+  const b = W / 2 - inset;
+  return [[-a + 0.35, -b], [a - 0.35, -b], [a - 0.08, -b * 0.72], [a + 0.04, -b * 0.3], [a + 0.04, b * 0.3], [a - 0.08, b * 0.72], [a - 0.35, b], [-a + 0.35, b], [-a + 0.08, b * 0.72], [-a - 0.04, b * 0.3], [-a - 0.04, -b * 0.3], [-a + 0.08, -b * 0.72]];
+}
+
+// A burnt-out tram, the old two-axle kind: ochre below the window line,
+// cream above, a clerestory roof. Derailed, windows blown out, a hole burnt
+// through the roof. With trailer: a second, shorter car coupled behind.
+// tilt leans it over (radians), nose pitches it down (into rubble).
+export function tram(B, x, z, yaw, { trailer = false, tilt = 0.04, nose = 0, burn = 0.6, snow = true } = {}) {
+  const rand = B.rand;
+  const g = new THREE.Group();
+  const LOWER = tramPaint(0x9a7a3a, burn, rand);
+  const UPPER = tramPaint(0xc9bfa0, burn * 0.8, rand);
+  const DARK = toon(0x141211);
+  const FRAME = 0x2a2826;
+  const W = 2.1;
+
+  function car(L, cx, { cab = true, roofHole = false } = {}) {
+    const c = new THREE.Group();
+    c.position.x = cx;
+    // underframe, two axles with spoked wheels, leaf springs, axle boxes
+    put(c, box(L - 0.7, 0.24, W - 0.4, FRAME, { r: 0.03 }), 0, 0.6, 0);
+    for (const ax of [-L * 0.24, L * 0.24]) {
+      for (const s of [-1, 1]) {
+        put(c, cyl(0.34, 0.1, 0x2b2726, { axis: 'z', seg: 10 }), ax, 0.36, s * 0.72);
+        put(c, cyl(0.12, 0.12, 0x3a3634, { axis: 'z', seg: 6 }), ax, 0.36, s * 0.8);
+        put(c, box(0.9, 0.08, 0.12, 0x3a3634, { r: 0.02 }), ax, 0.56, s * 0.86);
+        put(c, box(0.2, 0.2, 0.16, 0x2f2c2a, { r: 0.02 }), ax, 0.4, s * 0.9);
+      }
+    }
+    // lower body: the panels, a dark rubbing strip, a belt rail under the windows
+    c.add(planSlab(tramPlan(L, W), 0.72, 0.9, LOWER));
+    for (const s of [-1, 1]) put(c, box(L - 0.9, 0.07, 0.04, 0x3a3634, { r: 0.01 }), 0, 0.98, s * (W / 2 + 0.01));
+    c.add(planSlab(tramPlan(L + 0.06, W + 0.06), 1.6, 0.07, toon(0x4a4440)));
+    // the window band: a dark inside behind cream posts, a few panes left
+    c.add(planSlab(tramPlan(L, W, 0.06), 1.67, 0.75, DARK));
+    const n = Math.round((L - 1.6) / 0.62);
+    const step = (L - 1.6) / n;
+    for (const s of [-1, 1]) {
+      for (let i = 0; i <= n; i++) put(c, box(0.1, 0.75, 0.06, 0xb5ab90, { r: 0.01 }), -L / 2 + 0.8 + i * step, 2.04, s * (W / 2 - 0.02));
+      for (let i = 0; i < n; i++) {
+        if (rand() < 0.75) continue;
+        const pane = put(c, box(step - 0.16, 0.3 + rand() * 0.35, 0.02, 0x8fa4a8, { r: 0.005 }), -L / 2 + 0.8 + (i + 0.5) * step, 1.86 + rand() * 0.15, s * (W / 2 - 0.03));
+        pane.rotation.z = (rand() - 0.5) * 0.3;
+      }
+      // end platforms: the door openings and their step
+      for (const ex of cab ? [L / 2 - 0.6] : [L / 2 - 0.6, -L / 2 + 0.6]) {
+        put(c, box(0.7, 1.4, 0.05, 0x0f0e0d, { r: 0.01 }), ex, 1.4, s * (W / 2 + 0.005));
+        put(c, box(0.7, 0.06, 0.25, 0x3a3634, { r: 0.01 }), ex, 0.66, s * (W / 2 + 0.08));
+      }
+    }
+    // the end posts round the cab windows
+    const plan = tramPlan(L, W, 0.02);
+    for (const i of [2, 3, 4, 5, 8, 9, 10, 11]) put(c, box(0.08, 0.75, 0.08, 0xb5ab90, { r: 0.01 }), plan[i][0], 2.04, plan[i][1]);
+    // letterboard, then the curved roof (burnt through on one car)
+    c.add(planSlab(tramPlan(L, W), 2.42, 0.18, UPPER));
+    const arc = [];
+    for (let i = 0; i <= 8; i++) {
+      const a = Math.PI - (i / 8) * Math.PI;
+      arc.push([Math.cos(a) * (W / 2), 2.6 + Math.sin(a) * 0.22]);
+    }
+    arc.push([W / 2, 2.6]);
+    const roofPiece = (x0, x1) => {
+      const m = extrude(arc, x1 - x0 - 0.06, toon(0x5d5a55));
+      m.rotation.y = Math.PI / 2;
+      m.position.x = (x0 + x1) / 2;
+      return c.add(m);
+    };
+    const r0 = -L / 2 + 0.3;
+    const r1 = L / 2 - 0.3;
+    if (roofHole) {
+      const h0 = -0.3 + (rand() - 0.5) * 0.6;
+      roofPiece(r0, h0);
+      roofPiece(h0 + 1.5, r1);
+      // the ribs left standing over the hole, one sagging in
+      for (let i = 0; i < 3; i++) {
+        const rib = put(c, box(0.06, 0.06, W - 0.1, 0x2f2c2a, { r: 0.01 }), h0 + 0.35 + i * 0.4, 2.72 - (i === 1 ? 0.25 : 0), 0);
+        rib.rotation.x = i === 1 ? 0.25 : 0;
+      }
+      put(c, box(1.4, 0.1, 0.4, 0x2a2624, { r: 0.02 }), h0 + 0.75, 2.2, -0.3).rotation.set(0.2, 0, 0.3); // a roof sheet fallen in
+    } else roofPiece(r0, r1);
+    // clerestory along the middle with its vents
+    put(c, box(L * 0.6, 0.16, 0.8, 0x4f4c48, { r: 0.03 }), roofHole ? L * 0.14 : 0, 2.88, 0);
+    for (let i = 0; i < 4; i++) put(c, box(0.24, 0.1, 0.84, 0x3a3634, { r: 0.02 }), -L * 0.24 + i * L * 0.16 + (roofHole ? L * 0.14 : 0), 2.95, 0);
+    if (cab) {
+      // the driver's end: a headlamp (dead), the lifeguard tray, the
+      // number box on the roof, the coupler
+      put(c, cyl(0.12, 0.08, 0x8f8b84, { axis: 'x', seg: 8 }), L / 2 + 0.06, 1.05, 0);
+      put(c, box(0.3, 0.12, 1.5, 0x2a2826, { r: 0.02 }), L / 2 + 0.05, 0.42, 0);
+      for (const dz of [-0.5, 0, 0.5]) put(c, box(0.3, 0.04, 0.06, 0x3a3634, { r: 0.01 }), L / 2 + 0.05, 0.32, dz);
+      put(c, box(0.24, 0.3, 1.0, 0x1d1b1a, { r: 0.03 }), L / 2 - 0.45, 2.98, 0);
+      put(c, box(0.02, 0.18, 0.8, 0x6d6a62, { r: 0.005 }), L / 2 - 0.32, 2.98, 0); // its panel, blank
+    }
+    put(c, box(0.4, 0.12, 0.14, FRAME, { r: 0.02 }), -L / 2 - 0.05, 0.62, 0);
+    if (snow) for (let i = 0; i < 3; i++) put(c, box(0.6 + rand() * 0.9, 0.06, 0.5 + rand() * 0.4, SNOW, { r: 0.02 }), (rand() - 0.5) * (L - 2), 2.86, (rand() - 0.5) * 0.9);
+    return g.add(c);
+  }
+
+  const L = 6.4;
+  const main = car(L, 0, { cab: true, roofHole: true });
+  // the bow collector: knocked back, its frame bent
+  const bow = new THREE.Group();
+  bow.position.set(-0.6, 2.98, 0);
+  bow.rotation.z = 2.5 + rand() * 0.3;
+  put(bow, box(1.7, 0.05, 0.05, 0x2f2f30, { r: 0.01 }), 0.85, 0, -0.35);
+  put(bow, box(1.7, 0.05, 0.05, 0x2f2f30, { r: 0.01 }), 0.85, 0, 0.35).rotation.y = 0.15;
+  put(bow, box(0.06, 0.06, 1.2, 0x2f2f30, { r: 0.01 }), 1.7, 0, 0).rotation.x = 0.3;
+  main.add(bow);
+  let len = L;
+  if (trailer) {
+    const T = 5.4;
+    const tr = car(T, -(L / 2 + T / 2 + 0.25), { cab: false, roofHole: false });
+    tr.rotation.y = 0.12 + rand() * 0.08; // jack-knifed off the rails
+    tr.position.z = 0.35;
+    put(g, box(0.5, 0.1, 0.12, FRAME, { r: 0.02 }), -L / 2 - 0.15, 0.62, 0.1);
+    len += T + 0.25;
+  }
+  g.position.set(x, -0.08, z);
+  g.rotation.set(tilt, yaw, nose, 'YXZ');
+  B.add(g);
+  const cx = trailer ? -(len - L) / 2 : 0;
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const hx = x + c * cx;
+  const hz = z - s * cx;
+  B.hitBox(hx, 1.4, hz, len, 2.9, W, yaw);
+  scorch(B, hx, hz, len * 0.55);
+  B.block(hx, hz, len / 2, W / 2 + 0.05, yaw);
+  return g;
+}
+
 // Soot on the ground under something that burned.
 const scorchMat = new THREE.MeshBasicMaterial({ color: 0x0c0b0b, transparent: true, opacity: 0.45, depthWrite: false });
 export function scorch(B, x, z, r) {
