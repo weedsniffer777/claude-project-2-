@@ -109,6 +109,13 @@ const MG_DEPRESSION = -0.3;
 const MG_ELEVATION = 1.1; // the DShK is an anti-aircraft mount
 const MG_PITCH_SPEED = 4;
 const LOADER = { x: -0.1, z: 0.42 }; // DShK sits on this hatch ring
+// Drum rig hinge on the rear plate (world units), and how far it tips/slides
+// the drums when the turret faces the rear.
+const DRUM_HINGE = { x: -2.1 * 0.85 - 0.04, y: 0.805 };
+const DRUM_TIP = 0.9; // rad, drums swing down and back
+const DRUM_SLIDE = 0.3; // also slide back
+const DRUM_DROP = 0.1;
+const DRUM_SPEED = 2.6; // rig travel per second (0..1)
 const COMMANDER = { x: -0.15, z: -0.42 };
 
 export const SLOT_NAMES = ['tracks', 'armor', 'engine', 'gun', 'mg', 'sights', 'module'];
@@ -273,7 +280,7 @@ export function createTank() {
   slot('module', turret);
 
   const spinners = [];
-  let gunPivot, gunFlash, mgPivot, mgFlash;
+  let gunPivot, gunFlash, mgPivot, mgFlash, drumRig;
 
   // ---------------------------------------------------------------- hull
   const hull = new THREE.Group();
@@ -595,16 +602,23 @@ export function createTank() {
     put(e, cyl(0.11, 2.3, C.oliveDark, { axis: 'z', seg: 12 }), -2.3, 0.6, 0);
     for (const z of [-0.6, 0.6]) put(e, box(0.22, 0.14, 0.06, C.steel), -2.2, 0.6, z);
 
-    // Two big drums lying across, side by side, sitting high in U cradles
-    // bolted to the rear plate. The caricature accent: keep them big.
+    // Two big drums lying across, side by side, sitting high in U cradles.
+    // The cradles hang on a hinged rig at the rear plate: when the turret
+    // swings toward the rear, the rig tips the drums down and back out of the
+    // barrel's way (see update). The caricature accent: keep them big.
     const DR = 0.41;
     const DL = 1.0;
     const DX = HULL_PROFILE[0][0] * SX - 0.3;
     const DY = WORLD_DECK_Y + 0.16;
+    drumRig = new THREE.Group();
+    drumRig.position.set(DRUM_HINGE.x, DRUM_HINGE.y, 0);
+    engine.add(drumRig);
+    const rx = DX - DRUM_HINGE.x; // drum position relative to the hinge
+    const ry = DY - DRUM_HINGE.y;
     for (const z of [-0.53, 0.53]) {
       const drum = new THREE.Group();
-      drum.position.set(DX, DY, z);
-      engine.add(drum);
+      drum.position.set(rx, ry, z);
+      drumRig.add(drum);
       wobble(drum, 'z', { k: 90, d: 7, gain: 0.5, max: 0.12 });
       wobble(drum, 'x', { k: 90, d: 7, gain: 0.35, max: 0.08 });
       put(drum, cyl(DR, DL, C.olive, { axis: 'z', seg: 20 }));
@@ -616,11 +630,13 @@ export function createTank() {
         put(drum, cyl(DR + 0.014, 0.05, C.oliveDark, { axis: 'z', seg: 20 }), 0, 0, off * (DL / 2 - 0.03)); // rolled rims
         put(drum, cyl(DR + 0.01, 0.04, C.dark, { axis: 'z', seg: 20 }), 0, 0, off * DL * 0.24); // straps
         put(drum, box(0.07, 0.09, 0.07, C.steel, { r: 0.014 }), 0, DR + 0.025, off * DL * 0.24); // buckles on top
-        // U cradle: bottom bar, two uprights hugging the drum, arm to the rear plate
+        // U cradle (on the rig): bottom bar, two uprights hugging the drum, arm to the hinge
         const cz = z + off * DL * 0.24;
-        put(engine, box(DR * 2 + 0.06, 0.06, 0.07, C.steel, { r: 0.012 }), DX, DY - DR - 0.035, cz);
-        for (const ux of [-1, 1]) put(engine, box(0.06, DR * 0.9, 0.07, C.steel, { r: 0.012 }), DX + ux * (DR + 0.02), DY - DR * 0.55, cz);
-        put(engine, box(0.2, 0.07, 0.07, C.steel, { r: 0.012 }), HULL_PROFILE[0][0] * SX - 0.04, DY - DR - 0.035, cz);
+        put(drumRig, box(DR * 2 + 0.06, 0.06, 0.07, C.steel, { r: 0.012 }), rx, ry - DR - 0.035, cz);
+        for (const ux of [-1, 1]) put(drumRig, box(0.06, DR * 0.9, 0.07, C.steel, { r: 0.012 }), rx + ux * (DR + 0.02), ry - DR * 0.55, cz);
+        put(drumRig, box(0.2, 0.07, 0.07, C.steel, { r: 0.012 }), -0.08, ry - DR - 0.035, cz);
+        // hinge knuckle bolted to the rear plate (stays on the hull)
+        put(engine, cyl(0.06, 0.12, C.dark, { axis: 'z', seg: 8 }), DRUM_HINGE.x, DRUM_HINGE.y, cz);
       }
     }
   }
@@ -726,6 +742,7 @@ export function createTank() {
   let recoil = 0;
   let gunFlashTime = 0;
   let gunElev = 0; // barrel elevation toward the target's height
+  let drumStow = 0; // 0 = drums up, 1 = tipped down and back
   let mgElev = 0;
   const mgWorld = new THREE.Vector3();
   let mgTimer = 0;
@@ -802,6 +819,14 @@ export function createTank() {
       mgElev += THREE.MathUtils.clamp(wantPitch - mgElev, -MG_PITCH_SPEED * dt, MG_PITCH_SPEED * dt);
       mgPivot.rotation.z = mgElev;
     }
+
+    // Drum rig: tip the drums out of the way while the barrel is over the rear
+    const offBack = Math.abs(wrapAngle(turret.rotation.y - Math.PI));
+    const wantStow = THREE.MathUtils.clamp((1.1 - offBack) / 0.35, 0, 1) > 0 ? 1 : 0;
+    drumStow += THREE.MathUtils.clamp(wantStow - drumStow, -DRUM_SPEED * dt, DRUM_SPEED * dt);
+    const k = drumStow * drumStow * (3 - 2 * drumStow); // smoothstep: mechanical start and stop
+    drumRig.rotation.z = k * DRUM_TIP;
+    drumRig.position.set(DRUM_HINGE.x - k * DRUM_SLIDE, DRUM_HINGE.y - k * DRUM_DROP, 0);
 
     // Running gear
     const speed = ctx.speed || 0;
