@@ -334,10 +334,13 @@ export class LevelBuilder {
   // batched pieces, blocks, shell colliders, light emitters) is gathered into
   // one prop that the game breaks, flattens or knocks over on contact.
   //  kind: 'prop' (bursts into debris and is gone), 'car' (flattens and
-  //  stays), 'pole' (topples over at `pivot`, its light dies)
+  //  stays), 'pole' (topples over at `pivot`, its light dies), 'topple' (a
+  //  barricade section that falls over, then sinks away)
+  //  extra flags ride along, e.g. breakable (the cannon breaks it too),
+  //  armored (only the script breaks it)
   //  heavy: only a rocket ram (or a dozer blade) gets through it
   //  footprint: { x, z, hx, hz, yaw } for contact when it has no block
-  crushable(build, { kind = 'prop', heavy = false, pivot = null, footprint = null, scrap = 0 } = {}) {
+  crushable(build, { kind = 'prop', heavy = false, pivot = null, footprint = null, scrap = 0, ...extra } = {}) {
     const n0 = this.root.children.length;
     const b0 = this.blocks.length;
     const c0 = this.colliders.length;
@@ -379,7 +382,7 @@ export class LevelBuilder {
       const bb = new THREE.Box3().setFromObject(g);
       fp = { x: (bb.min.x + bb.max.x) / 2, z: (bb.min.z + bb.max.z) / 2, hx: Math.max(0.2, (bb.max.x - bb.min.x) / 2), hz: Math.max(0.2, (bb.max.z - bb.min.z) / 2), yaw: 0 };
     }
-    const c = { kind, heavy, group: g, blocks, colliders, emitters, fx, colors, footprint: fp, scrap, done: false };
+    const c = { kind, heavy, group: g, blocks, colliders, emitters, fx, colors, footprint: fp, scrap, done: false, ...extra };
     (this.crushables ||= []).push(c);
     return c;
   }

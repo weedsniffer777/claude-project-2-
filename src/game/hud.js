@@ -26,13 +26,21 @@ const CSS = `
 .hud-kills b { color: var(--danger); font-weight: 400; }
 .hud-center { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; gap: 12px; justify-items: center;
   width: min(500px, calc(100vw - 32px)); }
-@media (max-width: 860px) { .hud-center { top: calc(112px + env(safe-area-inset-top, 0px)); } }
-.hud.touch .hud-center { top: calc(96px + env(safe-area-inset-top, 0px)); }
+/* the radio box sits between the HP panel and the scrap counter, or under
+   them when the screen is too narrow for that */
+.hud-center { width: clamp(260px, calc(100vw - 560px), 500px); }
+@media (max-width: 820px) { .hud-center { top: calc(108px + env(safe-area-inset-top, 0px)); width: calc(100vw - 32px); } }
+.hud.touch .hud-center { top: calc(8px + env(safe-area-inset-top, 0px)); width: clamp(220px, calc(100vw - 390px), 440px); gap: 8px; }
+@media (max-width: 620px) { .hud.touch .hud-center { top: calc(92px + env(safe-area-inset-top, 0px)); width: calc(100vw - 24px); } }
+.hud.touch .hud-prompt { padding: 7px 12px 9px; }
+.hud.touch .hud-prompt .text { font-size: 14px; }
+.hud.touch .hud-kills { display: none; }
+.hud-obj { display: none !important; } /* objectives: off for now */
 .hud-sectors { justify-self: start; }
 .hud-prompt { padding: 10px 16px 12px; display: grid; gap: 6px; width: 100%; box-sizing: border-box; transition: opacity 0.2s, transform 0.2s; }
 .hud [hidden] { display: none !important; }
 .hud .hud-prompt[hidden] { display: grid !important; opacity: 0; transform: translateY(-10px); }
-.hud-prompt .tag { font-size: 11px; color: var(--amber); display: flex; gap: 8px; align-items: center; }
+.hud-prompt .tag { display: none; }
 .hud-prompt .tag::before { content: ''; width: 8px; height: 8px; background: currentColor; animation: hudblink 0.9s steps(1) infinite; }
 .hud-prompt.danger .tag { color: var(--danger); }
 .hud-prompt.go .tag { color: var(--go); }
@@ -68,6 +76,9 @@ const CSS = `
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .hud-ability.ready { animation: hudready 1s steps(2) infinite; }
+.hud-ability.cooling canvas { filter: brightness(0.45) saturate(0.6); }
+.hud-ability .cd { position: relative; font: 400 26px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; }
+.hud:not(.touch) .hud-ability .cd { font-size: 20px; }
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
 .hud:not(.touch) .hud-ability canvas { width: 64px; height: 64px; }
@@ -124,8 +135,8 @@ const CSS = `
 .hud-stick .knob { left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; }
 .hud-stick.idle .base { opacity: 0.45; }
 .hud-stick.idle .knob { opacity: 0.6; animation: hudbreathe 1.6s steps(4) infinite; }
-.hud.touch .hud-top { transform-origin: top left; transform: scale(0.8); }
-.hud.touch .hud-right { transform-origin: top right; transform: scale(0.8); top: calc(46px + env(safe-area-inset-top, 0px)); }
+.hud.touch .hud-top { transform-origin: top left; transform: scale(0.72); top: calc(8px + env(safe-area-inset-top, 0px)); left: 10px; }
+.hud.touch .hud-right { transform-origin: top right; transform: scale(0.72); top: calc(44px + env(safe-area-inset-top, 0px)); right: 10px; }
 @media (max-height: 500px) { .hud-prompt .text { font-size: 14px; } }
 .dk-shot .hud { display: none; }
 `;
@@ -249,7 +260,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-ability" hidden><canvas width="16" height="16"></canvas><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability" hidden><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -314,7 +325,6 @@ export function createHud() {
   picker.querySelector('.skip').addEventListener('click', () => onSkip?.());
   cont.addEventListener('click', () => onContinue?.());
   let scrapShown = 0;
-  let chainHide = 0;
   let hurtT = 0;
   let promptTimer = 0;
   let onEnd = null;
@@ -457,6 +467,9 @@ export function createHud() {
         drawAbility(abilityCanvas, state.k, state.lit);
       }
       ability.classList.toggle('ready', state.k >= 1 && !state.lit);
+      const cooling = state.left > 0 && !state.lit;
+      ability.classList.toggle('cooling', cooling);
+      ability.querySelector('.cd').textContent = cooling ? Math.ceil(state.left) : '';
       const c = abilityCenter();
       ability.style.transform = `translate(${c.x}px, ${c.y}px)`;
       ability.querySelector('.key').hidden = touchMode;

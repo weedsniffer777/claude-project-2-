@@ -30,7 +30,7 @@ export class Crushing {
         if (c.done) continue;
         const f = c.footprint;
         if (Math.abs(f.x - tankBox.x) > reach + f.hx || Math.abs(f.z - tankBox.z) > reach + f.hz) continue;
-        if (c.heavy && !ram) continue;
+        if (c.armored || (c.heavy && !ram)) continue;
         if (!separate(probe, f)) continue;
         this.crush(c, tankBox);
         out.push(c);
@@ -89,6 +89,25 @@ export class Crushing {
       combat.fx.burst(at.clone().setY(0.6), { count: 10, speed: 5, color: 0xffd36b, life: 0.3, size: 0.06, gravity: 12 });
       dust(8);
       combat.shake = Math.max(combat.shake, 0.18);
+    } else if (c.kind === 'topple') {
+      // falls over away from the hit, lies there a moment, sinks away
+      const axis = new THREE.Vector3(0, 1, 0).cross(away).normalize();
+      const q0 = g.quaternion.clone();
+      const q = new THREE.Quaternion();
+      const y0 = g.position.y;
+      let t = 0;
+      this.anims.push((dt) => {
+        t += dt;
+        const k = Math.min(1, (t / 0.55) ** 2);
+        q.setFromAxisAngle(axis, 1.5 * k);
+        g.quaternion.copy(q).multiply(q0);
+        if (t > 3) g.position.y = y0 - (t - 3) * 2;
+        if (t > 4.2) g.visible = false;
+        return t <= 4.2;
+      });
+      bits(14, 3.5, 0.18);
+      dust(10, 0x9d988c);
+      combat.shake = Math.max(combat.shake, 0.3);
     } else if (c.kind === 'pole') {
       // topple away from the tank around its foot
       const axis = new THREE.Vector3(0, 1, 0).cross(away).normalize();

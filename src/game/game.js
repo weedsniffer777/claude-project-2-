@@ -252,7 +252,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         pickups.collectAll(collect);
         fn();
         hud.fade(false);
-        run.locked = false;
+        if (run.mode === 'field') run.locked = false;
         run.fading = false;
       }, 420);
     },
@@ -263,25 +263,30 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       run.boss = e ? { e, name } : null;
       if (!e) hud.setBoss(null, null);
     },
-    // Roll into a depot shack: the tank drives itself onto the repair plate,
-    // a pick of parts pops up (or skip), then Continue drives it out the back.
-    // gift: 'rockets' rigs the fuel-can rockets first. onLeave: once it's out.
+    // Into a depot: fade from the shack door to the depot interior, the tank
+    // rolls itself onto the repair plate, a pick of parts pops up (or skip),
+    // then Continue drives it out and it fades back to the street, out of
+    // the shack's back door. gift: 'boost' rigs the drums as boosters.
     depot(shack, { offers, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
+      const room = level.depotRoom;
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
-      pickups.collectAll(collect);
+      speed = 0;
       hud.setArrow(null);
       hud.setSpot(null);
       run.spot = null;
-      shack.setOffers(offers);
-      shack.setInside(true);
-      level.bounds = { ...level.bounds, minX: Math.min(level.bounds.minX, shack.x0 - 4), maxX: shack.outside.x + 1.5 };
-      run.depot = { shack, step: 'in', offers, gift, onLeave, t: 0 };
-      hud.setObjective('Depot');
-      hud.prompt('Depot', 'Safe for now. Rolling onto the repair plate.', { go: true });
-      run.auto = shack.inside;
+      run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds };
+      api.transition(() => {
+        room.reset();
+        room.setOffers(offers);
+        level.bounds = room.bounds;
+        api.teleport(room.entry.x, room.entry.z, room.entry.yaw);
+        run.depot.step = 'in';
+        hud.prompt('Depot', 'Safe for now. Repairing.', { go: true });
+        run.auto = room.plate;
+      });
     },
     prompt: (tag, html, opts) => hud.prompt(tag, html, opts),
     clearPrompt: () => hud.clearPrompt(),
@@ -376,6 +381,12 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       const p = new THREE.Vector3(h.e.pos.x, 1.2, h.e.pos.z);
       hud.damage(p, h.amount, 'big');
       if (h.killed) hud.damage(p.clone().setY(1.9), 0, 'kill');
+    }
+    // a shell knocks over breakable barricades
+    for (const c of level.crushables || []) {
+      if (!c.breakable || c.armored || c.done) continue;
+      const f = c.footprint;
+      if (Math.abs(at.x - f.x) < f.hx + 1.2 && Math.abs(at.z - f.z) < f.hz + 1.2) crushing.crush(c, { x: pos.x, z: pos.z, yaw: 0 });
     }
     level.onImpact?.(at, mesh, api);
   }
@@ -559,16 +570,15 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     });
   }
 
-  // The depot stop, step by step: in -> repair (and the rockets gift) ->
-  // pick (cards, or skip) -> fit (crane) -> done (Continue) -> out.
+  // The depot stop, step by step: enter (fade) -> in (drive to the plate)
+  // -> repair -> pick (cards, or skip) -> fit (crane) -> done (Continue) ->
+  // out (drive to the door, fade back to the street).
   function depotFrame(dt) {
     const st = run.depot;
-    const d = st.shack;
     st.t += dt;
     if (st.step === 'in' && !run.auto) {
       st.step = 'repair';
       st.t = 0;
-      d.closeIn();
       speed = 0;
     }
     if (st.step === 'repair') {
@@ -578,27 +588,23 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       }
       if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
       if (st.t > 1.3 && run.hp >= stats.maxHp - 0.01) {
-        if (st.gift === 'rockets' && !run.rockets) {
-          // the zone's salvage find: the fuel drums get rigged as rockets
-          run.rockets = true;
-          for (const n of tank.rocketNozzles()) combat.fx.burst(n, { count: 14, speed: 4, color: 0xffd36b, life: 0.4, size: 0.06, gravity: 10 });
-          combat.shake = Math.max(combat.shake, 0.1);
-          hud.prompt('Salvage', `Found: <b>fuel-can rockets</b>! Your fuel drums now fire as boosters. ${api.touch ? 'Tap the <b>rocket</b> button' : '<kbd>Shift</kbd> or right-click'} to boost and ram.`, { go: true });
-          st.t = -2.5; // let it sink in before the cards
-          return;
-        }
+        if (st.gift === 'boost') run.rockets = true; // the drums get rigged as boosters
         st.step = 'pick';
         showPicker();
       }
     }
     if (st.step === 'out' && !run.auto) {
       st.step = 'gone';
-      d.setInside(false);
-      run.mode = 'field';
-      run.locked = false;
-      run.depot = null;
-      hud.clearPrompt();
-      st.onLeave();
+      api.transition(() => {
+        st.shack.openOut();
+        level.bounds = st.fieldBounds;
+        api.teleport(st.shack.outside.x, st.shack.outside.z, 0);
+        run.mode = 'field';
+        run.locked = false;
+        run.depot = null;
+        hud.clearPrompt();
+        st.onLeave();
+      });
     }
   }
   function showPicker() {
@@ -616,7 +622,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     st.step = 'fit';
     hud.showPicker(null);
     hud.prompt('Depot', `Fitting the <b>${PARTS[id].name}</b>...`, { go: true });
-    st.shack.install(id, () => new THREE.Vector3(pos.x, 0, pos.z), {
+    st.room.install(id, () => new THREE.Vector3(pos.x, 0, pos.z), {
       onFit() {
         run.parts.push(id);
         partMeshes.push(attachPart(tank, id));
@@ -640,13 +646,15 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.showContinue(() => {
       if (st.step !== 'done') return;
       hud.showContinue(null);
-      st.step = 'out';
-      st.shack.openOut();
+      st.step = 'opening';
+      st.room.openDoor();
       hud.prompt('Depot', 'Door opening. Next sector!', { go: true, seconds: 3 });
       // roll out once the door is up
-      const wait = () => (st.shack.outDoor > 0.6 ? (run.auto = st.shack.outside) : setTimeout(wait, 100));
-      run.auto = null;
-      st.t = 0;
+      const wait = () => {
+        if (st.room.doorOpen < 0.6) return void setTimeout(wait, 100);
+        st.step = 'out';
+        run.auto = st.room.outside;
+      };
       wait();
     });
   }
@@ -856,7 +864,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
 
       // camera follows; the aim is re-cast every frame so it tracks while driving
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
-      if (run.depot) camWant.lerp(run.depot.shack.focus, 0.5); // frame the shack, not just the tank
+      if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.room.focus, 0.5); // frame the room, not just the tank
       camTarget.lerp(camWant, 1 - Math.exp(-realDt * 6));
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
@@ -932,7 +940,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       if (client) hud.setReticle(client[0], client[1], reload);
       hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / CHAIN_WINDOW);
-      hud.setAbility(run.rockets && !run.over ? { k: 1 - run.boostCd / BOOST_COOLDOWN, lit: boosting } : null);
+      hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / BOOST_COOLDOWN, left: run.boostCd, lit: boosting } : null);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
