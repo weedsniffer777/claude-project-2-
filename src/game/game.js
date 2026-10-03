@@ -54,6 +54,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   let pointer = null;
   let client = null;
   let hovered = null;
+  let touch = matchMedia('(pointer: coarse)').matches;
+  hud.setTouch(touch);
   const pos = tank.group.position;
 
   // ------------------------------------------------------- level loading
@@ -95,6 +97,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.reset();
     hud.setHull(run.hp, TANK_HP);
     if (level.start) level.start(api);
+    else if (touch) hud.prompt('Controls', 'Drag on the left to drive · tap to aim and fire', { seconds: 8 });
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
     if (canvas.isConnected && hud.root.isConnected) canvas.style.cursor = 'none';
     return levelDef.id;
@@ -104,6 +107,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const api = {
     get tankPos() {
       return pos;
+    },
+    get touch() {
+      return touch;
     },
     get killed() {
       return enemies.killed;
@@ -191,16 +197,69 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     keys.add(e.code);
   };
   const onKeyUp = (e) => keys.delete(e.code);
-  const onMove = (e) => {
+  function aimAt(x, y) {
     const r = canvas.getBoundingClientRect();
-    pointer = [((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1];
-    client = [e.clientX, e.clientY];
+    pointer = [((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1];
+    client = [x, y];
+  }
+
+  // Touch: a floating stick on the left side drives; touching anywhere else
+  // aims there (drag to adjust) and fires.
+  const STICK_R = 56;
+  const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+  let fireOnAim = false;
+  function setTouch(on) {
+    if (touch === on) return;
+    touch = on;
+    hud.setTouch(on);
+  }
+
+  const onMove = (e) => {
+    if (e.pointerType === 'touch') {
+      if (e.pointerId === stick.id) {
+        let dx = e.clientX - stick.ox;
+        let dy = e.clientY - stick.oy;
+        const len = Math.hypot(dx, dy);
+        if (len > STICK_R) {
+          dx *= STICK_R / len;
+          dy *= STICK_R / len;
+        }
+        stick.x = dx / STICK_R;
+        stick.y = dy / STICK_R;
+        hud.setStick(true, stick.ox, stick.oy, stick.ox + dx, stick.oy + dy);
+      } else aimAt(e.clientX, e.clientY);
+      return;
+    }
+    aimAt(e.clientX, e.clientY);
   };
   const onDown = (e) => {
+    if (e.pointerType === 'touch') {
+      setTouch(true);
+      const r = canvas.getBoundingClientRect();
+      if (stick.id === null && e.clientX < r.left + r.width * 0.42) {
+        Object.assign(stick, { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 });
+        hud.setStick(true, e.clientX, e.clientY, e.clientX, e.clientY);
+      } else {
+        aimAt(e.clientX, e.clientY);
+        fireOnAim = true; // fire once this frame's aim ray has landed
+      }
+      return;
+    }
+    setTouch(false);
     if (e.button === 0) fire();
   };
-  const onBlur = () => keys.clear();
-  const onLeave = () => (client = null);
+  const onUp = (e) => {
+    if (e.pointerId !== stick.id) return;
+    Object.assign(stick, { id: null, x: 0, y: 0 });
+    hud.setStick(false);
+  };
+  const onBlur = () => {
+    keys.clear();
+    onUp({ pointerId: stick.id });
+  };
+  const onLeave = (e) => {
+    if (e.pointerType !== 'touch') client = null;
+  };
 
   function tankBox() {
     const yaw = tank.group.rotation.y;
@@ -243,6 +302,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.addEventListener('pointermove', onMove);
       canvas.addEventListener('pointerdown', onDown);
       canvas.addEventListener('pointerleave', onLeave);
+      canvas.addEventListener('pointerup', onUp);
+      canvas.addEventListener('pointercancel', onUp);
       canvas.style.cursor = run.over ? '' : 'none';
       hud.mount();
     },
@@ -253,6 +314,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointerleave', onLeave);
+      canvas.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointercancel', onUp);
+      onUp({ pointerId: stick.id });
       canvas.style.cursor = '';
       keys.clear();
       hud.unmount();
@@ -277,14 +341,16 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         if (keys.has('KeyS') || keys.has('ArrowDown')) input.sub(INPUT_FORWARD);
         if (keys.has('KeyD') || keys.has('ArrowRight')) input.add(INPUT_RIGHT);
         if (keys.has('KeyA') || keys.has('ArrowLeft')) input.sub(INPUT_RIGHT);
+        if (stick.id !== null) input.addScaledVector(INPUT_RIGHT, stick.x).addScaledVector(INPUT_FORWARD, -stick.y);
       }
       let want = 0;
-      if (input.lengthSq() > 0) {
+      const throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
+      if (input.lengthSq() > 0.02) {
         input.normalize();
         const heading = Math.atan2(-input.z, input.x);
         tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * dt);
         const off = Math.abs(wrapAngle(heading - tank.group.rotation.y));
-        want = MAX_SPEED * Math.max(0, Math.cos(off));
+        want = MAX_SPEED * throttle * Math.max(0, Math.cos(off));
       }
       speed += THREE.MathUtils.clamp(want - speed, -ACCEL * dt, ACCEL * dt);
       const yaw = tank.group.rotation.y;
@@ -316,6 +382,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         }
       }
       level.light.follow(pos);
+      if (fireOnAim) {
+        fireOnAim = false;
+        fire();
+      }
 
       // machines
       enemies.update(dt, t, { tankPos: pos, blocks, heightAt: level.heightAt, onTankHit: tankHit });

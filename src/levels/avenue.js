@@ -1325,12 +1325,14 @@ export const avenue = {
     // -> blow the gate -> drive through.
     const S = { step: 0, spawnX: 0, t: 0 };
     const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
-    const CLICK = '<kbd>Click</kbd>';
+    let CLICK = '<kbd>Click</kbd>';
     function start(api) {
+      CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
       Object.assign(S, { step: 0, spawnX: api.tankPos.x, t: 0 });
       gate.hp = 2;
       api.objective('Drive up the street and destroy all enemies');
-      api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
+      if (api.touch) api.prompt('Controls', 'Drag on the <b>left side</b> of the screen to drive');
+      else api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
       api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
     }
     // the arrow that follows the nearest machine
@@ -1364,8 +1366,9 @@ export const avenue = {
           if (api.enemiesAlive === 0) {
             api.spawnDog(40, -5.5, { delay: 1.2 });
             api.spawnDog(41, 4.5, { delay: 1.6 });
-            api.prompt('Main gun', `${CLICK} or <kbd>Space</kbd> fires the main gun at your reticle. The blast shreds machines.`);
-            api.arrow(onEnemy(api), `${CLICK} to fire main gun!`);
+            if (api.touch) api.prompt('Main gun', `${CLICK} a machine to fire the main gun at it. The blast shreds machines.`);
+            else api.prompt('Main gun', `${CLICK} or <kbd>Space</kbd> fires the main gun at your reticle. The blast shreds machines.`);
+            api.arrow(onEnemy(api), api.touch ? `${CLICK} it to fire!` : `${CLICK} to fire main gun!`);
             S.step = 3;
           }
           break;
@@ -1397,7 +1400,7 @@ export const avenue = {
         case 6:
           if (x > 82 && api.enemiesAlive === 0) {
             api.objective('Blow down the checkpoint gate');
-            api.prompt('Main gun', `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
+            api.prompt('Main gun', api.touch ? `${CLICK} the gate to fire at it. Two hits bring it down.` : `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
             api.arrow(gateMark, `${CLICK} to shoot the gate!`);
             S.step = 7;
           }

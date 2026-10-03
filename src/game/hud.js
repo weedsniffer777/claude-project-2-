@@ -62,6 +62,16 @@ const CSS = `
 .hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
 .hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.hud-stick { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+  border: 3px solid rgba(241, 233, 216, 0.55); background: rgba(12, 11, 13, 0.35); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
+.hud-stick i { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
+  background: var(--ink); box-shadow: 0 4px 0 #6d655a, 0 0 0 3px #000; }
+.hud-stick.ghost { opacity: 0.45; animation: hudbreathe 1.6s steps(4) infinite; }
+.hud.touch .hud-prompt { left: auto; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: none; max-width: min(420px, 52vw); }
+.hud.touch .hud-prompt[hidden] { transform: translateY(10px); }
+.hud.touch .hud-top { transform-origin: top left; transform: scale(0.8); }
+.hud.touch .hud-kills { top: calc(46px + env(safe-area-inset-top, 0px)); }
+@media (max-height: 500px) { .hud-prompt .text { font-size: 14px; } }
 .dk-shot .hud { display: none; }
 `;
 
@@ -105,6 +115,7 @@ export function createHud() {
       </svg>
     </div>
     <div class="hud-numbers"></div>
+    <div class="hud-stick ghost" hidden><i></i></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><button type="button"></button></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -120,6 +131,14 @@ export function createHud() {
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
+  const stickEl = $('.hud-stick');
+  const knob = stickEl.querySelector('i');
+  let touchMode = false;
+  let stickActive = false;
+  const placeGhost = () => {
+    stickEl.style.transform = `translate(110px, ${window.innerHeight - 120}px)`;
+    knob.style.transform = '';
+  };
   const arrow = $('.hud-arrow');
   let arrowAt = null;
   let hurtT = 0;
@@ -183,6 +202,29 @@ export function createHud() {
       arrowAt = target;
       arrow.hidden = !target;
       arrow.querySelector('.lbl').innerHTML = html;
+    },
+    // touch layout: prompts move to the top, a ghost stick shows where to drive
+    setTouch(on) {
+      touchMode = on;
+      root.classList.toggle('touch', on);
+      if (!stickActive) {
+        stickEl.hidden = !on;
+        stickEl.classList.add('ghost');
+        placeGhost();
+      }
+    },
+    setStick(active, ox, oy, kx, ky) {
+      stickActive = active;
+      if (!active) {
+        stickEl.hidden = !touchMode;
+        stickEl.classList.add('ghost');
+        placeGhost();
+        return;
+      }
+      stickEl.hidden = false;
+      stickEl.classList.remove('ghost');
+      stickEl.style.transform = `translate(${Math.round(ox)}px, ${Math.round(oy)}px)`;
+      knob.style.transform = `translate(${Math.round(kx - ox)}px, ${Math.round(ky - oy)}px)`;
     },
     showReticle(on) {
       reticle.hidden = !on;
