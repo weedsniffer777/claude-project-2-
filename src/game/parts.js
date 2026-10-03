@@ -3,7 +3,7 @@
 // The boost (the fuel drums rigged as boosters) is the zone's fixed one-time
 // find: an ability, not a pick.
 import * as THREE from 'three';
-import { box, cyl, put } from '../models/kit.js';
+import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 
 export const BASE_STATS = {
@@ -196,16 +196,23 @@ export const PARTS = {
       const g = new THREE.Group();
       put(g, cyl(0.4, 1.0, OLIVE, { axis: 'x', seg: 16 }), 0, 0.42, 0);
       put(g, cyl(0.42, 0.12, 0x3b3f6a, { axis: 'x', seg: 16 }), -0.55, 0.42, 0); // heat-blued nozzle ring
-      // the flame out the back: a warm outer plume round a blue-white core
+      // the flame out the back, built like the one on the tank: a wide warm
+      // cone round a short hot core, and a few cel puffs of exhaust trailing
       const cone = (r, len, color) => {
-        const m = new THREE.Mesh(new THREE.ConeGeometry(r, len, 10), new THREE.MeshBasicMaterial({ color }));
+        const m = new THREE.Mesh(new THREE.ConeGeometry(r, len, 8), new THREE.MeshBasicMaterial({ color }));
         m.rotation.z = Math.PI / 2; // tip pointing back (-x)
-        m.position.set(-0.6 - len / 2, 0.42, 0);
+        m.position.set(-0.62 - len / 2, 0.42, 0);
         g.add(m);
       };
-      cone(0.34, 1.3, 0xff8a4a);
-      cone(0.24, 1.0, 0xffc070);
-      cone(0.13, 0.75, 0xa8e8ff);
+      cone(0.33, 1.4, 0xff8a5a);
+      cone(0.18, 0.9, 0xa8e8ff);
+      const puff = new THREE.IcosahedronGeometry(1, 0);
+      for (const [x, y, z, r, c] of [[-1.95, 0.48, 0.1, 0.15, 0xffa040], [-2.2, 0.6, -0.1, 0.19, 0x8f8e94]]) {
+        const m = new THREE.Mesh(puff, c === 0xffa040 ? new THREE.MeshBasicMaterial({ color: c }) : toon(c)); // fire glows, smoke is lit
+        m.position.set(x, y, z);
+        m.scale.setScalar(r);
+        g.add(m);
+      }
       return g;
     },
   },
