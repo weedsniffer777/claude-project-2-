@@ -64,6 +64,37 @@ function hazard(w) {
   return new THREE.MeshToonMaterial({ map: t, gradientMap });
 }
 
+// CHECKPOINT, drawn letter by letter and snapped to hard pixels.
+let signTex = null;
+function signTexture() {
+  if (signTex) return signTex;
+  const [c, g] = canvas(120, 24);
+  g.fillStyle = '#1b1f24';
+  g.fillRect(0, 0, 120, 24);
+  g.fillStyle = '#cfe8ff';
+  g.font = 'bold 15px monospace';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('CHECKPOINT', 60, 13);
+  // threshold to hard pixels, with a dim glow fringe round the letters
+  const img = g.getImageData(0, 0, 120, 24);
+  const d = img.data;
+  const lit = new Uint8Array(120 * 24);
+  for (let i = 0; i < lit.length; i++) lit[i] = d[i * 4 + 2] > 150 ? 1 : 0;
+  for (let y = 0; y < 24; y++) {
+    for (let x = 0; x < 120; x++) {
+      const i = y * 120 + x;
+      let near = 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) near |= lit[(y + dy) * 120 + x + dx] || 0;
+      const [r, gg, b] = lit[i] ? [207, 232, 255] : near ? [52, 92, 120] : [27, 31, 36];
+      d.set([r, gg, b, 255], i * 4);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  signTex = tex(c);
+  return signTex;
+}
+
 // A roller door hanging in an opening of width w, facing along x.
 function rollerDoor(B, x, z, w) {
   const door = new THREE.Group();
@@ -155,17 +186,12 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
 
   // what makes it read from down the street: a lit sign, a beacon, work lights
   {
-    const sign = new THREE.Group();
-    put(sign, box(0.1, 0.9, 3.4, 0x2c3034), 0, 0, 0);
-    // a wrench glyph in cold tube
-    const tube = (w, h, y, z, rz = 0) => (put(sign, box(0.06, h, w, COLD, { glow: true }), -0.07, y, z).rotation.x = rz);
-    tube(1.8, 0.08, 0, -0.5);
-    tube(0.08, 0.5, 0, -1.4);
-    tube(0.08, 0.5, 0, 0.4);
-    tube(0.6, 0.08, 0.2, 0.9);
-    tube(0.6, 0.08, -0.2, 0.9);
-    sign.position.set(x0 - 0.35, H + 0.75, cz);
+    // a lit sign over the door: CHECKPOINT in cold tube letters
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture() }));
+    sign.rotation.y = -Math.PI / 2;
+    sign.position.set(x0 - 0.36, H + 0.7, cz);
     B.add(sign);
+    put(B.root, box(0.12, 0.9, 4.0, 0x2c3034), x0 - 0.3, H + 0.7, cz);
     B.emit(new THREE.Vector3(x0 - 1.5, H, cz), COLD, 10, 8);
   }
   const beacon = B.keep(put(B.root, box(0.26, 0.2, 0.26, 0xffb02a, { glow: true }), cx, H + 0.95, cz));

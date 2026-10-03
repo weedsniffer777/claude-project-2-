@@ -282,6 +282,8 @@ export function createTank() {
   const spinners = [];
   let gunPivot, gunFlash, mgPivot, mgFlash, drumRig;
   const drums = []; // the two rear drums; they swing round into rocket engines
+  const flameOuter = new THREE.MeshBasicMaterial({ color: 0xff8a2a });
+  const flameInner = new THREE.MeshBasicMaterial({ color: 0xfff1b8 });
 
   // ---------------------------------------------------------------- hull
   const hull = new THREE.Group();
@@ -622,12 +624,17 @@ export function createTank() {
       drumRig.add(drum);
       drums.push(drum);
       // rocket flame out of the drum's rear end (shown while boosting)
+      // the drums swing round opposite ways (one clockwise, one counter), so
+      // their open ends both end up facing back: the flame sits on that end
+      const turn = z < 0 ? 1 : -1;
+      drum.userData.turn = turn;
       const flame = new THREE.Group();
-      flame.position.z = -DL / 2 - 0.05;
-      const outer = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.8, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xff8a2a }));
+      flame.position.z = -turn * (DL / 2 + 0.05);
+      if (turn < 0) flame.rotation.y = Math.PI;
+      const outer = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.8, 1.4, 8), flameOuter);
       outer.rotation.x = -Math.PI / 2;
       outer.position.z = -0.7;
-      const inner = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.45, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xfff1b8 }));
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.45, 0.9, 8), flameInner);
       inner.rotation.x = -Math.PI / 2;
       inner.position.z = -0.45;
       outer.userData.fx = inner.userData.fx = true;
@@ -969,7 +976,7 @@ export function createTank() {
     rocketK = k;
     const e = k * k * (3 - 2 * k);
     for (const d of drums) {
-      d.rotation.y = e * (Math.PI / 2);
+      d.rotation.y = d.userData.turn * e * (Math.PI / 2);
       d.position.x = d.userData.home.x - e * 0.25;
       d.position.y = d.userData.home.y + e * 0.12;
       const f = d.userData.flame;
@@ -980,8 +987,14 @@ export function createTank() {
   // world points at the drums' rear ends (where the flame comes out)
   function rocketNozzles() {
     group.updateWorldMatrix(true, true);
-    return drums.map((d) => d.localToWorld(new THREE.Vector3(0, 0, -0.62)));
+    return drums.map((d) => d.localToWorld(new THREE.Vector3(0, 0, -d.userData.turn * 0.62)));
   }
+  // 'normal' or 'afterburner' (hotter: blue core, pink-violet flame)
+  function setFlameStyle(style) {
+    flameOuter.color.set(style === 'afterburner' ? 0xff5fd0 : 0xff8a2a);
+    flameInner.color.set(style === 'afterburner' ? 0x9fe4ff : 0xfff1b8);
+  }
+  const commanderTop = new THREE.Vector3(COMMANDER.x, turretSurfaceY(COMMANDER.x, COMMANDER.z) + 0.3, COMMANDER.z);
 
   return {
     group,
@@ -997,6 +1010,8 @@ export function createTank() {
     aimError: () => aimError,
     setRocket,
     rocketNozzles,
+    setFlameStyle,
+    commanderTop, // turret-local point on top of the commander's cupola
     get rocketK() {
       return rocketK;
     },

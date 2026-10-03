@@ -26,7 +26,7 @@ const GPX = 10; // ground texels per world unit
 const MAP = { x0: -80, x1: 176, z0: -46, z1: 40 }; // ground extent
 const RIVER = { x0: 60, x1: 78, y: -3.4 }; // the river the avenue bridges
 const BRIDGE = { n: -10.4, s: 9.8 }; // deck edges
-const GX = 100; // the checkpoint gate
+const GX = 100; // the gate across the street
 const START_X = -32; // the barricade behind the start
 const CURB = { n: -7.5, s: 6.5 };
 const WALK = { n: -10, s: 9 };
@@ -34,7 +34,7 @@ const SW = 0.16; // sidewalk height
 const CROSS = { x0: 17, x1: 27 }; // the cross street running north
 const JUNCTION = { x0: 128, x1: 144 }; // the intersection at the end of the zone
 const END_X = 156; // the shipping-container wall the airstrike opens
-const SHACKS = [{ x0: 50, x1: 57.6 }, { x0: 105.4, x1: 113 }]; // depot shacks across the street
+const SHACKS = [{ x0: 50, x1: 57.6 }, { x0: 105.4, x1: 113 }]; // checkpoint shacks across the street
 
 const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
 const COLD = 0xcfe8ff;
@@ -55,7 +55,12 @@ function toGround(p, h = 0) {
 }
 
 const inJunction = (x) => x > JUNCTION.x0 && x < JUNCTION.x1;
-const onSidewalk = (x, z) => !inJunction(x) && (z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1)));
+const JROAD = { x0: JUNCTION.x0 + 2, x1: JUNCTION.x1 - 2 }; // the cross road, sidewalks either side
+const onSidewalk = (x, z) => {
+  const off = z >= CURB.s || z <= CURB.n;
+  if (inJunction(x)) return off && !(x > JROAD.x0 && x < JROAD.x1);
+  return z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1));
+};
 const heightAt = (x, z) => (onSidewalk(x, z) ? SW : 0);
 const inRiver = (x) => x > RIVER.x0 - 0.5 && x < RIVER.x1 + 0.5;
 const overWater = (x, z) => inRiver(x) && (z < BRIDGE.n || z > BRIDGE.s);
@@ -127,7 +132,7 @@ function roadTexture(rand, craters) {
   rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#c3c6cc');
   rect(MAP.x0, CURB.n, MAP.x1, CURB.s, '#5c5d62');
   rect(CROSS.x0, -32, CROSS.x1, CURB.n, '#5c5d62');
-  rect(JUNCTION.x0, -30, JUNCTION.x1, 30, '#5c5d62');
+  rect(JROAD.x0, MAP.z0, JROAD.x1, MAP.z1, '#5c5d62');
   speckle(g, W, Z(CURB.s) - Z(CURB.n), ['#66676c', '#525358', '#6c6c70'], W * 40, rand, Z(CURB.n));
 
   g.fillStyle = '#aaa79e';
@@ -473,6 +478,11 @@ function buildAvenue(scene) {
     slab(RIVER.x0, RIVER.x1, CURB.s, BRIDGE.s);
     slab(RIVER.x1, JUNCTION.x0, CURB.s, MAP.z1);
     slab(JUNCTION.x1, MAP.x1, CURB.s, MAP.z1);
+    // the cross road's own sidewalks
+    for (const [xa, xb] of [[JUNCTION.x0, JROAD.x0], [JROAD.x1, JUNCTION.x1]]) {
+      slab(xa, xb, -30, CURB.n);
+      slab(xa, xb, CURB.s, MAP.z1);
+    }
 
     // snow banks plowed up along both curbs, with gaps where paths were cut
     for (const [z, dir] of [[CURB.n - 0.35, -1], [CURB.s + 0.35, 1]]) {
@@ -481,6 +491,12 @@ function buildAvenue(scene) {
         if (x > JUNCTION.x0 - 0.5 && x < JUNCTION.x1 + 0.5) continue;
         if (rand() < 0.12) x += 2;
         B.lump(x, SW, z + dir * rand() * 0.25, 0.5 + rand() * 0.4, 0.2 + rand() * 0.18, 0.35 + rand() * 0.2, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
+      }
+    }
+    // snow banks along the cross road's curbs too
+    for (const [x, dir] of [[JROAD.x0 - 0.35, -1], [JROAD.x1 + 0.35, 1]]) {
+      for (const [za, zb] of [[-19, CURB.n - 0.6], [CURB.s + 0.6, 19]]) {
+        for (let z = za; z < zb; z += 0.55) B.lump(x + dir * rand() * 0.25, SW, z, 0.35 + rand() * 0.2, 0.2 + rand() * 0.18, 0.5 + rand() * 0.4, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
       }
     }
     for (const z of [CURB.n + 0.3, CURB.s - 0.3]) {
@@ -549,9 +565,13 @@ function buildAvenue(scene) {
       const look = { panel: o.panel, accent: o.accent, broken: o.broken ?? 0.25, holes: o.holes ?? 2, shop: o.shop };
       const front = facadeMat(facadeTextures(w, floors, look, rand, pierce));
       const end = mapMat(endTexture(depth, floors, look, rand, false));
-      const west = o.cutaway ? mapMat(cutawayTexture(depth, floors, rand)) : o.mural ? mapMat(endTexture(depth, floors, look, rand, true)) : end;
+      let west = o.cutaway ? mapMat(cutawayTexture(depth, floors, rand)) : o.mural ? mapMat(endTexture(depth, floors, look, rand, true)) : end;
+      let east = end;
+      // corner blocks: the side on the cross street is a full facade too
+      if (o.sideFacade === 'east') east = facadeMat(facadeTextures(depth, floors, look, rand));
+      if (o.sideFacade === 'west') west = facadeMat(facadeTextures(depth, floors, look, rand));
       const roof = toon(0xc6c9ce);
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, depth), [end, west, roof, roof, front, end]);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, depth), [east, west, roof, roof, front, end]);
       m.position.set((x0 + x1) / 2, H / 2, zf - depth / 2);
       m.castShadow = m.receiveShadow = true;
       B.add(m);
@@ -633,8 +653,8 @@ function buildAvenue(scene) {
     building({ x0: CROSS.x1, x1: 39, floors: 9, panel: PANELS[2], accent: ACCENTS[2], mural: true, bite: { w: 4.5, floors: 4 }, holes: 3, pierce: 3 });
     building({ x0: 44, x1: 58, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
     building({ x0: 80, x1: 97, floors: 9, panel: PANELS[4], accent: ACCENTS[4], holes: 3, broken: 0.4, pierce: 3 });
-    building({ x0: 103, x1: JUNCTION.x0 - 0.5, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 2 });
-    building({ x0: JUNCTION.x1 + 0.5, x1: 162, floors: 7, panel: PANELS[3], accent: ACCENTS[0], holes: 4, broken: 0.45, pierce: 2 });
+    building({ x0: 103, x1: JUNCTION.x0 - 0.5, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 2, sideFacade: 'east' });
+    building({ x0: JUNCTION.x1 + 0.5, x1: 162, floors: 7, panel: PANELS[3], accent: ACCENTS[0], holes: 4, broken: 0.45, pierce: 2, sideFacade: 'west' });
     building({ x0: 162, x1: 176, floors: 10, panel: PANELS[2], accent: ACCENTS[1], holes: 3, pierce: 2 });
     // west of the start: more blocks so the street doesn't end in a void
     building({ x0: -78, x1: -44, floors: 9, panel: PANELS[3], accent: ACCENTS[2], holes: 3, pierce: 0 });
@@ -701,6 +721,17 @@ function buildAvenue(scene) {
       // the dead ground behind it: collapsed blocks and rubble mountains
       for (let k = 0; k < 9; k++) rubble(START_X - 8 - rand() * 36, -8 + rand() * 22, 2 + rand() * 2.5, 1.5 + rand() * 2.5, { slabs: 4 });
     }
+    // the cross street: rubble and junk along both sides, a lane left down
+    // the middle for whatever comes out of it
+    rubble(18.4, -13, 1.3, 1.0, { solid: true });
+    rubble(25.7, -16.5, 1.6, 1.3, { solid: true });
+    rubble(18.6, -19.8, 1.2, 0.9, { solid: true });
+    rubble(25.9, -21, 1.1, 0.8);
+    B.chunk(3, 1.8, 0.25, CONCRETE[2], 26.2, 0.8, -12.5, -0.4, 1.4, 0.1);
+    B.block(26.2, -12.5, 0.6, 1.5);
+    B.rebar(18.8, 0.6, -13.4, 4);
+    B.groundCable(20, -15, 1.2, 14);
+    B.groundCable(23, -11, 2.8, 10);
     // the cross street ends in a clean container wall: a straight corridor
     for (let k = 0; k < 2; k++) {
       container(19.8, k * 2.6, -23, 0, CONTAINERS[(k + 1) % 5]);
@@ -799,6 +830,7 @@ function buildAvenue(scene) {
     for (let i = 0; i < poleXs.length - 1; i++) {
       const xa = poleXs[i];
       const xb = poleXs[i + 1];
+      if (inJunction(xa) || inJunction(xb)) continue; // wired separately below
       for (const z of [-4.4, -3.9, 2.6, 3.1]) {
         const y = spanY - 0.3;
         if (rand() < 0.2) {
@@ -820,6 +852,40 @@ function buildAvenue(scene) {
           }
         } else {
           B.sagging(new THREE.Vector3(xa, y, z), new THREE.Vector3(xb, y, z), 0.12);
+        }
+      }
+    }
+    // the intersection: the trolley wires run straight on, and branch off
+    // in curves into both side streets
+    {
+      const y = spanY - 0.3;
+      const xa = poleXs.filter((x) => x < JUNCTION.x0).pop();
+      const xb = poleXs.find((x) => x > JUNCTION.x1);
+      const jx = (JROAD.x0 + JROAD.x1) / 2;
+      const curve = (a, c, b) => {
+        const pts = [];
+        for (let k = 0; k <= 20; k++) {
+          const t = k / 20;
+          pts.push(new THREE.Vector3((1 - t) ** 2 * a.x + 2 * (1 - t) * t * c.x + t * t * b.x, y - Math.sin(t * Math.PI) * 0.15, (1 - t) ** 2 * a.z + 2 * (1 - t) * t * c.z + t * t * b.z));
+        }
+        B.line(pts);
+      };
+      for (const z of [-4.4, -3.9, 2.6, 3.1]) {
+        B.sagging(new THREE.Vector3(xa, y, z), new THREE.Vector3(xb, y, z), 0.2);
+        const north = z < 0;
+        const off = north ? -4.4 - z : z - 2.6; // keep the pair's spacing through the bend
+        const sx = jx + (north ? -1 : 1) * (2 + off * 1.5);
+        curve(new THREE.Vector3(xa, y, z), new THREE.Vector3(sx, y, z), new THREE.Vector3(sx, y, north ? -20 : 20));
+      }
+      // span wires across the side streets, hung off the corner blocks
+      for (const z of [-12, -16]) B.sagging(new THREE.Vector3(JUNCTION.x0 - 0.5, 6, z), new THREE.Vector3(JUNCTION.x1 + 0.5, 6, z), 0.4);
+      // street lamps on the four corners
+      let idx = 40;
+      for (const x of [JUNCTION.x0 + 0.8, JUNCTION.x1 - 0.8]) {
+        for (const side of [-1, 1]) {
+          const z = side < 0 ? CURB.n - 0.6 : CURB.s + 0.6;
+          const i = idx++;
+          B.crushable(() => lampPole(x, z, side, i), { kind: 'pole', pivot: { x, y: SW, z }, footprint: { x, z, hx: 0.25, hz: 0.25, yaw: 0 } });
         }
       }
     }
@@ -882,8 +948,7 @@ function buildAvenue(scene) {
       B.hitBox((xa + xb) / 2, SW + (y + 0.25) / 2, z, xb - xa, y + 0.25, 0.9);
     }
     pipeRun(START_X - 2, 38.6, PZ, 1.05);
-    pipeRun(44.4, JUNCTION.x0 - 0.5, PZ, 1.05);
-    pipeRun(JUNCTION.x1 + 0.5, 176, PZ, 1.05);
+    pipeRun(44.4, SHACKS[1].x0 - 0.3, PZ, 1.05);
     for (const x of [64, 69, 74]) B.piece(0.3, 1.05 - RIVER.y + SW, 0.3, 0x6e6c68, x, (RIVER.y + 1.05 + SW) / 2, PZ);
     const AX = 41.5;
     const AY = 6.6;
@@ -996,6 +1061,9 @@ function buildAvenue(scene) {
     junk(() => P.crates(B, -6, SW, CURB.s + 1.3), 2);
     junk(() => P.crates(B, 20, 0, -3.5), 2);
     junk(() => P.tires(B, 13, 0, 2.6, 4));
+    junk(() => P.crates(B, 19, 0, -16.5), 2);
+    junk(() => P.tires(B, 25.6, 0, -19, 5));
+    B.crushable(() => P.car(B, 25.4, -10.4, 1.45, { kind: 'hatch', paint: BURNT_PAINT[5] }), { kind: 'car', scrap: 2 });
     junk(() => P.crates(B, 120, SW, WALK.n + 1.3), 2);
     junk(() => P.crates(B, 125, SW, CURB.s + 1.2), 2);
     junk(() => P.crates(B, 150, SW, WALK.n + 1.3), 2);
@@ -1072,6 +1140,12 @@ function buildAvenue(scene) {
     garages(-62, 19, WALK.s + 4);
     garages(46, 4, WALK.s + 4);
     garages(81, 6, WALK.s + 4);
+    // past the second checkpoint the pipes end: a row of garages closes the
+    // south side of the street instead, open only where the cross road runs
+    garages(114.6, 4, WALK.s + 1.2);
+    garages(146.2, 9, WALK.s + 1.2);
+    B.block(119.25, WALK.s + 3.7, 6.2, 2.5);
+    B.block(158.6, WALK.s + 3.7, 14, 2.5);
     P.fence(B, -2, 22, SW, WALK.s + 4.4);
     P.fence(B, 100, 112, SW, WALK.s + 4.4);
 
@@ -1343,10 +1417,11 @@ function buildAvenue(scene) {
       });
     });
 
-    function hitGate(at, api) {
-      if (gate.down) return false;
-      if (Math.abs(at.x - GX) > 2.2 || Math.abs(at.z) > 3 || at.y > 3.6) return false;
-      gate.hp--;
+    // the gate is a breakable like the barricades: one shell or a boost ram
+    B.crushable(() => {}, { kind: 'prop', heavy: true, breakable: true, footprint: { x: GX, z: 0, hx: 0.4, hz: 2.5, yaw: 0 }, onBreak: () => (S.api ? breakGate(S.api) : false) });
+    function breakGate(api) {
+      if (gate.down) return true;
+      gate.hp = 0;
       const c = api.combat;
       const center = new THREE.Vector3(GX - 0.3, 1.3, 0);
       c.fx.burst(center, { count: 24, speed: 7, color: 0xffd36b, life: 0.4, size: 0.08, gravity: 12 });
@@ -1355,11 +1430,6 @@ function buildAvenue(scene) {
         l.hinge.rotation.z = -0.1;
         l.hinge.rotation.y = (i ? 1 : -1) * 0.08;
       });
-      if (gate.hp > 0) {
-        api.shake(0.2);
-        api.prompt('Main gun', 'Good hit! One more!');
-        return true;
-      }
       // down it goes
       gate.down = true;
       for (const b of gate.blocks) api.removeBlock(b);
@@ -1375,6 +1445,9 @@ function buildAvenue(scene) {
         c.puffs.spawn(new THREE.Vector3(GX + 1, 0.3, (Math.random() - 0.5) * 4), new THREE.Vector3(Math.cos(a) * 3, 0.6, Math.sin(a) * 3), { color: 0xa9a8a6, s0: 0.3, s1: 0.9, life: 1.4, drag: 2, lift: 0.4, fadeAt: 0.3 });
       }
       api.shake(0.5);
+      api.prompt('Breakthrough', 'The gate is down. Drive through!', { seconds: 4 });
+      api.arrow(new THREE.Vector3(GX + 5, 0.4, 0), 'Go!');
+      if (S.sector === 1) go(5);
       return true;
     }
 
@@ -1383,40 +1456,104 @@ function buildAvenue(scene) {
     // through it. Its sides are walled off to the buildings and the pipes.
     const shacks = SHACKS.map((k) => buildShack(B, { x0: k.x0, x1: k.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: PZ - 0.45 }, heightAt }));
 
-    // ------------------------------------------------- breakable walls
-    // Barricades of shipping containers and crates. Each section topples
-    // over when it's rammed with the boost or hit by the main gun (armored
-    // ones only go when the script says so: the airstrike).
-    function breakableWall(x, sections, { high = 1, armored = false } = {}) {
-      const list = [];
+    // ----------------------------------------------- breakable barricades
+    // Wrecks, jersey blocks and planks nailed across: a boost ram or one
+    // shell from the main gun bursts a section. (Shipping containers are
+    // for what can't be broken through.)
+    function barricade(x, sections) {
       for (const [z0, z1] of sections) {
         const zc = (z0 + z1) / 2;
-        const y = heightAt(x, zc);
-        list.push(
-          B.crushable(
-            () => {
-              const len = z1 - z0;
-              for (let k = 0; k < high; k++) {
-                const c = container(x + (rand() - 0.5) * 0.3, y + k * 2.6, zc + (rand() - 0.5) * 0.4, Math.PI / 2 + (rand() - 0.5) * 0.08, CONTAINERS[(rand() * 5) | 0], k ? (rand() - 0.5) * 0.06 : 0);
-                c.scale.x = Math.min(1, (len - 0.3) / 6);
-              }
-              // crates heaped at its foot, hazard tape across
-              for (let i = 0; i < 4; i++) {
-                const sz = 0.7 + rand() * 0.4;
-                B.piece(sz, sz, sz, rand() < 0.6 ? 0x7a5f3e : 0x6b6f62, x - 1.6 - rand() * 0.4, y + sz / 2, z0 + 0.6 + rand() * (len - 1.2), 0, rand(), 0);
-              }
-              put(B.root, box(0.06, 0.14, len - 0.4, 0xc99a2e), x - 1.3, y + 1.4, zc);
-              B.hitBox(x, y + 1.3 * high, zc, 2.6, 2.6 * high, len);
-              B.block(x, zc, 1.25, len / 2);
-            },
-            { kind: 'topple', heavy: true, breakable: true, armored, scrap: armored ? 0 : 3, pivot: { x, y, z: zc } },
-          ),
+        const len = z1 - z0;
+        B.crushable(
+          () => {
+            const y = heightAt(x, zc);
+            P.car(B, x, zc, Math.PI / 2 + (rand() - 0.5) * 0.3, { kind: rand() < 0.5 ? 'sedan' : 'hatch', paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false, snow: false });
+            const top = P.car(B, x + 0.2, zc + 0.3, Math.PI / 2 + 0.4, { kind: 'hatch', paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false, flipped: true, snow: false });
+            top.position.y = 1.0 + y;
+            top.rotation.z = 0.2;
+            for (const s of [-1, 1]) {
+              const j = put(B.root, box(0.7, 0.9, 1.6, 0x9a978f), x + s * 1.1, y + 0.45, zc + s * 1.2);
+              j.rotation.y = s * 0.4;
+            }
+            // planks nailed across the face, crossed
+            for (const [h, tilt] of [[0.6, 0.18], [1.2, -0.14], [1.75, 0.1]]) {
+              const p = put(B.root, box(0.08, 0.22, len - 0.5, [0x7a5f3e, 0x6b5640, 0x84694a][(rand() * 3) | 0]), x - 1.0, y + h, zc);
+              p.rotation.x = tilt;
+            }
+            for (const zz of [z0 + 0.5, z1 - 0.5]) put(B.root, box(0.12, 2.2, 0.16, 0x5c472e), x - 0.95, y + 1.1, zz);
+            for (let i = 0; i < 6; i++) B.piece(0.3 + rand() * 0.5, 0.2, 0.3, CONCRETE[i % 5], x + (rand() - 0.5) * 2.4, y + 0.1, zc + (rand() - 0.5) * len, rand(), rand() * 3, rand());
+            put(B.root, box(0.12, 0.3, len - 0.4, 0xc99a2e), x - 1.06, y + 0.95, zc); // hazard board
+            B.hitBox(x, y + 1.1, zc, 2.2, 2.2, len);
+            B.block(x, zc, 1.0, len / 2);
+          },
+          { kind: 'prop', heavy: true, breakable: true, scrap: 3, onBreak: () => burst(new THREE.Vector3(x, 1.2, zc)) },
         );
       }
-      return list;
     }
-    // the far end of the bridge: one container high, the boost or cannon opens it
-    breakableWall(81.5, [[WALK.n, -3.3], [-3.3, 3.3], [3.3, WALK.s + 1]]);
+    // a section going up: a blast, then it scatters (the default break)
+    let comb = null;
+    const burst = (at) => {
+      comb?.explode(at);
+      comb?.machineDeath(at.clone().setY(2), 0x4a4440);
+    };
+    barricade(81.5, [[WALK.n, -3.3], [-3.3, 3.3], [3.3, WALK.s + 1]]);
+
+    // The end of the zone: a two-high wall of shipping containers. Only the
+    // airstrike gets through it; it collapses into a heap of torn metal.
+    function containerWall(x, sections) {
+      return sections.map(([z0, z1]) => {
+        const zc = (z0 + z1) / 2;
+        const len = z1 - z0;
+        const c = B.crushable(
+          () => {
+            for (let k = 0; k < 2; k++) {
+              const m = container(x + (rand() - 0.5) * 0.3, k * 2.6, zc + (rand() - 0.5) * 0.4, Math.PI / 2 + (rand() - 0.5) * 0.06, CONTAINERS[(rand() * 5) | 0], k ? (rand() - 0.5) * 0.05 : 0);
+              m.scale.x = Math.min(1.2, len / 6);
+            }
+            B.hitBox(x, 2.6, zc, 2.6, 5.2, len);
+            B.block(x, zc, 1.25, len / 2);
+          },
+          { kind: 'prop', heavy: true, armored: true, pivot: { x, y: 0, z: zc } },
+        );
+        c.onBreak = () => {
+          collapse(c, x, zc, len);
+          return true;
+        };
+        return c;
+      });
+    }
+    // a container section torn apart: the boxes vanish into the blast and a
+    // low heap of crumpled sheet, frames and rubble is left lying there
+    function collapse(c, x, zc, len) {
+      c.group.visible = false;
+      const heap = new THREE.Group();
+      const colors = [...new Set(c.colors)].filter((col) => col !== 0xd0d3d8);
+      for (let i = 0; i < 9; i++) {
+        const sheet = new THREE.Mesh(new THREE.BoxGeometry(1.4 + Math.random() * 1.6, 0.12, 1 + Math.random() * 1.4), toon(colors[i % colors.length] ?? 0x6b6f72));
+        sheet.position.set(x + (Math.random() - 0.5) * 3.5, 0.15 + Math.random() * 0.5, zc + (Math.random() - 0.5) * len);
+        sheet.rotation.set((Math.random() - 0.5) * 0.9, Math.random() * 3, (Math.random() - 0.5) * 0.9);
+        sheet.castShadow = sheet.receiveShadow = true;
+        heap.add(sheet);
+      }
+      for (let i = 0; i < 6; i++) {
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(2 + Math.random() * 2, 0.14, 0.14), toon(0x3a3c3f));
+        beam.position.set(x + (Math.random() - 0.5) * 3, 0.3 + Math.random() * 0.6, zc + (Math.random() - 0.5) * len);
+        beam.rotation.set(Math.random(), Math.random() * 3, (Math.random() - 0.5) * 0.8);
+        heap.add(beam);
+      }
+      B.root.add(heap);
+      const at = new THREE.Vector3(x, 1.5, zc);
+      if (comb) {
+        for (let i = 0; i < 26; i++) {
+          const a = Math.random() * Math.PI * 2;
+          comb.debris.spawn(at.clone().add(new THREE.Vector3(0, Math.random() * 2, (Math.random() - 0.5) * len)), new THREE.Vector3(Math.cos(a) * (2 + Math.random() * 5), 4 + Math.random() * 6, Math.sin(a) * (2 + Math.random() * 5)), { color: colors[i % colors.length] ?? 0x6b6f72, size: 0.12 + Math.random() * 0.2, life: 3 + Math.random() });
+        }
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2;
+          comb.puffs.spawn(at.clone().setY(0.4), new THREE.Vector3(Math.cos(a) * 3, 0.8, Math.sin(a) * 3), { color: 0x8f8b84, s0: 0.3, s1: 1.0, life: 1.6, drag: 2, lift: 0.5, fadeAt: 0.3 });
+        }
+      }
+    }
 
     // ------------------------------ the end of the zone: the intersection
     // A broad crossing; both side streets run on until rubble from collapsed
@@ -1443,7 +1580,7 @@ function buildAvenue(scene) {
         for (const [za, zb] of [[-19, CURB.n - 0.4], [CURB.s + 0.4, 18.5]]) for (let z = za; z < zb; z += 0.8) if (rand() > 0.35) B.lump(x, 0, z, 0.4, 0.08, 0.3, 0x8f8e8b, rand() * 3);
       }
     }
-    const endWall = breakableWall(END_X, [[WALK.n - 0.5, -4], [-4, 2.4], [2.4, PZ - 0.45]], { high: 2, armored: true });
+    const endWall = containerWall(END_X, [[WALK.n - 0.5, -3.4], [-3.4, 3.4], [3.4, WALK.s + 1.6]]);
     // past the wall the street runs on into a last heap of rubble
     rubble(170, -4, 3, 2, { slabs: 3 });
     rubble(171, 3, 3.4, 2.4, { slabs: 3 });
@@ -1487,9 +1624,9 @@ function buildAvenue(scene) {
     // the sector is clear: open the shack ahead and point at it
     function openShack(api, shack, text) {
       shack.openIn();
-      api.objective('Enter the depot');
+      api.objective('Enter the checkpoint');
       api.prompt('Sector clear', text, { go: true });
-      api.arrow(shack.door, 'Depot');
+      api.arrow(shack.door, 'Checkpoint');
     }
     const atDoor = (api, shack) => shack.inDoor > 0.6 && Math.hypot(api.tankPos.x - shack.door.x, api.tankPos.z - shack.door.z) < 5;
 
@@ -1497,7 +1634,8 @@ function buildAvenue(scene) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
       Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false });
       setBounds(api, B1);
-      gate.hp = 2;
+      S.api = api;
+      comb = api.combat;
       api.sectors(SECTORS, 0);
       api.objective('Drive up the street and destroy all enemies');
       if (api.touch) api.prompt('Controls', 'Use the <b>stick</b> in the bottom left to drive.');
@@ -1579,9 +1717,10 @@ function buildAvenue(scene) {
             api.spawnDog(47, -8.4, { delay: 0.3 });
             api.spawnDog(47, 5.6, { delay: 0.6 });
             api.spawnDog(45, 0, { delay: 0.9 });
-            api.spawnDog(x - 16, -4, { delay: 2 });
-            api.spawnDog(x - 16, 4, { delay: 2.4 });
-            api.prompt('Contact', 'Walkers ahead, and coming up from behind!', { danger: true, seconds: 5 });
+            const out = [[22, -9], [21, -3]];
+            api.spawnDog(22, -20, { delay: 2, via: out });
+            api.spawnDog(23, -20.5, { delay: 2.4, via: out });
+            api.prompt('Contact', 'Walkers ahead, and more out of the side street!', { danger: true, seconds: 5 });
             go(7);
           } else if (api.enemiesAlive === 0 && S.t > 3 && S.n === 0) {
             S.n = 1;
@@ -1591,7 +1730,7 @@ function buildAvenue(scene) {
           break;
         case 7:
           if (api.enemiesAlive === 0 && S.t > 3) {
-            openShack(api, shackA, 'Street clear. Roll into the <b>depot</b> for repairs and parts.');
+            openShack(api, shackA, 'Street clear. Roll into the <b>checkpoint</b> for repairs and parts.');
             go(8);
           }
           break;
@@ -1648,30 +1787,29 @@ function buildAvenue(scene) {
             api.spawnDog(97.5, -7.5);
             api.spawnDog(97.5, 7.6, { delay: 0.4 });
             api.spawnDog(96, 0, { delay: 0.9 });
-            api.spawnDog(x - 12, 0, { delay: 1.8 });
+            api.spawnDog(98, 3, { delay: 1.8 });
             go(3);
           }
           break;
         case 3:
           if (api.enemiesAlive === 0 && S.t > 1) {
-            api.objective('Blow down the checkpoint gate');
-            api.prompt('Main gun', api.touch ? `${CLICK} the gate to fire at it. Two hits bring it down.` : `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
-            api.arrow(gateMark, `${CLICK} to shoot the gate!`);
+            api.objective('Break the gate');
+            api.prompt('Gate', api.touch ? `${CLICK} the gate to shell it, or boost into it.` : `Shell the gate (${CLICK}), or boost into it.`);
+            api.arrow(gateMark, 'Break it!');
             go(4);
           }
           break;
         // 4: waiting for the gate (onImpact)
         case 5:
           if (x > GX + 1) {
-            openShack(api, shackB, 'Through! Another <b>depot</b>. Patch up before the intersection.');
+            openShack(api, shackB, 'Through! Another <b>checkpoint</b>. Patch up before the intersection.');
             go(6);
           }
           break;
         case 6:
           if (atDoor(api, shackB)) {
             go(7);
-            const pool = ['twinmg', 'he', 'plating', 'dozer', 'autoloader', 'era'].filter((id) => !run.parts.includes(id));
-            api.depot(shackB, { offers: pool.slice(0, 3), onLeave: () => startSector3(api) });
+            api.depot(shackB, { offers: ['afterburner', 'twinmg', 'optics'], onLeave: () => startSector3(api) });
           }
           break;
       }
@@ -1732,55 +1870,35 @@ function buildAvenue(scene) {
         case 2:
           if (S.strike.update(dt)) {
             S.strike = null;
-            api.prompt('Zone clear', 'The wall is down. Drive through!', { go: true });
             api.arrow(new THREE.Vector3(END_X + 3, 0.6, 0), 'Exit');
             go(3);
           }
           break;
         case 3:
-          if (api.tankPos.x > END_X + 2) {
+          // the level ends the moment the tank crosses the wall's line
+          if (api.tankPos.x > END_X - 0.5) {
             api.arrow(null);
-            api.win('Zone 1 cleared');
+            api.win('Level clear');
             go(4);
           }
           break;
       }
     }
 
-    // Jets scream over, bombs walk along the container wall and anything
-    // still standing near it. update() returns true when it's over.
+    // Bombs walk along the container wall and anything still standing near
+    // it. update() returns true when it's over.
     function airstrike(api) {
       const c = api.combat;
-      const jets = [0, 1].map((i) => {
-        const g = new THREE.Group();
-        put(g, box(3.4, 0.4, 0.55, 0x3a3d42, { r: 0.08 }), 0, 0, 0);
-        put(g, box(1.5, 0.1, 4.2, 0x33363b, { r: 0.03 }), -0.2, 0, 0);
-        put(g, box(0.7, 0.08, 1.8, 0x33363b, { r: 0.02 }), -1.5, 0, 0);
-        put(g, box(0.6, 0.8, 0.08, 0x33363b, { r: 0.02 }), -1.5, 0.4, 0);
-        put(g, box(0.4, 0.18, 0.3, 0xcfe8ff, { glow: true }), 1.0, 0.2, 0);
-        put(g, box(0.3, 0.3, 0.3, 0xffb347, { glow: true }), -1.85, 0, 0);
-        g.traverse((m) => m.isMesh && (m.castShadow = true));
-        g.visible = false;
-        B.root.add(g);
-        return { g, delay: i * 0.35, z: i ? 3.5 : -3.5 };
-      });
       const points = [];
       for (const w of endWall) for (const dz of [-1.5, 1.5]) points.push(new THREE.Vector3(w.footprint.x, 1.2, w.footprint.z + dz));
       for (const e of api.enemies) points.push(new THREE.Vector3(e.pos.x, 0.6, e.pos.z));
       for (let i = 0; i < 4; i++) points.push(new THREE.Vector3(END_X - 4 + Math.random() * 3, 0.4, -8 + Math.random() * 16));
       points.sort((a, b) => a.z - b.z);
-      const bombs = points.map((p, i) => ({ p, at: 1.0 + i * 0.09, done: false }));
+      const bombs = points.map((p, i) => ({ p, at: 0.5 + i * 0.09, done: false }));
       let t = 0;
       return {
         update(dt) {
           t += dt;
-          for (const j of jets) {
-            const k = (t - j.delay) / 1.8;
-            j.g.visible = k > 0 && k < 1;
-            if (!j.g.visible) continue;
-            j.g.position.set(END_X - 40 + k * 60, 16, 22 - k * 44 + j.z);
-            j.g.rotation.y = Math.atan2(44, 60);
-          }
           for (const b of bombs) {
             if (b.done || t < b.at) continue;
             b.done = true;
@@ -1790,9 +1908,8 @@ function buildAvenue(scene) {
             for (const w of endWall) if (Math.abs(w.footprint.z - b.p.z) < 3.3 && Math.abs(w.footprint.x - b.p.x) < 3) api.crush(w, { x: w.footprint.x - 3, z: w.footprint.z, yaw: 0 });
             api.shake(0.6);
           }
-          if (t > 3.2) {
+          if (t > 2.6) {
             for (const w of endWall) api.crush(w, { x: w.footprint.x - 3, z: w.footprint.z, yaw: 0 });
-            for (const j of jets) j.g.removeFromParent();
             return true;
           }
           return false;
@@ -1807,13 +1924,7 @@ function buildAvenue(scene) {
       else if (S.sector === 1) sector2(api, dt);
       else sector3(api, dt);
     }
-    function onImpact(at, mesh, api) {
-      if (!hitGate(at, api) || !gate.down) return;
-      api.objective('Drive through the gate');
-      api.prompt('Breakthrough', 'The gate is down. Drive through!', { seconds: 5 });
-      api.arrow(new THREE.Vector3(GX + 5, 0.4, 0), 'Go!');
-      if (S.sector === 1) go(5);
-    }
+    function onImpact() {}
 
     function update(dt, t, ctx = {}) {
       B.update(dt, t, ctx);

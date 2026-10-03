@@ -45,6 +45,7 @@ export class Crushing {
     c.done = true;
     for (const b of c.blocks) this.removeBlock(b);
     for (const m of c.colliders) this.removeCollider(m);
+    if (c.onBreak?.(from) === true) return; // the level broke it its own way (the gate, the end wall)
     const { combat } = this;
     const g = c.group;
     const f = c.footprint;

@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 
 const CSS = `
-.hud { --go: #6be08a; --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
+.hud button, .hud .hud-card { cursor: var(--cursor); }
+.hud { cursor: inherit; --go: #6be08a; --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
   position: fixed; inset: 0; pointer-events: none; z-index: 10; color: var(--ink);
   font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; -webkit-font-smoothing: none; image-rendering: pixelated; }
 .hud .px { font-family: 'Silkscreen', 'Pixelify Sans', ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -82,21 +83,34 @@ const CSS = `
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
 .hud:not(.touch) .hud-ability canvas { width: 64px; height: 64px; }
-.hud-picker { position: absolute; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 12px; justify-items: center;
-  width: min(640px, calc(100vw - 32px)); pointer-events: auto; }
+.hud-picker { position: absolute; left: 50%; bottom: calc(22vh + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 14px; justify-items: center;
+  width: min(660px, calc(100vw - 32px)); pointer-events: auto; }
 .hud-picker .title { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--go); text-shadow: 2px 2px 0 #000; }
-.hud-picker .row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
-.hud-card { width: 180px; padding: 12px 12px 14px; display: grid; gap: 7px; justify-items: center; align-content: start; text-align: center; cursor: pointer; border: 0; color: var(--ink); font: inherit; }
-.hud-card canvas { width: 60px; height: 42px; image-rendering: pixelated; }
+.hud-picker .row { display: flex; gap: 16px; justify-content: center; align-items: stretch; flex-wrap: wrap; }
+.hud-card { width: 184px; min-height: 150px; padding: 14px 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; border: 0; color: var(--ink); font: inherit;
+  transition: transform 0.12s steps(3); }
 .hud-card .name { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
 .hud-card .what { font-size: 13px; line-height: 1.25; }
-.hud-card .take { margin-top: 2px; padding: 6px 14px 7px; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40; }
-.hud-card:hover, .hud-card:focus-visible { filter: brightness(1.2); outline: none; }
-.hud-picker .skip { padding: 7px 16px 8px; border: 0; cursor: pointer; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud-card .take { margin-top: auto; padding: 7px 18px 8px; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40; }
+.hud-card:hover, .hud-card:focus-visible { transform: translateY(-6px) scale(1.07); outline: none; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 4px 4px 0 4px #000; }
+.hud-card:hover .take, .hud-card:focus-visible .take { background: #b6ffc4; box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000, 0 0 12px 2px #6be08a88; }
+.hud-card:hover .name { color: #ffd08a; }
+.hud-picker .skip { padding: 7px 16px 8px; border: 0; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud-picker .skip:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--ink); }
 .hud.touch .hud-card { width: 150px; padding: 10px 8px 12px; }
 .hud-continue { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); padding: 14px 20px 15px; border: 0; cursor: pointer; pointer-events: auto;
   font: 400 16px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000, 0 5px 0 2px #2f6b40; animation: hudready 1s steps(2) infinite; }
 .hud-end .bank { color: var(--amber); font-size: 14px; }
+.hud-end .parts { display: grid; gap: 8px; justify-items: center; }
+.hud-end .parts > span { font-size: 12px; color: var(--dim); }
+.hud-end .icons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.hud-end .icon { position: relative; width: 56px; height: 42px; padding: 4px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; display: grid; place-items: center; }
+.hud-end .icon canvas { position: static; inset: auto; width: 48px; height: 30px; image-rendering: pixelated; } /* the page styles every canvas as full-screen */
+.hud-end .icon:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.hud-end .tip { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%); width: 180px; padding: 8px 10px 10px; display: none; gap: 4px; text-align: center; z-index: 2; }
+.hud-end .icon:hover .tip { display: grid; }
+.hud-end .tip b { font: 400 12px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); font-weight: 400; }
+.hud-end .tip span { font-size: 12px; line-height: 1.25; color: var(--ink); }
 .hud-arrow { --go: #6be08a; position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 4px; transform: translate(-50%, -100%); }
 .hud-arrow .lbl { padding: 4px 8px 5px; background: var(--panel); color: var(--go); font: 400 13px/1.2 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap;
   box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go); animation: hudbreathe 1.2s steps(3) infinite; }
@@ -207,18 +221,35 @@ function drawAbility(c, k, lit) {
   }
 }
 
-// A part's pixel icon for its depot card (rows of '#' ink and '+' accent).
+// A part's pixel icon (rows of characters, one per pixel).
+const ICON_INK = { '#': '#f1e9d8', '+': '#ffb347', '-': '#8a9097', '*': '#5fe6ff', '%': '#ff6fd8' };
 function drawIcon(c, rows) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height);
   rows.forEach((row, y) => {
     [...row].forEach((ch, x) => {
-      if (ch === '.') return;
-      g.fillStyle = ch === '#' ? '#f1e9d8' : '#ffb347';
+      if (!ICON_INK[ch]) return;
+      g.fillStyle = ICON_INK[ch];
       g.fillRect(x, y, 1, 1);
     });
   });
 }
+
+// The pointer outside of combat: a chunky pixel arrow, bone with a black
+// edge, drawn at 2x.
+const CURSOR = (() => {
+  const rows = ['X.........', 'XX........', 'XoX.......', 'XooX......', 'XoooX.....', 'XooooX....', 'XoooooX...', 'XooooooX..', 'XoooooooX.', 'XooooXXXXX', 'XooXoX....', 'XoX.XoX...', 'XX..XoX...', 'X....XoX..', '.....XXX..'];
+  const c = document.createElement('canvas');
+  c.width = 20;
+  c.height = 30;
+  const g = c.getContext('2d');
+  rows.forEach((r, y) => [...r].forEach((ch, x) => {
+    if (ch === '.') return;
+    g.fillStyle = ch === 'X' ? '#000' : '#f1e9d8';
+    g.fillRect(x * 2, y * 2, 2, 2);
+  }));
+  return `url(${c.toDataURL()}) 0 0, default`;
+})();
 
 let injected = false;
 function inject() {
@@ -240,6 +271,7 @@ export function createHud() {
   inject();
   const root = document.createElement('div');
   root.className = 'hud';
+  root.style.setProperty('--cursor', CURSOR);
   root.innerHTML = `
     <canvas class="hud-spot"></canvas>
     <div class="hud-hurt"></div>
@@ -249,8 +281,8 @@ export function createHud() {
     </div>
     <div class="hud-right">
       <div class="hud-kills panel px" hidden>Destroyed <b>0</b></div>
-      <div class="hud-scrap panel px" hidden><i></i>Scrap <b>0</b></div>
-      <div class="hud-chain px" hidden><span><small>Chain </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
+      <div class="hud-scrap panel px" hidden><i></i>Scraps <b>0</b></div>
+      <div class="hud-chain px" hidden><span><small>Multiplier </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
     </div>
     <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip">Skip</button></div>
     <button type="button" class="hud-continue" hidden>Continue &#9654;</button>
@@ -273,7 +305,7 @@ export function createHud() {
     </div>
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
-    <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="bank px"></div><button type="button"></button></div>
+    <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts acquired</span><div class="icons"></div></div><div class="bank px"></div><button type="button"></button></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -476,7 +508,8 @@ export function createHud() {
     },
     abilityCenter,
     // depot parts: [{ id, name, text, icon }], or null to hide
-    showPicker(list, onPick, skip) {
+    // onHover(id | null): the card under the pointer
+    showPicker(list, onPick, skip, onHover) {
       picker.hidden = !list;
       onSkip = skip;
       const row = picker.querySelector('.row');
@@ -485,14 +518,17 @@ export function createHud() {
         const el = document.createElement('button');
         el.type = 'button';
         el.className = 'hud-card panel';
-        el.innerHTML = '<canvas width="10" height="7"></canvas><span class="name"></span><span class="what"></span><span class="take">Take</span>';
-        drawIcon(el.querySelector('canvas'), c.icon);
+        el.innerHTML = '<span class="name"></span><span class="what"></span><span class="take">Pick</span>';
         el.querySelector('.name').textContent = c.name;
         el.querySelector('.what').textContent = c.text;
         el.addEventListener('click', () => onPick(c.id));
+        el.addEventListener('pointerenter', () => onHover?.(c.id));
+        el.addEventListener('pointerleave', () => onHover?.(null));
+        el.addEventListener('focus', () => onHover?.(c.id));
         row.append(el);
       }
     },
+    cursor: CURSOR,
     showContinue(fn) {
       cont.hidden = !fn;
       onContinue = fn;
@@ -520,8 +556,22 @@ export function createHud() {
       numbers.push({ el, p: worldPos.clone(), t: 0, vx: (Math.random() - 0.5) * 0.8, life: kind === 'mg' ? 0.55 : kind === 'chain' || kind === 'heal' ? 1.1 : 0.9 });
       if (numbers.length > 40) numbers.shift().el.remove();
     },
-    showEnd(kind, title, stats, button, onClick, bank = '') {
+    // parts: [{ name, text, icon }] shown as icons with a hover summary
+    showEnd(kind, title, stats, button, onClick, bank = '', parts = []) {
       end.hidden = false;
+      const box = end.querySelector('.parts');
+      box.hidden = !parts.length;
+      const icons = box.querySelector('.icons');
+      icons.innerHTML = '';
+      for (const p of parts) {
+        const el = document.createElement('div');
+        el.className = 'icon';
+        el.innerHTML = '<canvas width="16" height="10"></canvas><div class="tip panel"><b></b><span></span></div>';
+        drawIcon(el.querySelector('canvas'), p.icon);
+        el.querySelector('.tip b').textContent = p.name;
+        el.querySelector('.tip span').textContent = p.text;
+        icons.append(el);
+      }
       end.querySelector('.bank').textContent = bank;
       end.querySelector('.bank').hidden = !bank;
       end.className = `hud-end panel ${kind}`;

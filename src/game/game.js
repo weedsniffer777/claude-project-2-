@@ -30,13 +30,14 @@ const TURN_RATE = 4;
 const LAMP_LIGHTS = 6; // max point lights shared by the level's emitters nearest the tank
 
 const MG_ACCURACY = 0.8;
-// fuel-can rockets
-const BOOST_TIME = 1.0;
-const BOOST_COOLDOWN = 6;
+// boost (the fuel drums as rockets); time, cooldown and speed scale with parts
 const BOOST_SPEED = MAX_SPEED * 2.2;
 const RAM_DAMAGE = 80;
-// kill chains: kills within this many seconds of each other
-const CHAIN_WINDOW = 3;
+// the multiplier: each kill adds one (up to x5); when no kill comes for a
+// while it steps down one at a time
+const MULT_HOLD = 4; // seconds a fresh kill keeps it
+const MULT_STEP = 2.2; // seconds per step down after that
+const MULT_MAX = 5;
 const SLOW_MO = 0.15; // game speed under a tutorial spotlight
 const BANK_KEY = 'scavenger.bank';
 function bank(add = 0) {
@@ -116,6 +117,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     // a fresh run: bare tank, no parts, no rockets
     for (const m of partMeshes) m.removeFromParent();
     partMeshes.length = 0;
+    tank.setFlameStyle('normal');
     stats = statsFor([]);
     Object.assign(run, {
       hp: stats.maxHp,
@@ -141,6 +143,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       depot: null,
       fading: false,
       auto: null,
+      autoKeep: false,
     });
     hud.showContinue(null);
     hud.showPicker(null);
@@ -263,28 +266,33 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       run.boss = e ? { e, name } : null;
       if (!e) hud.setBoss(null, null);
     },
-    // Into a depot: fade from the shack door to the depot interior, the tank
-    // rolls itself onto the repair plate, a pick of parts pops up (or skip),
-    // then Continue drives it out and it fades back to the street, out of
-    // the shack's back door. gift: 'boost' rigs the drums as boosters.
+    // Into a checkpoint: the tank rolls on through the shack door as the
+    // screen fades, and comes out in the checkpoint interior already driving
+    // onto the repair plate. A pick of parts pops up (or skip), then Continue
+    // drives it out; it fades back to the street still rolling, out of the
+    // shack's back door. gift: 'boost' rigs the drums as boosters.
     depot(shack, { offers, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
-      speed = 0;
       hud.setArrow(null);
       hud.setSpot(null);
+      hud.clearPrompt();
       run.spot = null;
-      run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds };
+      run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds, focus: null };
+      level.bounds = { ...level.bounds, maxX: shack.x0 + 4 };
+      run.auto = new THREE.Vector3(shack.x0 + 3, 0, pos.z * 0.5);
+      setCursor();
       api.transition(() => {
         room.reset();
         room.setOffers(offers);
         level.bounds = room.bounds;
-        api.teleport(room.entry.x, room.entry.z, room.entry.yaw);
+        const keep = speed;
+        api.teleport(room.entry.x - 2, room.entry.z, room.entry.yaw);
+        speed = Math.max(keep, 4);
         run.depot.step = 'in';
-        hud.prompt('Depot', 'Safe for now. Repairing.', { go: true });
         run.auto = room.plate;
       });
     },
@@ -333,15 +341,25 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       const m = Math.floor(run.time / 60);
       const s = String(Math.floor(run.time % 60)).padStart(2, '0');
       const total = bank(run.scrap);
-      hud.showEnd(
-        'win',
-        title,
-        [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Parts fitted', run.parts.length], ['Scrap', run.scrap]],
-        'Play again',
-        () => loadLevel(levelDef.id),
-        `+${run.scrap} scrap banked${total != null ? ` · ${total} total` : ''}`,
-      );
-      canvas.style.cursor = '';
+      hud.setBoss(null, null);
+      hud.setArrow(null);
+      // the tank drives on out of the shot; the camera stays where it is
+      level.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
+      const yaw = tank.group.rotation.y;
+      run.auto = new THREE.Vector3(pos.x + Math.cos(yaw) * 40, 0, pos.z - Math.sin(yaw) * 40);
+      run.autoKeep = true;
+      setTimeout(() => {
+        hud.showEnd(
+          'win',
+          title,
+          [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
+          'Play again',
+          () => loadLevel(levelDef.id),
+          `+${run.scrap} scraps banked${total != null ? ` · ${total} total` : ''}`,
+          run.parts.map((id) => PARTS[id]),
+        );
+        setCursor();
+      }, 900);
     },
   };
   let mgActive = false;
@@ -349,9 +367,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
   function onKill(e, blasted) {
-    run.chain = run.chainT > 0 ? run.chain + 1 : 1;
-    run.chainT = CHAIN_WINDOW;
-    const mult = Math.min(5, run.chain);
+    run.chain = Math.min(MULT_MAX, Math.max(1, run.chain) + (run.chainT > 0 ? 1 : 0));
+    run.chainT = MULT_HOLD;
+    const mult = run.chain;
     const at = new THREE.Vector3(e.pos.x, 0.8 * e.stats.scale, e.pos.z);
     pickups.spawn(at, e.stats.scrap > 10 ? 16 : e.stats.scrap, 'scrap', e.stats.scrap > 10 ? Math.ceil(e.stats.scrap / 16) * mult : mult);
     run.drops++;
@@ -403,12 +421,13 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.showEnd(
       'lose',
       'Tank disabled',
-      [['Enemies destroyed', enemies.killed], ['Scrap collected', run.scrap]],
+      [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
       'Retry',
       () => loadLevel(levelDef.id),
-      `Half recovered: +${kept} scrap banked${total != null ? ` · ${total} total` : ''}`,
+      `Half recovered: +${kept} scraps banked${total != null ? ` · ${total} total` : ''}`,
+      run.parts.map((id) => PARTS[id]),
     );
-    canvas.style.cursor = '';
+    setCursor();
     combat.explode(pos.clone().setY(1.2));
   }
 
@@ -437,8 +456,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   }
   function boost() {
     if (!run.rockets || run.over || run.mode !== 'field' || run.locked || run.boostCd > 0) return;
-    run.boost = BOOST_TIME;
-    run.boostCd = BOOST_COOLDOWN;
+    run.boost = stats.boostTime;
+    run.boostCd = stats.boostCooldown;
     run.boosts++;
     combat.shake = Math.max(combat.shake, 0.2);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xffd08a, 0.2, 1.2, 0.12);
@@ -570,9 +589,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     });
   }
 
-  // The depot stop, step by step: enter (fade) -> in (drive to the plate)
-  // -> repair -> pick (cards, or skip) -> fit (crane) -> done (Continue) ->
-  // out (drive to the door, fade back to the street).
+  // The checkpoint stop, step by step: enter (fade) -> in (drive onto the
+  // plate) -> repair -> pick (cards, or skip) -> fit (crane) -> done
+  // (Continue) -> out (drive for the door, fading back to the street).
   function depotFrame(dt) {
     const st = run.depot;
     st.t += dt;
@@ -583,80 +602,137 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     }
     if (st.step === 'repair') {
       if (run.hp < stats.maxHp) {
-        run.hp = Math.min(stats.maxHp, run.hp + dt * 60);
+        run.hp = Math.min(stats.maxHp, run.hp + dt * 80);
         hud.setHull(run.hp, stats.maxHp);
       }
       if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
-      if (st.t > 1.3 && run.hp >= stats.maxHp - 0.01) {
+      if (st.t > 0.8 && run.hp >= stats.maxHp - 0.01) {
         if (st.gift === 'boost') run.rockets = true; // the drums get rigged as boosters
         st.step = 'pick';
         showPicker();
       }
     }
-    if (st.step === 'out' && !run.auto) {
+    // leaving: start the fade while still rolling for the door
+    if (st.step === 'out' && pos.x > st.room.outside.x - 4) {
       st.step = 'gone';
       api.transition(() => {
+        const keep = Math.max(speed, 4);
         st.shack.openOut();
         level.bounds = st.fieldBounds;
-        api.teleport(st.shack.outside.x, st.shack.outside.z, 0);
+        api.teleport(st.shack.outside.x - 2.5, st.shack.outside.z, 0);
+        speed = keep;
         run.mode = 'field';
         run.locked = false;
         run.depot = null;
-        hud.clearPrompt();
+        run.auto = null;
+        setCursor();
         st.onLeave();
       });
     }
   }
   function showPicker() {
     const st = run.depot;
-    hud.prompt('Depot', 'Repaired. Pick <b>one</b> part to fit, or skip.', { go: true });
     hud.showPicker(
       st.offers.map((id) => ({ id, ...PARTS[id] })),
       (id) => pick(id),
-      () => done('Skipped. Nothing fitted.'),
+      () => done(),
+      // hovering a card swings the camera over to that part's pallet
+      (id) => {
+        const pad = id && st.room.pads.find((p) => p.offer === id);
+        st.focus = pad ? new THREE.Vector3(pad.x, 0, pad.z) : null;
+      },
     );
   }
   function pick(id) {
     const st = run.depot;
     if (!st || st.step !== 'pick') return;
     st.step = 'fit';
+    st.focus = null;
     hud.showPicker(null);
-    hud.prompt('Depot', `Fitting the <b>${PARTS[id].name}</b>...`, { go: true });
     st.room.install(id, () => new THREE.Vector3(pos.x, 0, pos.z), {
       onFit() {
         run.parts.push(id);
-        partMeshes.push(attachPart(tank, id));
+        const g = attachPart(tank, id);
+        partMeshes.push(g, ...(g.userData.extra || []));
         const was = stats.maxHp;
         stats = statsFor(run.parts);
+        tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
+        if (lastSize) game.resize(...lastSize); // optics widen the view
         run.hp = Math.min(stats.maxHp, run.hp + (stats.maxHp - was) + (PARTS[id].heal || 0));
         hud.setHull(run.hp, stats.maxHp);
         combat.fx.burst(pos.clone().setY(1.6), { count: 30, speed: 6, color: 0xffd36b, life: 0.45, size: 0.07, gravity: 12 });
         combat.glow.flash(pos.clone().setY(1.6), 0xfff0c8, 0.2, 1.4, 0.1);
         combat.shake = Math.max(combat.shake, 0.15);
       },
-      onDone: () => done(`<b>${PARTS[id].name}</b> fitted.`),
+      onDone: () => done(),
     });
   }
-  function done(text) {
+  function done() {
     const st = run.depot;
     if (!st || (st.step !== 'pick' && st.step !== 'fit')) return;
     st.step = 'done';
+    st.focus = null;
     hud.showPicker(null);
-    hud.prompt('Depot', `${text} Continue when you're ready.`, { go: true });
     hud.showContinue(() => {
       if (st.step !== 'done') return;
       hud.showContinue(null);
       st.step = 'opening';
       st.room.openDoor();
-      hud.prompt('Depot', 'Door opening. Next sector!', { go: true, seconds: 3 });
-      // roll out once the door is up
+      // roll for the door as it goes up
       const wait = () => {
-        if (st.room.doorOpen < 0.6) return void setTimeout(wait, 100);
+        if (st.room.doorOpen < 0.35) return void setTimeout(wait, 60);
         st.step = 'out';
         run.auto = st.room.outside;
+        run.autoKeep = true;
       };
       wait();
     });
+  }
+  // the pointer: the gun's reticle while fighting, a pixel arrow elsewhere
+  function setCursor() {
+    if (!canvas.isConnected) return;
+    canvas.style.cursor = run.over || run.mode === 'depot' ? hud.cursor : 'none';
+  }
+
+  // second roof MG (Twin MG part): turns on its own and takes the nearest
+  // walker the first MG isn't already on
+  const mg2 = { timer: 0, target: null };
+  const mgWorld = new THREE.Vector3();
+  function twinMg(dt, t, first) {
+    const g = partMeshes.find((m) => m.userData.pivot);
+    if (!g || run.over || run.mode !== 'field' || dt <= 0) return;
+    let best = null;
+    let bd = stats.mgRange ** 2;
+    for (const e of enemies.alive) {
+      if (e === first) continue;
+      const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    const target = best || first;
+    if (!target) return;
+    const pivot = g.userData.pivot;
+    pivot.getWorldPosition(mgWorld);
+    const aim = enemies.aimPoint(target);
+    const want = wrapAngle(Math.atan2(-(aim.z - mgWorld.z), aim.x - mgWorld.x) - tank.group.rotation.y - tank.turret.rotation.y);
+    pivot.rotation.y = approachAngle(pivot.rotation.y, want, 9 * dt);
+    pivot.rotation.z = THREE.MathUtils.clamp(Math.atan2(aim.y - mgWorld.y, Math.hypot(aim.x - mgWorld.x, aim.z - mgWorld.z)), -0.3, 0.9);
+    if (Math.abs(wrapAngle(want - pivot.rotation.y)) > 0.3) return;
+    mg2.timer -= dt;
+    if (mg2.timer > 0 || Math.sin(t * 2.4 + 1.5) < -0.3) return;
+    mg2.timer = 0.08;
+    const muzzle = pivot.localToWorld(g.userData.muzzle.clone());
+    const hit = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.2, (Math.random() - 0.5) * 0.35));
+    combat.glow.tracer(muzzle, hit, 0xffe08a, 0.05, 0.07);
+    combat.glow.flash(muzzle, 0xffc860, 0.08, 0.38, 0.05);
+    combat.fx.burst(hit, { count: 4, speed: 3.5, color: 0xffd36b, life: 0.18, size: 0.06, gravity: 9 });
+    if (Math.random() > MG_ACCURACY) return;
+    const killed = enemies.damage(target, stats.mgDamage);
+    const p = hit.clone().add(new THREE.Vector3(0, 0.5, 0));
+    hud.damage(p, stats.mgDamage, 'mg');
+    if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
   }
 
   const input = new THREE.Vector3();
@@ -665,7 +741,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const tmp = new THREE.Vector3();
   loadLevel(startLevel);
 
-  return {
+  let lastSize = null;
+  const game = {
     enter() {
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
@@ -676,7 +753,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.addEventListener('pointerleave', onLeave);
       canvas.addEventListener('pointerup', onUp);
       canvas.addEventListener('pointercancel', onUp);
-      canvas.style.cursor = run.over ? '' : 'none';
+      setCursor();
       pixel.setActorOutlines(true);
       pixel.setHeight(PIXEL_ROWS); // the model viewer may have changed it
       hud.mount();
@@ -698,8 +775,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hud.unmount();
     },
     resize(w, h) {
+      lastSize = [w, h];
       const aspect = w / h;
-      const viewH = Math.max(VIEW_H, 15 / aspect);
+      const viewH = Math.max(VIEW_H, 15 / aspect) * stats.view;
       camera.left = (-viewH * aspect) / 2;
       camera.right = (viewH * aspect) / 2;
       camera.top = viewH / 2;
@@ -728,8 +806,14 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       if (!run.over) run.time += dt;
       reload = Math.min(1, reload + dt / stats.reload);
       run.boostCd = Math.max(0, run.boostCd - dt);
-      run.chainT = Math.max(0, run.chainT - dt);
-      if (run.chainT <= 0) run.chain = 0;
+      if (run.chain > 0) {
+        run.chainT -= dt;
+        if (run.chainT <= 0) {
+          run.chain--;
+          run.chainT = run.chain > 1 ? MULT_STEP : 0;
+          if (run.chain <= 1) run.chain = 0;
+        }
+      }
 
       // the hull turns toward the input direction and slows while turning
       input.set(0, 0, 0);
@@ -752,10 +836,11 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         const dist = Math.hypot(dx, dz);
         if (dist < 0.35) {
           run.auto = null;
-          speed = 0;
+          if (!run.autoKeep) speed = 0;
+          run.autoKeep = false;
         } else {
           input.set(dx, 0, dz);
-          throttle = THREE.MathUtils.clamp(dist / 3, 0.25, 0.75);
+          throttle = run.autoKeep ? 1 : THREE.MathUtils.clamp(dist / 2, 0.45, 1);
         }
       }
       if (input.lengthSq() > 0.02) {
@@ -767,7 +852,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       }
       if (boosting) {
         run.boost -= dt;
-        want = BOOST_SPEED;
+        want = BOOST_SPEED * stats.boostSpeed;
         accel = 60;
       }
       speed += THREE.MathUtils.clamp(want - speed, -accel * dt, accel * dt);
@@ -820,8 +905,9 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         for (const n of tank.rocketNozzles()) {
           const back = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
           for (let i = 0; i < 2; i++) {
+            if (i && stats.afterburner && Math.random() < 0.6) continue; // burns cleaner: less smoke
             combat.puffs.spawn(n.clone().addScaledVector(back, 0.3), back.clone().multiplyScalar(4 + Math.random() * 3).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5)), {
-              color: i ? 0x6b6a6f : 0xffa040,
+              color: i ? 0x6b6a6f : stats.afterburner ? (Math.random() < 0.5 ? 0xff6fd8 : 0x8fd8ff) : 0xffa040,
               s0: 0.14,
               s1: i ? 0.5 : 0.28,
               life: i ? 0.7 : 0.18,
@@ -831,7 +917,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
             });
           }
           if (Math.random() < 0.5) combat.fx.spawn(n, back.clone().multiplyScalar(6).add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), { color: 0xffd36b, life: 0.3, size: 0.07, gravity: 6, glow: true });
-          combat.glow.light(n, 0xff8a2a, 12, 0.05);
+          combat.glow.light(n, stats.afterburner ? 0xc77dff : 0xff8a2a, 12, 0.05);
         }
         combat.shake = Math.max(combat.shake, 0.06);
       }
@@ -864,8 +950,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
 
       // camera follows; the aim is re-cast every frame so it tracks while driving
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
-      if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.room.focus, 0.5); // frame the room, not just the tank
-      camTarget.lerp(camWant, 1 - Math.exp(-realDt * 6));
+      if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5); // frame the room (or the part hovered)
+      if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : 6))); // once the zone's won the camera stays put
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       camera.updateMatrixWorld();
@@ -903,6 +989,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         combat.fx.burst(e.target, { count: 5, speed: 5, color: 0xfff3c4, life: 0.2, size: 0.06, gravity: 10 });
         if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
       }
+      if (stats.twinMg) twinMg(dt, t, mgTarget);
       tryFire(dt);
       combat.handleTankEvents(tank);
       combat.update(dt);
@@ -939,8 +1026,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hud.showReticle(!!client && !run.over && run.mode === 'field');
       if (client) hud.setReticle(client[0], client[1], reload);
       hud.setKills(enemies.killed);
-      hud.setChain(run.chain, run.chainT / CHAIN_WINDOW);
-      hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / BOOST_COOLDOWN, left: run.boostCd, lit: boosting } : null);
+      hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
+      hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting } : null);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
@@ -1000,4 +1087,5 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       press: (code, down) => (down ? keys.add(code) : keys.delete(code)),
     }),
   };
+  return game;
 }
