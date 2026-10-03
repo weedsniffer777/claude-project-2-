@@ -247,6 +247,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     get spotlit() {
       return !!run.spot;
     },
+    clearSpot() {
+      run.spot = null;
+      hud.setSpot(null);
+    },
+    // dev tools: every enemy on the field gone, no drops, no kills counted
+    clearEnemies: () => enemies.retire(),
     sectors: (names, current) => hud.setSectors(names, current),
     // Walk from `from` along `dir` until the point is just outside what the
     // camera shows (whatever the view size, optics included): a spawn point
@@ -1195,6 +1201,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     get levelId() {
       return levelDef.id;
     },
+    // Dev kit: beat the current stage of the level and stand at the door of
+    // the next checkpoint (or, in the last stage, bring the boss on now).
+    skipStage() {
+      if (run.mode !== 'field' || run.over || run.won || run.fading) return false;
+      return !!level.skipStage?.(api);
+    },
     // for tests and dev tools
     debug: (debug = {
       boostPicture: (...a) => boostPicture(...a).toDataURL(),
@@ -1239,6 +1251,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         hasAim = true;
       },
       press: (code, down) => (down ? keys.add(code) : keys.delete(code)),
+      skipStage: () => game.skipStage(),
     }),
   };
   return game;

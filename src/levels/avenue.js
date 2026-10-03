@@ -2136,6 +2136,37 @@ function buildAvenue(scene) {
       };
     }
 
+    // Dev kit: beat the current stage. Sectors 1 and 2 end at their
+    // checkpoint's door, open and ready to drive in; in sector 3 the hold is
+    // cut short so the boss comes on straight away, and once it's out,
+    // skipping again kills it.
+    function skipStage(api) {
+      api.clearSpot();
+      api.arrow(null);
+      api.clearPrompt();
+      if (S.sector < 2) {
+        const shack = S.sector === 0 ? shackA : shackB;
+        api.clearEnemies();
+        api.enableGun();
+        api.revealScraps();
+        if (S.sector === 1) api.giveRockets();
+        api.teleport(shack.door.x - 7, shack.door.z, 0);
+        openShack(api, shack, 'Skipped ahead. Roll into the <b>checkpoint</b>.');
+        go(S.sector === 0 ? 8 : 6);
+        return true;
+      }
+      if (S.step === 0) {
+        api.clearEnemies();
+        S.hold = 0;
+        return true;
+      }
+      if (S.step === 1 && S.boss?.alive) {
+        api.blast(S.boss.pos.clone().setY(1), 0.5, 99999);
+        return true;
+      }
+      return false;
+    }
+
     function script(api, dt) {
       S.t += dt;
       if (api.run.mode !== 'field') return;
@@ -2188,6 +2219,7 @@ function buildAvenue(scene) {
       start,
       onImpact,
       update,
+      skipStage,
     };
   }
 }

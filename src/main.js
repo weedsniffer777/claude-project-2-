@@ -91,6 +91,16 @@ const devkit = createDevKit({
       },
     },
     {
+      id: 'skip-stage',
+      label: 'Skip stage',
+      detail: 'Beat this stage and go to the next checkpoint (in the last stage: the boss)',
+      open: () => {
+        if (mode !== game) return;
+        game.skipStage();
+        devkit.close();
+      },
+    },
+    {
       id: 'add-scraps',
       label: 'Add 1,000,000 scraps',
       detail: 'For testing upgrades and unlocks',
