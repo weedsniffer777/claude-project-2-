@@ -29,8 +29,8 @@ export class CombatFx {
 
   // Fires the tank's cannon toward aimPoint (or straight out when null). The
   // shell flies along the gun's bearing to the aim distance and height, and
-  // stops at the first collider in its way. Returns false when the tank
-  // refuses to fire (gun lifted over the drums).
+  // stops at the first collider in its way. Returns false if the tank
+  // could not fire.
   fireCannon(tank, aimPoint, colliders = []) {
     const shot = tank.fire();
     if (!shot) return false;

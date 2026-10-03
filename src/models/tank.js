@@ -725,11 +725,9 @@ export function createTank() {
   let hasPrev = false;
   let recoil = 0;
   let gunFlashTime = 0;
-  let gunLift = 0; // barrel elevation used to clear the fuel drums
   let gunElev = 0; // barrel elevation toward the target's height
   let mgElev = 0;
   const mgWorld = new THREE.Vector3();
-  let gunLiftTarget = 0;
   let mgTimer = 0;
   let bumpTimer = 0.5;
   const events = []; // MG shots this frame, read by the scene for tracers/casings
@@ -752,13 +750,7 @@ export function createTank() {
     }
   }
 
-  // Blocked while the gun is lifted over (or swinging into) the drum sector.
-  function canFire() {
-    return gunLift < 0.02 && gunLiftTarget === 0;
-  }
-
   function fire() {
-    if (!canFire()) return null;
     recoil = 1;
     gunFlashTime = 0.09;
     // Recoil pushes the hull away from the shot, snapped to the nearest of the
@@ -810,13 +802,6 @@ export function createTank() {
       mgElev += THREE.MathUtils.clamp(wantPitch - mgElev, -MG_PITCH_SPEED * dt, MG_PITCH_SPEED * dt);
       mgPivot.rotation.z = mgElev;
     }
-
-    // Gun lifts to clear the fuel drums while the turret faces the rear.
-    const offBack = Math.abs(wrapAngle(turret.rotation.y - Math.PI));
-    const inSector = THREE.MathUtils.clamp((0.95 - offBack) / 0.3, 0, 1);
-    gunLiftTarget = inSector > 0 ? 0.42 * inSector : 0;
-    const liftStep = 1.8 * dt;
-    gunLift += THREE.MathUtils.clamp(gunLiftTarget - gunLift, -liftStep, liftStep);
 
     // Running gear
     const speed = ctx.speed || 0;
@@ -885,11 +870,11 @@ export function createTank() {
       w.obj.rotation[w.axis] = w.rest + w.a;
     }
 
-    // Main gun: hard, fast recoil with a slower run-out; lift for the drums
+    // Main gun: hard, fast recoil with a slower run-out; pitch toward the target
     recoil = Math.max(0, recoil - dt * 3.2);
     const slide = recoil > 0.8 ? 1 : recoil / 0.8;
     gunPivot.position.x = GUN_BASE_X - slide * slide * 0.45;
-    gunPivot.rotation.z = Math.max(gunLift, gunElev);
+    gunPivot.rotation.z = gunElev;
     gunFlashTime = Math.max(0, gunFlashTime - dt);
     gunFlash.visible = false; // the scene's glow effects own the cannon flash now
 
@@ -918,5 +903,5 @@ export function createTank() {
     }
   }
 
-  return { group, slotGroups, setSlotVisible, turret, fire, canFire, update, events };
+  return { group, slotGroups, setSlotVisible, turret, fire, update, events };
 }

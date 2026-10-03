@@ -60,7 +60,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       <select id="mv-model" ${models.length > 1 ? '' : 'hidden'}>${models.map((m, i) => `<option value="${i}">${m.name}</option>`).join('')}</select>
       <h2>Render</h2>
       <label for="mv-px">Pixel height <span class="dk-value" data-px></span></label>
-      <input id="mv-px" type="range" min="135" max="540" step="1" />
+      <input id="mv-px" type="range" min="135" max="720" step="1" />
       <label><input id="mv-outline" type="checkbox" checked /> Outline</label>
       <label><input id="mv-turntable" type="checkbox" /> Turntable</label>
       <h2>Demo</h2>
@@ -135,9 +135,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
 
   function fire() {
     if (!model.fire) return;
-    if (!combat.fireCannon(model, hasAim || params.has('shot') ? aimPoint : null, [ground])) {
-      note('The gun is lifted over the fuel drums. Traverse off the rear to fire.');
-    }
+    combat.fireCannon(model, hasAim || params.has('shot') ? aimPoint : null, [ground]);
   }
   const onMove = (e) => {
     const r = canvas.getBoundingClientRect();

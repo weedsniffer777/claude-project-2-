@@ -16,10 +16,11 @@ const ACCEL = 12;
 const TURN_RATE = 3.4;
 const ARENA = 38;
 
-// World-relative input: W drives forward along the level (world +X, up-right
-// on screen), D drives to the world's right (+Z, down-right on screen).
-const INPUT_FORWARD = new THREE.Vector3(1, 0, 0);
-const INPUT_RIGHT = new THREE.Vector3(0, 0, 1);
+// Screen-relative input: W drives straight up the screen, D straight right.
+// (The camera looks along world (1, 0, -1), so "up the screen" on the ground
+// is that direction, and "right" is (1, 0, 1).)
+const INPUT_FORWARD = new THREE.Vector3(1, 0, -1).normalize();
+const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 
 // Tank footprint for collisions: hull, covers and the rear drums.
 const TANK_BOX = { cx: -0.25, hx: 2.25, hz: 1.15 };
@@ -63,7 +64,7 @@ export function createGame({ renderer, pixel }) {
 
   const hint = document.createElement('div');
   hint.className = 'dk-hint';
-  const HINT = 'WASD or arrows to drive (W is forward) · move the pointer to aim · click or Space to fire';
+  const HINT = 'WASD or arrows to drive · move the pointer to aim · click or Space to fire';
   hint.textContent = HINT;
   let hintTimer = 0;
 
@@ -76,10 +77,7 @@ export function createGame({ renderer, pixel }) {
   let pointer = null;
 
   function fire() {
-    if (!combat.fireCannon(tank, hasAim ? aimPoint : null, colliders)) {
-      hint.textContent = 'The gun is lifted over the fuel drums. Traverse off the rear to fire.';
-      hintTimer = 1.6;
-    }
+    combat.fireCannon(tank, hasAim ? aimPoint : null, colliders);
   }
   const onKeyDown = (e) => {
     if (e.code === 'Space') {
