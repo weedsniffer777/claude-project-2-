@@ -104,10 +104,11 @@ function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const aspect = w / h;
-  camera.left = (-VIEW_H * aspect) / 2;
-  camera.right = (VIEW_H * aspect) / 2;
-  camera.top = VIEW_H / 2;
-  camera.bottom = -VIEW_H / 2;
+  const viewH = Math.max(VIEW_H, 8.5 / aspect); // tall (phone) screens: keep the whole tank in frame
+  camera.left = (-viewH * aspect) / 2;
+  camera.right = (viewH * aspect) / 2;
+  camera.top = viewH / 2;
+  camera.bottom = -viewH / 2;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   pixel.setSize(w, h);
