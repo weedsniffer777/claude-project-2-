@@ -62,11 +62,12 @@ const CSS = `
 .hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
 .hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
-.hud-stick { position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
-  border: 3px solid rgba(241, 233, 216, 0.55); background: rgba(12, 11, 13, 0.35); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.5); }
-.hud-stick i { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
-  background: var(--ink); box-shadow: 0 4px 0 #6d655a, 0 0 0 3px #000; }
-.hud-stick.ghost { opacity: 0.45; animation: hudbreathe 1.6s steps(4) infinite; }
+.hud-stick { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px 0 0 -66px; image-rendering: pixelated; }
+.hud-stick canvas { position: absolute; display: block; image-rendering: pixelated; }
+.hud-stick .base { inset: 0; width: 132px; height: 132px; opacity: 0.75; }
+.hud-stick .knob { left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; }
+.hud-stick.idle .base { opacity: 0.45; }
+.hud-stick.idle .knob { opacity: 0.6; animation: hudbreathe 1.6s steps(4) infinite; }
 .hud.touch .hud-prompt { left: auto; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: none; max-width: min(420px, 52vw); }
 .hud.touch .hud-prompt[hidden] { transform: translateY(10px); }
 .hud.touch .hud-top { transform-origin: top left; transform: scale(0.8); }
@@ -74,6 +75,35 @@ const CSS = `
 @media (max-height: 500px) { .hud-prompt .text { font-size: 14px; } }
 .dk-shot .hud { display: none; }
 `;
+
+// Pixel-art stick: a stepped ring with four direction notches, and a round
+// knob with a lit top-left and a shaded bottom-right.
+function drawStick(base, knob) {
+  const g = base.getContext('2d');
+  const n = 22;
+  const c = (n - 1) / 2;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const d = Math.hypot(x - c, y - c);
+      if (d < 9.2) g.fillStyle = 'rgba(12, 11, 13, 0.55)';
+      else if (d < 10.4) g.fillStyle = '#f1e9d8';
+      else if (d < 11.3) g.fillStyle = '#000';
+      else continue;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+  g.fillStyle = '#f1e9d8';
+  for (const [x, y, w, h] of [[10, 2, 2, 1], [9, 3, 4, 1], [10, 18, 2, 1], [9, 17, 4, 1], [2, 10, 1, 2], [3, 9, 1, 4], [18, 10, 1, 2], [17, 9, 1, 4]]) g.fillRect(x, y, w, h);
+  const k = knob.getContext('2d');
+  for (let y = 0; y < 9; y++) {
+    for (let x = 0; x < 9; x++) {
+      const d = Math.hypot(x - 4, y - 4);
+      if (d > 4.4) continue;
+      k.fillStyle = d > 3.6 ? '#000' : x + y < 6 ? '#ffffff' : x + y > 9 ? '#a39a8c' : '#f1e9d8';
+      k.fillRect(x, y, 1, 1);
+    }
+  }
+}
 
 let injected = false;
 function inject() {
@@ -115,7 +145,7 @@ export function createHud() {
       </svg>
     </div>
     <div class="hud-numbers"></div>
-    <div class="hud-stick ghost" hidden><i></i></div>
+    <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><button type="button"></button></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -131,14 +161,18 @@ export function createHud() {
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
+  // The drive stick: fixed in the bottom-left corner, drawn as pixel art
+  // (one canvas pixel = 6 screen pixels).
   const stickEl = $('.hud-stick');
-  const knob = stickEl.querySelector('i');
+  const knob = stickEl.querySelector('.knob');
   let touchMode = false;
-  let stickActive = false;
-  const placeGhost = () => {
-    stickEl.style.transform = `translate(110px, ${window.innerHeight - 120}px)`;
-    knob.style.transform = '';
+  drawStick(stickEl.querySelector('.base'), knob);
+  const stickCenter = () => ({ x: 96, y: window.innerHeight - 100 });
+  const placeStick = () => {
+    const c = stickCenter();
+    stickEl.style.transform = `translate(${c.x}px, ${c.y}px)`;
   };
+  window.addEventListener('resize', placeStick);
   const arrow = $('.hud-arrow');
   let arrowAt = null;
   let hurtT = 0;
@@ -203,28 +237,19 @@ export function createHud() {
       arrow.hidden = !target;
       arrow.querySelector('.lbl').innerHTML = html;
     },
-    // touch layout: prompts move to the top, a ghost stick shows where to drive
+    // touch layout: prompts move to the bottom right, the stick shows
     setTouch(on) {
       touchMode = on;
       root.classList.toggle('touch', on);
-      if (!stickActive) {
-        stickEl.hidden = !on;
-        stickEl.classList.add('ghost');
-        placeGhost();
-      }
+      stickEl.hidden = !on;
+      placeStick();
     },
-    setStick(active, ox, oy, kx, ky) {
-      stickActive = active;
-      if (!active) {
-        stickEl.hidden = !touchMode;
-        stickEl.classList.add('ghost');
-        placeGhost();
-        return;
-      }
-      stickEl.hidden = false;
-      stickEl.classList.remove('ghost');
-      stickEl.style.transform = `translate(${Math.round(ox)}px, ${Math.round(oy)}px)`;
-      knob.style.transform = `translate(${Math.round(kx - ox)}px, ${Math.round(ky - oy)}px)`;
+    stickCenter,
+    // knob offset in screen pixels from the stick's centre (snapped to the
+    // stick's 6 px pixel grid)
+    setStick(active, dx = 0, dy = 0) {
+      stickEl.classList.toggle('idle', !active);
+      knob.style.transform = active ? `translate(${Math.round(dx / 6) * 6}px, ${Math.round(dy / 6) * 6}px)` : '';
     },
     showReticle(on) {
       reticle.hidden = !on;

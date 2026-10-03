@@ -99,7 +99,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.reset();
     hud.setHull(run.hp, TANK_HP);
     if (level.start) level.start(api);
-    else if (touch) hud.prompt('Controls', 'Drag on the left to drive · tap to aim and fire', { seconds: 8 });
+    else if (touch) hud.prompt('Controls', 'Stick drives · tap anywhere to aim and fire', { seconds: 8 });
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
     if (canvas.isConnected && hud.root.isConnected) canvas.style.cursor = 'none';
     return levelDef.id;
@@ -243,7 +243,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
 
   // Touch: a floating stick on the left side drives; touching anywhere else
   // aims there (drag to adjust) and fires.
-  const STICK_R = 56;
+  const STICK_R = 56; // how far the knob travels
+  const STICK_GRAB = 96; // touches this close to the stick grab it; anything else fires
   const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
   let fireOnAim = false;
   function setTouch(on) {
@@ -264,7 +265,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         }
         stick.x = dx / STICK_R;
         stick.y = dy / STICK_R;
-        hud.setStick(true, stick.ox, stick.oy, stick.ox + dx, stick.oy + dy);
+        hud.setStick(true, dx, dy);
       } else aimAt(e.clientX, e.clientY);
       return;
     }
@@ -273,10 +274,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const onDown = (e) => {
     if (e.pointerType === 'touch') {
       setTouch(true);
-      const r = canvas.getBoundingClientRect();
-      if (stick.id === null && e.clientX < r.left + r.width * 0.42) {
-        Object.assign(stick, { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 });
-        hud.setStick(true, e.clientX, e.clientY, e.clientX, e.clientY);
+      const c = hud.stickCenter();
+      if (stick.id === null && Math.hypot(e.clientX - c.x, e.clientY - c.y) < STICK_GRAB) {
+        Object.assign(stick, { id: e.pointerId, ox: c.x, oy: c.y, x: 0, y: 0 });
+        onMove(e); // the knob jumps straight to the thumb
       } else {
         aimAt(e.clientX, e.clientY);
         fireOnAim = true; // fire once this frame's aim ray has landed

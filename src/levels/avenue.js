@@ -1342,7 +1342,7 @@ function buildAvenue(scene) {
       Object.assign(S, { step: 0, spawnX: api.tankPos.x, t: 0 });
       gate.hp = 2;
       api.objective('Drive up the street and destroy all enemies');
-      if (api.touch) api.prompt('Controls', 'Drag on the <b>left side</b> of the screen to drive');
+      if (api.touch) api.prompt('Controls', 'Use the <b>stick</b> in the bottom left to drive');
       else api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
       api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
     }
