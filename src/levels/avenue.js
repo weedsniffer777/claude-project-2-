@@ -21,7 +21,11 @@ import * as P from './props.js';
 const FH = 1.35; // floor height
 const PX = 12; // facade texels per world unit
 const GPX = 10; // ground texels per world unit
-const MAP = { x0: -44, x1: 132, z0: -46, z1: 34 }; // ground extent
+const MAP = { x0: -80, x1: 140, z0: -46, z1: 40 }; // ground extent
+const RIVER = { x0: 60, x1: 78, y: -3.4 }; // the river the avenue bridges
+const BRIDGE = { n: -10.4, s: 9.8 }; // deck edges
+const GX = 100; // the checkpoint gate
+const START_X = -32; // the barricade behind the start
 const CURB = { n: -7.5, s: 6.5 };
 const WALK = { n: -10, s: 9 };
 const SW = 0.16; // sidewalk height
@@ -30,6 +34,7 @@ const CROSS = { x0: 17, x1: 27 }; // the cross street running north
 const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
 const COLD = 0xcfe8ff;
 const SUN = 0xffc98a;
+const NEON = 0x5fd0ff;
 
 const PANELS = ['#9a978f', '#a5a095', '#91959a', '#aca393', '#8b8e92'];
 const ACCENTS = ['#5f8784', '#a3874e', '#5c6f8c', '#8f8550', '#6f7f6a'];
@@ -46,6 +51,8 @@ function toGround(p, h = 0) {
 
 const onSidewalk = (x, z) => z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1));
 const heightAt = (x, z) => (onSidewalk(x, z) ? SW : 0);
+const inRiver = (x) => x > RIVER.x0 - 0.5 && x < RIVER.x1 + 0.5;
+const overWater = (x, z) => inRiver(x) && (z < BRIDGE.n || z > BRIDGE.s);
 
 // ---------------------------------------------------------------- textures
 function glyphs(g, x, y, w, h, cells, color, rand) {
@@ -390,7 +397,7 @@ function sunPatch(B, pts, opacity) {
 // ------------------------------------------------------------- the level
 export const avenue = {
   id: 'avenue',
-  name: 'Ruined avenue · winter dusk',
+  name: 'Zone 1 · The avenue (tutorial)',
   build(scene) {
     const B = new LevelBuilder(scene, 20241);
     const rand = B.rand;
@@ -400,13 +407,31 @@ export const avenue = {
 
     // ------------------------------------------------- ground and sidewalks
     const craters = [];
-    for (let i = 0; i < 12; i++) craters.push({ x: -10 + rand() * 100, z: CURB.n + 2 + rand() * (CURB.s - CURB.n - 4), r: 0.6 + rand() * 0.6 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(MAP.x1 - MAP.x0, MAP.z1 - MAP.z0), mapMat(roadTexture(rand, craters)));
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.set((MAP.x0 + MAP.x1) / 2, 0, (MAP.z0 + MAP.z1) / 2);
-    ground.receiveShadow = true;
-    B.add(ground);
-    B.solid(ground);
+    while (craters.length < 12) {
+      const x = -20 + rand() * 120;
+      if (!inRiver(x)) craters.push({ x, z: CURB.n + 2 + rand() * (CURB.s - CURB.n - 4), r: 0.6 + rand() * 0.6 });
+    }
+    // the ground is one big painted texture, laid in pieces around the river
+    const groundMat = mapMat(roadTexture(rand, craters));
+    function groundPiece(x0, x1, z0, z1) {
+      const geo = new THREE.PlaneGeometry(x1 - x0, z1 - z0);
+      const uv = geo.attributes.uv;
+      const p = geo.attributes.position;
+      for (let i = 0; i < uv.count; i++) {
+        const x = p.getX(i) + (x0 + x1) / 2;
+        const z = -p.getY(i) + (z0 + z1) / 2;
+        uv.setXY(i, (x - MAP.x0) / (MAP.x1 - MAP.x0), 1 - (z - MAP.z0) / (MAP.z1 - MAP.z0));
+      }
+      const m = new THREE.Mesh(geo, groundMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2);
+      m.receiveShadow = true;
+      B.add(m);
+      B.solid(m);
+    }
+    groundPiece(MAP.x0, RIVER.x0, MAP.z0, MAP.z1);
+    groundPiece(RIVER.x1, MAP.x1, MAP.z0, MAP.z1);
+    groundPiece(RIVER.x0, RIVER.x1, CURB.n, CURB.s); // the bridge roadway
 
     const walkTex = sidewalkTexture(rand);
     const curbMat = toon(0x9a9893);
@@ -422,8 +447,12 @@ export const avenue = {
       B.solid(m);
     }
     slab(MAP.x0, CROSS.x0, -16, CURB.n);
-    slab(CROSS.x1, MAP.x1, -16, CURB.n);
-    slab(MAP.x0, MAP.x1, CURB.s, MAP.z1);
+    slab(CROSS.x1, RIVER.x0, -16, CURB.n);
+    slab(RIVER.x0, RIVER.x1, BRIDGE.n, CURB.n);
+    slab(RIVER.x1, MAP.x1, -16, CURB.n);
+    slab(MAP.x0, RIVER.x0, CURB.s, MAP.z1);
+    slab(RIVER.x0, RIVER.x1, CURB.s, BRIDGE.s);
+    slab(RIVER.x1, MAP.x1, CURB.s, MAP.z1);
 
     // snow banks plowed up along both curbs, with gaps where paths were cut
     for (const [z, dir] of [[CURB.n - 0.35, -1], [CURB.s + 0.35, 1]]) {
@@ -451,6 +480,7 @@ export const avenue = {
     for (let i = 0; i < 420; i++) {
       const x = MAP.x0 + 8 + rand() * 150;
       const z = WALK.n + rand() * (WALK.s - WALK.n + 6);
+      if (overWater(x, z)) continue;
       const s = 0.08 + rand() * 0.22;
       B.piece(s * (1 + rand()), s * 0.6, s, rand() < 0.25 ? 0x7a5e50 : CONCRETE[(rand() * 5) | 0], x, heightAt(x, z) + s * 0.25, z, rand(), rand() * 3, rand());
     }
@@ -580,32 +610,79 @@ export const avenue = {
     building({ x0: -15, x1: 4, floors: 5, panel: PANELS[3], accent: null, holes: 3, broken: 0.35, pierce: 3 });
     building({ x0: 4, x1: CROSS.x0, floors: 5, panel: PANELS[1], shop: true, sign: '#b7c9c4', letters: true, holes: 1 });
     building({ x0: CROSS.x1, x1: 39, floors: 9, panel: PANELS[2], accent: ACCENTS[2], mural: true, bite: { w: 4.5, floors: 4 }, holes: 3, pierce: 3 });
-    building({ x0: 44, x1: 61, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
-    building({ x0: 66, x1: 71, floors: 5, panel: PANELS[4], holes: 2, broken: 0.5 });
-    building({ x0: 78, x1: 84, floors: 3, panel: PANELS[4], broken: 0.6, cutaway: true });
-    building({ x0: 87, x1: 110, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 3 });
+    building({ x0: 44, x1: 58, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
+    building({ x0: 80, x1: 97, floors: 9, panel: PANELS[4], accent: ACCENTS[4], holes: 3, broken: 0.4, pierce: 3 });
+    building({ x0: 103, x1: 132, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 3 });
+    // west of the start: more blocks so the street doesn't end in a void
+    building({ x0: -78, x1: -44, floors: 9, panel: PANELS[3], accent: ACCENTS[2], holes: 3, pierce: 0 });
     building({ x0: 8, x1: 36, zf: -29, depth: 8, floors: 2, panel: PANELS[2], broken: 0.6, pierce: 0 });
 
     // haze in the gaps: light pouring through between the blocks
-    for (const [gx0, gx1, h] of [[-20, -15, 9], [CROSS.x0, CROSS.x1, 9], [39, 44, 12], [61, 66, 12], [71, 78, 6], [84, 87, 9]]) {
+    for (const [gx0, gx1, h] of [[-20, -15, 9], [CROSS.x0, CROSS.x1, 9], [39, 44, 12], [58, 80, 12], [97, 103, 9]]) {
       const y = h * FH;
       sunVolume(B, [new THREE.Vector3(gx0, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n), new THREE.Vector3(gx0, y, WALK.n)], 0.05);
     }
 
-    rubble(74.5, -12.5, 3.4, 2.2, { solid: true, slabs: 6 });
-    rubble(74, -9.4, 2.0, 1.0, { slabs: 2 });
     rubble(41.5, -12.5, 1.8, 1.4, { solid: true });
-    rubble(63.5, -12.5, 1.8, 1.5, { solid: true });
     rubble(-17.5, -12.2, 1.6, 1.0, { solid: true });
-    rubble(22, -23, 3.2, 1.6, { solid: true, slabs: 4 });
+    rubble(100, -12.4, 2.4, 1.8, { solid: true, slabs: 3 });
     B.block(41.5, -14, 2.4, 3);
-    B.block(63.5, -14, 2.4, 3);
     B.block(-17.5, -14, 2.4, 3);
-    B.block(74.5, -14, 3.6, 3);
-    B.block(22, -24, 5, 2);
-    for (const [x, r] of [[-24, 1.3], [-4, 0.9], [33, 1.7], [52, 1.2], [58, 0.8], [93, 1.1]]) rubble(x, WALK.n + 0.9, r, 0.8, { solid: true });
+    B.block(100, -14, 3.2, 4);
+    for (const [x, r] of [[-24, 1.3], [-4, 0.9], [33, 1.7], [52, 1.2], [86, 1.1]]) rubble(x, WALK.n + 0.9, r, 0.8, { solid: true });
+
+    // Containers: stacked into walls where the street is closed off.
+    const ribs = (() => {
+      const [c, g] = canvas(16, 16);
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 16, 16);
+      g.fillStyle = '#c9c9c9';
+      for (let x = 0; x < 16; x += 4) g.fillRect(x, 0, 2, 16);
+      g.fillStyle = '#9a9a9a';
+      g.fillRect(0, 0, 16, 1);
+      g.fillRect(0, 15, 16, 1);
+      const t = tex(c);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(5, 1);
+      return t;
+    })();
+    const CONTAINERS = [0x7a4a36, 0x4f6b6a, 0x6b6f72, 0x8a6a3a, 0x3f5470];
+    function container(x, y, z, yaw, color, tilt = 0) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(6, 2.6, 2.45), new THREE.MeshToonMaterial({ map: ribs, color, gradientMap }));
+      m.position.set(x, y + 1.3, z);
+      m.rotation.set(0, yaw, tilt);
+      m.castShadow = m.receiveShadow = true;
+      B.add(m);
+      B.solid(m);
+      B.lump(x, y + 2.62, z, 2.4, 0.1, 1.0, 0xd0d3d8, yaw);
+      return m;
+    }
+    // the start: a container wall across the avenue, rubble heaped against it
+    {
+      const X = START_X - 1.3;
+      let i = 0;
+      for (let z = -15; z < 20; z += 6.2, i++) {
+        container(X, 0, z, Math.PI / 2, CONTAINERS[i % 5]);
+        if (i % 3 !== 1) container(X - 0.1, 2.6, z + (i % 2 ? 0.4 : -0.3), Math.PI / 2 + (rand() - 0.5) * 0.1, CONTAINERS[(i + 2) % 5]);
+      }
+      container(X + 2.2, 0, -2.2, Math.PI / 2 + 0.5, CONTAINERS[3], 0.05);
+      B.block(X, 2, 1.4, 22);
+      rubble(X + 2.4, 5.5, 2.2, 1.4, { slabs: 3 });
+      rubble(X + 2.0, -9, 1.6, 1.0, { slabs: 2 });
+      for (let z = -6; z < 6; z += 1.7) B.piece(0.7, 0.9, 1.6, 0x9a978f, X + 3.6, 0.45, z, 0, (rand() - 0.5) * 0.3, 0);
+      B.block(X + 3.6, 0, 0.45, 6);
+      // the dead ground behind it: collapsed blocks and rubble mountains
+      for (let k = 0; k < 9; k++) rubble(START_X - 8 - rand() * 36, -8 + rand() * 22, 2 + rand() * 2.5, 1.5 + rand() * 2.5, { slabs: 4 });
+    }
+    // the cross street ends in a clean container wall: a straight corridor
+    for (let k = 0; k < 2; k++) {
+      container(19.8, k * 2.6, -23, 0, CONTAINERS[(k + 1) % 5]);
+      container(25.2, k * 2.6, -23.1, 0, CONTAINERS[(k + 3) % 5]);
+    }
+    B.block(22, -23, 6, 1.5);
+
     // facade slabs that came down whole, leaning on the sidewalk
-    for (const [x, ry] of [[-30, 0.2], [12, -0.3], [49, 0.4], [98, -0.2]]) {
+    for (const [x, ry] of [[-30, 0.2], [12, -0.3], [49, 0.4], [92, -0.2]]) {
       const s = B.chunk(2.4, 1.6, 0.2, CONCRETE[1], x, SW + 0.7, WALK.n + 0.9, -0.55, ry, 0.05);
       B.solid(s);
       B.block(x, WALK.n + 0.9, 1.2, 0.5, ry);
@@ -614,7 +691,7 @@ export const avenue = {
 
     // ------------------------------------------- poles, lamps and wires
     const poleXs = [];
-    for (let x = -34; x < 104; x += 14) poleXs.push(x);
+    for (let x = -34; x < 124; x += 14) poleXs.push(x);
     const spanY = 5.9;
     const flickers = [];
     let lampIndex = 0;
@@ -637,7 +714,7 @@ export const avenue = {
         const dir = -side;
         const kind = idx % 7 === 3 ? 'globe' : idx % 9 === 5 ? 'hanging' : 'cobra';
         const dead = [1, 4, 12, 15].includes(idx);
-        const cold = idx % 5 === 2;
+        const cold = idx % 3 === 1;
         const color = cold ? COLD : SODIUM[idx % 3];
         const armLen = 1.6 + (idx % 3) * 0.3;
         const arm = put(B.root, box(0.08, 0.08, armLen, 0x4a4c50, { r: 0.02 }), top.x, top.y, top.z + (dir * armLen) / 2);
@@ -664,7 +741,10 @@ export const avenue = {
           const e = B.emit(head.clone().add(new THREE.Vector3(0, -0.7, 0)), color, power, 9 + rand() * 3);
           const groundY = heightAt(head.x, head.z);
           const p = B.pool(head.x + (rand() - 0.5) * 0.6, head.z + (rand() - 0.5) * 0.6, 2.6 + rand() * 1.4, color, (cold ? 0.16 : 0.22) * (0.7 + rand() * 0.5), { sx: 0.8 + rand() * 0.5, sz: 0.8 + rand() * 0.4, yaw: rand() * 3, y: groundY + 0.03 });
-          if (idx === 6 || idx === 13 || kind === 'hanging') flickers.push({ e, lens, p, color, base: p.material.opacity, seed: idx });
+          if (idx === 6 || idx === 13 || kind === 'hanging') {
+            B.keep(lens);
+            flickers.push({ e, lens, p, color, base: p.material.opacity, seed: idx });
+          }
         }
       }
       B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
@@ -713,7 +793,7 @@ export const avenue = {
       put(B.root, box(0.34, 0.42, 1.36, 0x2e3033, { r: 0.06 }), x, SW + 4.6, hz);
       const lamps = [0x3fe0b4, 0xffb428, 0xff3b30].map((c, i) => {
         const z2 = hz + (i - 1) * 0.42 * -armDir;
-        return { c, meshes: [-1, 1].map((sx) => put(B.root, cyl(0.14, 0.04, 0x1f2124, { axis: 'x', seg: 10 }), x + sx * 0.18, SW + 4.6, z2)) };
+        return { c, meshes: [-1, 1].map((sx) => B.keep(put(B.root, cyl(0.14, 0.04, 0x1f2124, { axis: 'x', seg: 10 }), x + sx * 0.18, SW + 4.6, z2))) };
       });
       const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), sign(1.2, 0.36, { board: '#3c5a7a', ink: '#d4d9de' }));
       plate.material.side = THREE.DoubleSide;
@@ -751,9 +831,9 @@ export const avenue = {
       B.block((xa + xb) / 2, z, (xb - xa) / 2, 0.45);
       B.hitBox((xa + xb) / 2, SW + (y + 0.25) / 2, z, xb - xa, y + 0.25, 0.9);
     }
-    pipeRun(-40, 38.6, PZ, 1.05);
-    pipeRun(44.4, 76, PZ, 1.05);
-    pipeRun(80, 120, PZ, 1.05);
+    pipeRun(START_X - 2, 38.6, PZ, 1.05);
+    pipeRun(44.4, 132, PZ, 1.05);
+    for (const x of [64, 69, 74]) B.piece(0.3, 1.05 - RIVER.y + SW, 0.3, 0x6e6c68, x, (RIVER.y + 1.05 + SW) / 2, PZ);
     const AX = 41.5;
     const AY = 6.6;
     for (const dx of [-0.28, 0.28]) {
@@ -768,7 +848,7 @@ export const avenue = {
       put(B.root, box(1.6, 0.16, 0.2, 0x4b4e52, { r: 0.02 }), AX, AY - 0.32, z);
       B.block(AX, z, 0.9, 0.3);
     }
-    const sheet = put(B.root, box(0.6, 1.1, 0.03, 0x8d8f91, { r: 0.01 }), AX + 0.2, AY - 0.75, -1.2);
+    const sheet = B.keep(put(B.root, box(0.6, 1.1, 0.03, 0x8d8f91, { r: 0.01 }), AX + 0.2, AY - 0.75, -1.2));
     B.animate((dt, t) => (sheet.rotation.x = Math.sin(t * 1.3) * 0.18));
 
     // ------------------------------------------------------------- wrecks
@@ -779,11 +859,12 @@ export const avenue = {
     P.bus(B, 33, -1.2, 0.32);
     P.car(B, 47, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
     P.car(B, 56.5, -6.0, 0.05, { kind: 'sedan', paint: BURNT_PAINT[4] });
-    P.car(B, 69, 1.6, 1.25, { kind: 'sedan', paint: BURNT_PAINT[5] });
-    P.car(B, 63, 4.9, -0.2, { kind: 'van', paint: 0x7b7f78 });
-    P.car(B, 80, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
-    P.car(B, 88.6, -4.4, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
-    P.car(B, 88.4, 4.6, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
+    P.car(B, 67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
+    P.car(B, 72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
+    P.car(B, 83, 1.6, 1.25, { kind: 'sedan', paint: BURNT_PAINT[1] });
+    P.car(B, 88, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
+    P.car(B, 96.6, -4.6, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
+    P.car(B, 96.4, 4.8, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
     {
       // the trolleybus is still smouldering
       const fire = B.emit(new THREE.Vector3(33.4, 1.5, -1.0), 0xff8a35, 16, 8);
@@ -815,6 +896,7 @@ export const avenue = {
         const f = new THREE.Mesh(new THREE.ConeGeometry(0.22 - i * 0.04, 0.6, 6), glowMat(c));
         f.position.set(x + (i - 1) * 0.08, y + 0.95, z);
         B.add(f);
+        B.keep(f);
         return f;
       });
       const e = B.emit(new THREE.Vector3(x, y + 1.3, z), 0xff9a40, 12, 7);
@@ -834,7 +916,7 @@ export const avenue = {
     }
     barrelFire(46.5, WALK.s - 0.9);
     barrelFire(8, WALK.s + 4.2);
-    barrelFire(83, WALK.n + 1.2);
+    barrelFire(91, WALK.n + 1.2);
 
     // ------------------------------------------------------ street clutter
     P.bench(B, -27, SW, WALK.n + 1.2, 0);
@@ -846,12 +928,11 @@ export const avenue = {
     P.planter(B, -12, SW, WALK.n + 1.2);
     P.planter(B, 30, SW, WALK.n + 1.4);
     P.cabinet(B, 15.5, SW, WALK.n + 0.6, 0);
-    P.cabinet(B, 68, SW, WALK.n + 0.6, 0.3);
+    P.cabinet(B, 84, SW, WALK.n + 0.6, 0.3);
     P.crates(B, 8, SW, WALK.n + 1.2);
     P.dumpster(B, 42, SW, WALK.n + 1.2, 0.3, 0x4e6355);
-    P.dumpster(B, 63.8, SW, WALK.n + 1.1, -0.4, 0x4f5d73);
-    P.tires(B, 72.5, SW, WALK.n + 1.4, 5);
-    P.bollards(B, 18, 26, 0, CURB.n - 0.1);
+    P.dumpster(B, 81.5, SW, WALK.n + 1.1, -0.4, 0x4f5d73);
+    P.tires(B, 94, SW, WALK.n + 1.4, 5);
     P.fallenPole(B, 58, CURB.s + 0.4, -2.5);
     for (const [x, z, bend, color] of [[5, CURB.s + 0.6, 0.5, '#3d5f86'], [37, CURB.n - 0.5, -0.4, '#3d5f86'], [-20, CURB.s + 0.6, 0.25, '#8c7a3e'], [77, CURB.n - 0.5, 1.2, '#3d5f86']]) {
       const top = P.bentPole(B, x, heightAt(x, z), z, 2.7, rand() * 3, bend, 0x5a5d61);
@@ -873,7 +954,7 @@ export const avenue = {
       s.position.set(kx, SW + 1.92, kz - 0.83);
       s.rotation.y = Math.PI;
       B.add(s);
-      const tube = put(B.root, box(1.8, 0.05, 0.05, COLD, { r: 0.01, glow: true }), kx, SW + 2.12, kz - 0.9);
+      const tube = B.keep(put(B.root, box(1.8, 0.05, 0.05, COLD, { r: 0.01, glow: true }), kx, SW + 2.12, kz - 0.9));
       const e = B.emit(new THREE.Vector3(kx, 2.0, kz - 1.4), COLD, 9, 6);
       const p = B.pool(kx, kz - 1.6, 2.0, COLD, 0.2, { sx: 1.4, sz: 0.8 });
       flickers.push({ e, lens: tube, p, color: COLD, base: 0.2, seed: 99, fast: true });
@@ -917,10 +998,11 @@ export const avenue = {
         B.lump(x, SW + h + 0.12, z + 2.5, 1.4, 0.12, 2.4, 0xd0d3d8, 0);
       }
     }
-    garages(-30, 9, WALK.s + 4);
-    garages(52, 7, WALK.s + 4);
+    garages(-62, 19, WALK.s + 4);
+    garages(46, 4, WALK.s + 4);
+    garages(81, 6, WALK.s + 4);
     P.fence(B, -2, 22, SW, WALK.s + 4.4);
-    P.fence(B, 76, 86, SW, WALK.s + 4.4);
+    P.fence(B, 100, 112, SW, WALK.s + 4.4);
 
     function ruinedWall(x0, x1, z) {
       let x = x0;
@@ -934,7 +1016,7 @@ export const avenue = {
       rubble((x0 + x1) / 2, z - 1, (x1 - x0) * 0.22, 0.8, { slabs: 2 });
     }
     ruinedWall(26, 37, WALK.s + 6);
-    ruinedWall(86, 97, WALK.s + 5);
+    ruinedWall(102, 114, WALK.s + 5);
 
     function birch(x, z, h) {
       put(B.root, cyl(0.1, h, 0xd9d6cc, { seg: 6, radiusEnd: 0.14 }), x, SW + h / 2, z);
@@ -947,7 +1029,7 @@ export const avenue = {
         B.add(b);
       }
     }
-    for (const [x, z, h] of [[-12, 12.8, 4.2], [-9.5, 13.4, 3.6], [15, 12.5, 4.4], [39, 13.2, 3.8], [73, 12.6, 4.0], [101, 12.8, 4.2]]) birch(x, z, h);
+    for (const [x, z, h] of [[-12, 12.8, 4.2], [-9.5, 13.4, 3.6], [15, 12.5, 4.4], [39, 13.2, 3.8], [57, 12.6, 4.0], [99, 12.8, 4.2]]) birch(x, z, h);
     {
       const t = cyl(0.12, 5, 0xd9d6cc, { seg: 6 });
       t.position.set(20, SW + 1.1, WALK.s + 1.5);
@@ -956,25 +1038,30 @@ export const avenue = {
     }
 
     // foreground clutter along the bottom edge of the screen
-    for (let i = 0; i < 14; i++) rubble(-34 + i * 10 + rand() * 4, WALK.s + 7.5 + rand() * 4, 1 + rand() * 1.3, 0.8 + rand() * 1.1, { slabs: 2 });
+    for (let i = 0; i < 18; i++) {
+      const x = -60 + i * 10 + rand() * 4;
+      if (!inRiver(x)) rubble(x, WALK.s + 7.5 + rand() * 4, 1 + rand() * 1.3, 0.8 + rand() * 1.1, { slabs: 2 });
+    }
     P.billboard(B, 6, WALK.s + 9, 0.15, (w, h) => sign(w, h, { board: '#4f5b62', ink: '#c6bfa8' }));
-    P.billboard(B, 66, WALK.s + 9.5, -0.2, (w, h) => sign(w, h, { board: '#5d5546', ink: '#9fb5b3' }));
+    P.billboard(B, 90, WALK.s + 9.5, -0.2, (w, h) => sign(w, h, { board: '#5d5546', ink: '#9fb5b3' }));
     P.crates(B, -18, SW, WALK.s + 3.4);
     P.crates(B, 35, SW, WALK.s + 3.6);
     P.tires(B, 44, SW, WALK.s + 3.2, 6);
-    P.dumpster(B, 79, SW, WALK.s + 3.0, 0.5, 0x5e5a4c);
+    P.dumpster(B, 86, SW, WALK.s + 2.6, 0.5, 0x5e5a4c);
     P.cabinet(B, 12, SW, WALK.s + 0.6, Math.PI);
     P.bench(B, 28, SW, WALK.s - 0.8, Math.PI + 0.3, { tipped: true });
     P.bin(B, 26.5, SW, WALK.s - 0.6);
     P.bin(B, 70, SW, WALK.s - 0.6, { tipped: true });
     for (let i = 0; i < 5; i++) {
       const x = -24 + i * 26 + rand() * 6;
+      if (inRiver(x)) continue;
       const drum = put(B.root, cyl(0.85, 0.7, 0x6b5843, { axis: 'z', seg: 12 }), x, SW + 0.85, WALK.s + 3.6);
       drum.rotation.y = rand();
       put(B.root, cyl(0.45, 0.72, 0x1d1f22, { axis: 'z', seg: 10 }), x, SW + 0.85, WALK.s + 3.6).rotation.y = drum.rotation.y;
     }
     for (let i = 0; i < 6; i++) {
       const x = -30 + i * 22 + rand() * 6;
+      if (inRiver(x) || inRiver(x + 5)) continue;
       B.heavyCable([
         new THREE.Vector3(x, SW + 0.05, WALK.s + 4.5),
         new THREE.Vector3(x + 0.8, SW + 1.3, PZ),
@@ -983,47 +1070,150 @@ export const avenue = {
       ]);
     }
 
-    // ------------------------------------------------------ the checkpoint
-    const GX = 92;
+    // ---------------------------------------------------------- the river
     {
-      for (let z = CURB.n + 0.2; z < CURB.s; z += 1.7) {
+      const W = RIVER.x1 - RIVER.x0;
+      const cx = (RIVER.x0 + RIVER.x1) / 2;
+      const cz = (MAP.z0 + MAP.z1) / 2;
+      const depth = MAP.z1 - MAP.z0;
+      // dark water, half frozen: ice sheets along the banks, floes drifting
+      const [c, g] = canvas(W * 8, depth * 8);
+      g.fillStyle = '#2b3b4b';
+      g.fillRect(0, 0, c.width, c.height);
+      g.fillStyle = '#34485a';
+      for (let i = 0; i < 160; i++) g.fillRect((rand() * c.width) | 0, (rand() * c.height) | 0, 3 + rand() * 10, 1);
+      g.fillStyle = '#c9d0d8';
+      for (const edge of [0, c.width]) for (let y = 0; y < c.height; y += 6) blob(g, edge, y, 10 + rand() * 18, 6 + rand() * 6, rand);
+      g.fillStyle = '#9fadba';
+      for (let i = 0; i < 40; i++) blob(g, rand() * c.width, rand() * c.height, 3 + rand() * 8, 2 + rand() * 6, rand);
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(W, depth), mapMat(tex(c)));
+      water.rotation.x = -Math.PI / 2;
+      water.position.set(cx, RIVER.y, cz);
+      water.receiveShadow = true;
+      B.add(water);
+      B.solid(water);
+      for (let i = 0; i < 26; i++) {
+        const z = MAP.z0 + rand() * depth;
+        B.lump(RIVER.x0 + 2 + rand() * (W - 4), RIVER.y, z, 0.5 + rand() * 1.2, 0.08, 0.4 + rand() * 0.9, rand() < 0.5 ? 0xd5dade : 0xb5c0ca, rand() * 3);
+      }
+      // embankment walls, with the bank's snow on top
+      for (const [x, side] of [[RIVER.x0 - 0.25, -1], [RIVER.x1 + 0.25, 1]]) {
+        for (const [z0, z1] of [[MAP.z0, BRIDGE.n], [BRIDGE.s, MAP.z1]]) {
+          B.chunk(0.5, -RIVER.y + SW, z1 - z0, 0x77736c, x, (RIVER.y + SW) / 2, (z0 + z1) / 2);
+          B.block(x - side * 0.1, (z0 + z1) / 2, 0.4, (z1 - z0) / 2);
+        }
+      }
+      // the bridge: deck, fascia beams, two piers, railings
+      B.chunk(W + 0.4, 0.98, BRIDGE.s - BRIDGE.n, 0x6e6b66, cx, -0.51, (BRIDGE.n + BRIDGE.s) / 2);
+      for (const z of [BRIDGE.n + 0.1, BRIDGE.s - 0.1]) B.chunk(W + 0.6, 0.55, 0.3, 0x5d5a55, cx, -0.75, z);
+      for (const x of [65, 73]) {
+        B.chunk(1.3, -1 - RIVER.y, BRIDGE.s - BRIDGE.n - 2, 0x7a766f, x, (RIVER.y - 1) / 2, (BRIDGE.n + BRIDGE.s) / 2);
+        B.lump(x, RIVER.y, BRIDGE.s - 1.5, 1.2, 0.12, 0.8, 0xd5dade);
+      }
+      for (const z of [BRIDGE.n + 0.25, BRIDGE.s - 0.25]) {
+        for (let x = RIVER.x0 + 0.3; x < RIVER.x1; x += 1.2) {
+          const bent = rand() < 0.12;
+          B.piece(0.08, 0.95, 0.08, 0x4c4f53, x, SW + 0.47, z, bent ? 0.4 : 0, 0, bent ? 0.3 : 0);
+        }
+        B.piece(W, 0.07, 0.07, 0x5a5d61, cx, SW + 0.92, z);
+        B.piece(W, 0.05, 0.05, 0x5a5d61, cx, SW + 0.5, z);
+        B.block(cx, z, W / 2 + 0.6, 0.3);
+      }
+      // a torn section of railing hanging over the edge
+      B.piece(3, 0.07, 0.07, 0x5a5d61, 70, SW + 0.2, BRIDGE.s + 0.1, 0.6, 0, 0.3);
+      // work lights at the bridgehead: cold white on tripods
+      for (const [x, z, yaw] of [[57.5, CURB.n + 0.8, 0.6], [79.5, CURB.s - 0.8, -2.5]]) {
+        for (let k = 0; k < 3; k++) B.piece(0.04, 1.7, 0.04, 0x3a3c3f, x + Math.cos(k * 2.1) * 0.3, 0.8, z + Math.sin(k * 2.1) * 0.3, Math.sin(k * 2.1) * 0.2, 0, -Math.cos(k * 2.1) * 0.2);
+        const head = put(B.root, box(0.5, 0.4, 0.2, 0x2e3034, { r: 0.04 }), x, 1.75, z);
+        head.rotation.set(0, yaw, -0.4);
+        const lens = put(B.root, box(0.42, 0.32, 0.04, COLD, { r: 0.01, glow: true }), x + Math.cos(yaw) * 0.12, 1.72, z - Math.sin(yaw) * 0.12);
+        lens.rotation.copy(head.rotation);
+        B.block(x, z, 0.4, 0.4);
+        const ax = x + Math.cos(yaw) * 3.5;
+        const az = z - Math.sin(yaw) * 3.5;
+        B.emit(new THREE.Vector3(ax, 1.6, az), COLD, 16, 9);
+        B.pool(ax, az, 3.2, COLD, 0.2, { sx: 1.5, yaw: -yaw });
+      }
+    }
+
+    // ---------------------------------- more cold light along the way
+    {
+      // a cyan neon tube sign on the shop, still somehow powered
+      const nx = 10.5;
+      const ny = 2.25;
+      const nz = WALK.n + 0.08;
+      const tubes = [];
+      for (let i = 0; i < 6; i++) {
+        const vertical = i % 2 === 0;
+        tubes.push(put(B.root, box(vertical ? 0.07 : 0.6, vertical ? 0.55 : 0.07, 0.05, NEON, { r: 0.01, glow: true }), nx - 2 + i * 0.75, ny + (vertical ? 0 : (i % 4) * 0.12 - 0.12), nz));
+      }
+      tubes.forEach((m) => B.keep(m));
+      const e = B.emit(new THREE.Vector3(nx, ny, nz + 1.2), NEON, 10, 7);
+      const p = B.pool(nx, WALK.n + 1.6, 2.6, NEON, 0.2, { sx: 1.6, sz: 0.7, y: SW + 0.03 });
+      flickers.push({ e, lens: tubes[2], p, color: NEON, base: 0.2, seed: 41 });
+      // a lit lightbox on the bus shelter
+      const lb = put(B.root, box(0.06, 1.3, 0.9, COLD, { r: 0.01, glow: true }), -3.9, SW + 1.1, WALK.s - 0.9);
+      B.keep(lb);
+      B.emit(new THREE.Vector3(-4.4, 1.2, WALK.s - 1.4), COLD, 8, 6);
+      B.pool(-4.6, WALK.s - 1.6, 1.8, COLD, 0.18, { y: SW + 0.03 });
+      // fluorescent tubes inside two open garages
+      for (const gx of [-20.5, 49.3]) {
+        B.keep(put(B.root, box(1.6, 0.05, 0.05, COLD, { r: 0.01, glow: true }), gx, SW + 1.6, WALK.s + 4.4));
+        B.emit(new THREE.Vector3(gx, 1.2, WALK.s + 3), COLD, 9, 6);
+        B.pool(gx, WALK.s + 2.6, 2.0, COLD, 0.2, { sx: 1.2, y: SW + 0.03 });
+      }
+    }
+
+    // ------------------------------------------------------ the checkpoint
+    // A wall of jersey barriers from the buildings to the heat pipes, one
+    // heavy gate in the middle. The gate takes three cannon hits.
+    const gate = { hp: 3, down: false, leaves: [], blocks: [], fall: 0, beacons: [] };
+    {
+      for (let z = WALK.n + 0.1; z < WALK.s + 0.6; z += 1.7) {
         if (z > -2.6 && z < 2.6) continue;
-        const j = put(B.root, box(0.7, 0.9, 1.6, 0x9a978f, { r: 0.06 }), GX, 0.45, z);
-        j.rotation.y = (rand() - 0.5) * 0.15;
+        const y = heightAt(GX, z);
+        const j = put(B.root, box(0.7, 0.9, 1.6, 0x9a978f, { r: 0.06 }), GX, y + 0.45, z);
+        j.rotation.y = (rand() - 0.5) * 0.12;
         B.solid(j);
       }
-      B.block(GX, -5, 0.45, 2.7);
-      B.block(GX, 4.6, 0.45, 2.1);
-      const beacons = [];
+      B.block(GX, -6.25, 0.45, 3.9);
+      B.block(GX, 6.1, 0.45, 3.7);
       for (const z of [-2.9, 2.9]) {
         B.solid(put(B.root, box(0.9, 3.2, 0.9, 0x7d7c78, { r: 0.06 }), GX, 1.6, z));
         B.block(GX, z, 0.45, 0.45);
         put(B.root, cyl(0.16, 0.24, 0x2b2c2e, { seg: 8 }), GX, 3.32, z);
-        const lens = put(B.root, box(0.26, 0.2, 0.08, 0xffb02a, { r: 0.02, glow: true }), GX, 3.4, z);
-        beacons.push({ lens, e: B.emit(new THREE.Vector3(GX - 0.6, 3.2, z), 0xffa21f, 14, 9) });
+        const lens = B.keep(put(B.root, box(0.26, 0.2, 0.08, 0xffb02a, { r: 0.02, glow: true }), GX, 3.4, z));
+        gate.beacons.push({ lens, e: B.emit(new THREE.Vector3(GX - 0.6, 3.2, z), 0xffa21f, 14, 9) });
       }
-      B.animate((dt, t) => {
-        beacons.forEach((b, i) => {
-          b.lens.rotation.y = t * 5 + i * Math.PI;
-          b.e.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5 + i * Math.PI));
-        });
-      });
+      // the leaves hinge at their bottom far edge, so they fall away from the tank
       const hz = new THREE.MeshToonMaterial({ map: hazard, gradientMap });
       hazard.repeat.set(3, 1);
       for (const z of [-1.25, 1.25]) {
+        const hinge = new THREE.Group();
+        hinge.position.set(GX + 0.15, 0, z);
         const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 2.4), toon(0x3e4247));
-        leaf.position.set(GX, 1.3, z);
+        leaf.position.set(-0.15, 1.3, 0);
         leaf.castShadow = leaf.receiveShadow = true;
-        B.add(leaf);
-        B.solid(leaf);
+        hinge.add(leaf);
         for (const y of [0.6, 2.2]) {
           const band = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.4), hz);
-          band.position.set(GX - 0.16, y, z);
+          band.position.set(-0.31, y, 0);
           band.rotation.y = -Math.PI / 2;
-          B.add(band);
+          hinge.add(band);
         }
+        for (const y of [0.3, 1.3, 2.3]) put(hinge, box(0.08, 0.12, 2.3, 0x2f3236, { r: 0.02 }), -0.32, y, 0);
+        B.add(hinge);
+        B.keep(hinge);
+        B.solid(leaf);
+        gate.leaves.push({ hinge, leaf, z });
       }
-      B.block(GX, 0, 0.3, 2.5);
+      const warn = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.7), sign(1.6, 0.7, { board: '#b08a2a', ink: '#1f2022' }));
+      warn.position.set(-0.32, 1.45, 0);
+      warn.rotation.set(0, -Math.PI / 2, 0.06);
+      gate.leaves[0].hinge.add(warn);
+      gate.blocks.push({ x: GX, z: 0, hx: 0.3, hz: 2.5, yaw: 0 });
+      B.blocks.push(...gate.blocks);
+
       for (let i = 0; i < 16; i++) {
         const z = (i % 2 ? -1 : 1) * (4 + (i >> 1) * 0.55);
         if (Math.abs(z) > 7) continue;
@@ -1034,15 +1224,17 @@ export const avenue = {
         put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, 0, 0.62);
         put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, Math.PI / 2, 0.62);
         put(g, box(0.14, 0.14, 1.8, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0.62, 0.6, 0);
-        g.position.set(x, 0, z);
+        g.position.set(x, heightAt(x, z), z);
         g.rotation.y = rand() * 3;
         B.add(g);
-        B.solidGroup(g);
+        B.hitBox(x, 0.5, z, 1.4, 1.0, 1.4);
         B.block(x, z, 0.7, 0.7);
       }
-      for (const [x, z] of [[82, -3.5], [84.5, 1.5], [86, -6], [80.5, 4.2], [86.5, 3.8]]) hedgehog(x, z);
-      const tx = GX - 2.2;
-      const tz = CURB.s + 1.6;
+      // spaced so there is always a way round, never a pocket to get stuck in
+      for (const [x, z] of [[86, -3.6], [88.5, 2.4], [91.5, -0.6], [93.5, 4.2], [94, -5.8]]) hedgehog(x, z);
+      // floodlight tower: cold white over the approach
+      const tx = GX - 2.4;
+      const tz = WALK.s - 0.4;
       for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) B.piece(0.08, 6, 0.08, 0x45484c, tx + dx, SW + 3, tz + dz);
       B.piece(1.1, 0.12, 1.1, 0x45484c, tx, SW + 6, tz);
       put(B.root, box(0.5, 0.5, 0.9, 0x2e3034, { r: 0.05 }), tx - 0.2, SW + 6.35, tz).rotation.z = -0.5;
@@ -1050,25 +1242,148 @@ export const avenue = {
       B.block(tx, tz, 0.5, 0.5);
       B.emit(new THREE.Vector3(tx - 4, 3.5, tz - 3), COLD, 26, 14);
       B.pool(tx - 5, tz - 4.5, 4.2, COLD, 0.2, { sx: 1.3, yaw: 0.6 });
-      put(B.root, box(1.6, 2.4, 1.6, 0x6f7a72, { r: 0.08 }), GX + 2, SW + 1.2, CURB.n - 1);
-      put(B.root, box(1.8, 0.1, 1.8, 0xd0d3d8, { r: 0.02 }), GX + 2, SW + 2.46, CURB.n - 1);
-      B.block(GX + 2, CURB.n - 1, 0.8, 0.8);
-      const warn = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.7), sign(1.6, 0.7, { board: '#b08a2a', ink: '#1f2022' }));
-      warn.position.set(GX - 0.17, 1.45, -1.25);
-      warn.rotation.set(0, -Math.PI / 2, 0.06);
-      B.add(warn);
+      // guard booth behind the gate, a blue strobe on its roof
+      put(B.root, box(1.6, 2.4, 1.6, 0x6f7a72, { r: 0.08 }), GX + 2.4, SW + 1.2, CURB.n - 1.2);
+      put(B.root, box(1.8, 0.1, 1.8, 0xd0d3d8, { r: 0.02 }), GX + 2.4, SW + 2.46, CURB.n - 1.2);
+      const strobe = B.keep(put(B.root, box(0.22, 0.16, 0.22, 0x3f8cff, { r: 0.03, glow: true }), GX + 2.4, SW + 2.6, CURB.n - 1.2));
+      const strobeE = B.emit(new THREE.Vector3(GX + 1.4, 2.8, CURB.n - 1.2), 0x3f8cff, 12, 8);
+      B.block(GX + 2.4, CURB.n - 1.2, 0.8, 0.8);
+      B.animate((dt, t) => {
+        const on = t % 0.9 < 0.12 || (t % 0.9 > 0.22 && t % 0.9 < 0.32);
+        strobe.material = on ? glowMat(0x3f8cff) : toon(0x1d2a44);
+        strobeE.level = on ? 1 : 0;
+        if (gate.down) return;
+        gate.beacons.forEach((b, i) => {
+          b.lens.rotation.y = t * 5 + i * Math.PI;
+          b.e.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5 + i * Math.PI));
+        });
+      });
+    }
+    // gate toppling once it's broken
+    B.animate((dt) => {
+      if (!gate.down || gate.fall >= 1) return;
+      gate.fall = Math.min(1, gate.fall + dt * 1.6);
+      const k = gate.fall;
+      const ease = k < 0.8 ? (k / 0.8) ** 2 : 1 - Math.sin(((k - 0.8) / 0.2) * Math.PI) * 0.06;
+      gate.leaves.forEach((l, i) => {
+        l.hinge.rotation.z = -ease * (Math.PI / 2 - 0.08);
+        l.hinge.rotation.x = (i ? 1 : -1) * ease * 0.12;
+      });
+    });
+
+    function hitGate(at, api) {
+      if (gate.down) return false;
+      if (Math.abs(at.x - GX) > 2.2 || Math.abs(at.z) > 3 || at.y > 3.6) return false;
+      gate.hp--;
+      const c = api.combat;
+      const center = new THREE.Vector3(GX - 0.3, 1.3, 0);
+      c.fx.burst(center, { count: 24, speed: 7, color: 0xffd36b, life: 0.4, size: 0.08, gravity: 12 });
+      // buckle the leaves a little more with each hit
+      gate.leaves.forEach((l, i) => {
+        l.hinge.rotation.z = -0.06 * (3 - gate.hp);
+        l.hinge.rotation.y = (i ? 1 : -1) * 0.05 * (3 - gate.hp);
+      });
+      if (gate.hp > 0) {
+        api.shake(0.2);
+        api.prompt('Main gun', gate.hp === 2 ? 'Good hit! Two more.' : 'One more!', { seconds: 0 });
+        return true;
+      }
+      // down it goes
+      gate.down = true;
+      for (const b of gate.blocks) api.removeBlock(b);
+      for (const l of gate.leaves) api.removeCollider(l.leaf);
+      for (const b of gate.beacons) {
+        b.e.level = 0;
+        b.lens.material = toon(0x3a2a14);
+      }
+      c.explode(center.clone().setY(1.6));
+      c.machineDeath(center.clone().setY(2.6), 0x3e4247);
+      for (let i = 0; i < 18; i++) {
+        const a = Math.random() * Math.PI * 2;
+        c.puffs.spawn(new THREE.Vector3(GX + 1, 0.3, (Math.random() - 0.5) * 4), new THREE.Vector3(Math.cos(a) * 3, 0.6, Math.sin(a) * 3), { color: 0xa9a8a6, s0: 0.3, s1: 0.9, life: 1.4, drag: 2, lift: 0.4, fadeAt: 0.3 });
+      }
+      api.shake(0.5);
+      return true;
     }
 
     B.finish();
+    B.mergeStatic();
 
-    // ------------------------------------------------------------ snowfall
-    const FLAKES = 420;
-    const flakes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0xe6eaf0 }), FLAKES);
-    flakes.frustumCulled = false;
-    B.add(flakes);
-    const flakePos = [];
-    for (let i = 0; i < FLAKES; i++) flakePos.push(new THREE.Vector3((rand() - 0.5) * 40, rand() * 14, (rand() - 0.5) * 40));
-    const m4 = new THREE.Matrix4();
+    // ------------------------------------------------------ tutorial script
+    // Drive -> machines (the roof MG handles them) -> main gun -> the bridge
+    // -> blow the gate -> drive through.
+    const S = { step: 0, spawnX: 0 };
+    const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
+    function start(api) {
+      S.step = 0;
+      S.spawnX = api.tankPos.x;
+      gate.hp = 3;
+      api.objective('Push down the avenue to the checkpoint');
+      api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
+    }
+    function script(api) {
+      const x = api.tankPos.x;
+      switch (S.step) {
+        case 0:
+          if (x > S.spawnX + 5) {
+            api.clearPrompt();
+            S.step = 1;
+          }
+          break;
+        case 1:
+          if (x > -6) {
+            api.spawnDog(22, -19);
+            api.spawnDog(21, -21.5, { delay: 0.7 });
+            api.prompt('Machines', 'Incoming! Your roof MG tracks and fires on its own. Keep them in range.', { danger: true });
+            S.step = 2;
+          }
+          break;
+        case 2:
+          if (api.enemiesAlive === 0) {
+            api.prompt('Main gun', 'The turret follows your pointer. <kbd>Click</kbd> or <kbd>Space</kbd> fires the cannon. Its blast shreds machines.', { seconds: 8 });
+            S.step = 3;
+          }
+          break;
+        case 3:
+          if (x > 40) {
+            api.spawnDog(82, -3);
+            api.spawnDog(83, 1.5, { delay: 0.5 });
+            api.spawnDog(84.5, 4, { delay: 1.0 });
+            api.prompt('Machines', 'More of them, coming over the bridge.', { danger: true, seconds: 4 });
+            S.step = 4;
+          }
+          break;
+        case 4:
+          if (x > 80) {
+            api.spawnDog(97.5, -7.5);
+            api.spawnDog(97.5, 7.6, { delay: 0.4 });
+            S.step = 5;
+          }
+          break;
+        case 5:
+          if (x > 84 && api.enemiesAlive === 0) {
+            api.objective('Blow down the checkpoint gate');
+            api.prompt('Main gun', 'Aim at the gate and <kbd>Click</kbd> to fire. Three hits should bring it down.');
+            api.marker(gateMark, 'Gate');
+            S.step = 6;
+          }
+          break;
+        case 7:
+          if (x > GX + 8) {
+            api.objective('');
+            api.win();
+            S.step = 8;
+          }
+          break;
+      }
+    }
+    function onImpact(at, mesh, api) {
+      if (!hitGate(at, api) || !gate.down) return;
+      api.marker(null);
+      api.objective('Drive through the gate');
+      api.prompt('Breakthrough', 'The gate is down. Drive through!', { seconds: 5 });
+      S.step = 7;
+    }
 
     function update(dt, t, ctx = {}) {
       B.update(dt, t, ctx);
@@ -1093,19 +1408,7 @@ export const avenue = {
           s.p.material.opacity = 0;
         }
       }
-      const c = ctx.focus || new THREE.Vector3();
-      for (let i = 0; i < FLAKES; i++) {
-        const p = flakePos[i];
-        p.y -= dt * (0.9 + (i % 5) * 0.12);
-        p.x += dt * (0.5 + Math.sin(t * 0.7 + i) * 0.3);
-        p.z += dt * Math.cos(t * 0.5 + i * 1.3) * 0.25;
-        if (p.y < 0) p.y += 14;
-        const wx = ((((p.x - c.x) % 40) + 60) % 40) - 20 + c.x;
-        const wz = ((((p.z - c.z) % 40) + 60) % 40) - 20 + c.z;
-        m4.makeTranslation(wx, p.y, wz);
-        flakes.setMatrixAt(i, m4);
-      }
-      flakes.instanceMatrix.needsUpdate = true;
+      if (ctx.api) script(ctx.api);
     }
 
     return {
@@ -1114,8 +1417,10 @@ export const avenue = {
       blocks: B.blocks,
       emitters: B.emitters,
       heightAt,
-      spawn: { x: -22, z: -0.5, yaw: 0 },
-      bounds: { minX: -36, maxX: 98, minZ: -21, maxZ: 9.9 },
+      spawn: { x: START_X + 7, z: -0.5, yaw: 0 },
+      bounds: { minX: START_X + 2, maxX: GX + 14, minZ: -21, maxZ: 9.9 },
+      start,
+      onImpact,
       update,
     };
   },

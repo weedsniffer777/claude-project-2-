@@ -1,0 +1,239 @@
+// In-game HUD: hull bar, objective, tutorial prompts, a reticle with the
+// cannon's reload ring, floating damage numbers, an on-screen target marker
+// and the end-of-run panel. Pixel type, black panels, bone-white text with
+// hazard amber; red only means danger (damage taken, low hull, machines).
+import * as THREE from 'three';
+
+const CSS = `
+.hud { --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
+  position: fixed; inset: 0; pointer-events: none; z-index: 10; color: var(--ink);
+  font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; -webkit-font-smoothing: none; image-rendering: pixelated; }
+.hud .px { font-family: 'Silkscreen', 'Pixelify Sans', ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.06em; }
+.hud .panel { background: var(--panel); box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--edge), 4px 4px 0 4px #000;
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px)); }
+.hud-top { position: absolute; left: 16px; top: calc(14px + env(safe-area-inset-top, 0px)); display: grid; gap: 10px; }
+.hud-hull { padding: 8px 12px 10px; display: grid; gap: 6px; min-width: 210px; }
+.hud-hull .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+.hud-hull .val { font-variant-numeric: tabular-nums; }
+.hud-bar { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 12px; }
+.hud-bar i { background: var(--ink); }
+.hud-bar i.off { background: #3a3634; }
+.hud.low .hud-bar i:not(.off) { background: var(--danger); }
+.hud.low .hud-hull .val { color: var(--danger); }
+.hud-obj { padding: 6px 12px 7px; font-size: 13px; display: flex; gap: 10px; align-items: baseline; max-width: min(420px, calc(100vw - 32px)); }
+.hud-obj .tag { color: var(--amber); font-size: 11px; }
+.hud-kills { position: absolute; right: 16px; top: calc(52px + env(safe-area-inset-top, 0px)); padding: 6px 12px; font-size: 12px; }
+.hud-kills b { color: var(--danger); font-weight: 400; }
+.hud-prompt { position: absolute; left: 50%; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
+  padding: 10px 16px 12px; display: grid; gap: 6px; max-width: min(560px, calc(100vw - 32px)); text-align: center; transition: opacity 0.2s, transform 0.2s; }
+.hud [hidden] { display: none !important; }
+.hud .hud-prompt[hidden] { display: grid !important; opacity: 0; transform: translate(-50%, 10px); }
+.hud-prompt .tag { font-size: 11px; color: var(--amber); }
+.hud-prompt.danger .tag { color: var(--danger); }
+.hud-prompt .text { font-size: 17px; text-wrap: balance; }
+.hud kbd { display: inline-block; min-width: 1.4em; padding: 1px 5px 2px; margin: 0 1px; font: 400 13px/1.2 'Silkscreen', monospace;
+  color: #111; background: var(--ink); box-shadow: 0 2px 0 #6d655a; }
+.hud-reticle { position: absolute; left: 0; top: 0; width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+.hud-reticle svg { width: 100%; height: 100%; overflow: visible; }
+.hud-dmg { position: absolute; left: 0; top: 0; font: 400 16px/1 'Silkscreen', monospace; color: var(--ink);
+  text-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, 2px 2px #000; white-space: nowrap; transform: translate(-50%, -50%); }
+.hud-dmg.big { font-size: 24px; color: var(--amber); }
+.hud-dmg.kill { color: var(--danger); }
+.hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
+.hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
+.hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
+@keyframes hudpulse { 50% { transform: scale(1.12); } }
+.hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 6px var(--danger), inset 0 0 80px rgba(255, 59, 47, 0.45); opacity: 0; transition: opacity 0.25s; }
+.hud-end { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: center;
+  text-align: center; pointer-events: auto; min-width: min(360px, calc(100vw - 32px)); }
+.hud-end h2 { margin: 0; font: 400 28px/1.1 'Silkscreen', monospace; letter-spacing: 0.04em; text-transform: uppercase; }
+.hud-end.lose h2 { color: var(--danger); }
+.hud-end.win h2 { color: var(--amber); }
+.hud-end .stats { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 14px; color: var(--dim); }
+.hud-end .stats b { color: var(--ink); font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
+.hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
+  color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
+.hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.dk-shot .hud { display: none; }
+`;
+
+let injected = false;
+function inject() {
+  if (injected) return;
+  injected = true;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap';
+  document.head.append(link);
+  const style = document.createElement('style');
+  style.textContent = CSS;
+  document.head.append(style);
+}
+
+const RING_R = 19;
+const RING_LEN = 2 * Math.PI * RING_R;
+
+export function createHud() {
+  inject();
+  const root = document.createElement('div');
+  root.className = 'hud';
+  root.innerHTML = `
+    <div class="hud-hurt"></div>
+    <div class="hud-top">
+      <div class="hud-hull panel"><div class="row"><span class="px">Hull</span><span class="px val">100</span></div><div class="hud-bar"></div></div>
+      <div class="hud-obj panel" hidden><span class="px tag">Objective</span><span class="text"></span></div>
+    </div>
+    <div class="hud-kills panel px" hidden>Machines <b>0</b></div>
+    <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
+    <div class="hud-marker" hidden><span class="px"></span></div>
+    <div class="hud-reticle" hidden>
+      <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
+        <circle r="${RING_R}" fill="none" stroke="#000" stroke-width="6" opacity="0.6"></circle>
+        <circle class="reload" r="${RING_R}" fill="none" stroke="#f1e9d8" stroke-width="3" stroke-dasharray="${RING_LEN}" transform="rotate(-90)"></circle>
+        <g stroke="#000" stroke-width="5"><path d="M-12 0H-5M5 0H12M0 -12V-5M0 5V12"></path></g>
+        <g class="cross" stroke="#f1e9d8" stroke-width="2"><path d="M-12 0H-5M5 0H12M0 -12V-5M0 5V12"></path></g>
+        <rect x="-1.5" y="-1.5" width="3" height="3" fill="#f1e9d8"></rect>
+      </svg>
+    </div>
+    <div class="hud-numbers"></div>
+    <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><button type="button"></button></div>
+  `;
+  const $ = (s) => root.querySelector(s);
+  const bar = $('.hud-bar');
+  for (let i = 0; i < 12; i++) bar.append(document.createElement('i'));
+  const reticle = $('.hud-reticle');
+  const reload = $('.reload');
+  const cross = $('.cross');
+  const prompt = $('.hud-prompt');
+  const marker = $('.hud-marker');
+  const numbersEl = $('.hud-numbers');
+  const hurt = $('.hud-hurt');
+  const end = $('.hud-end');
+  const numbers = [];
+  let markerAt = null;
+  let hurtT = 0;
+  let promptTimer = 0;
+  let onEnd = null;
+  end.querySelector('button').addEventListener('click', () => onEnd?.());
+
+  const v = new THREE.Vector3();
+  function toScreen(p, camera, rect) {
+    v.copy(p).project(camera);
+    return [rect.left + ((v.x + 1) / 2) * rect.width, rect.top + ((1 - v.y) / 2) * rect.height, v.z < 1];
+  }
+
+  return {
+    root,
+    mount() {
+      document.body.append(root);
+    },
+    unmount() {
+      root.remove();
+    },
+    setHull(hp, max) {
+      const k = Math.max(0, hp / max);
+      $('.hud-hull .val').textContent = Math.ceil(Math.max(0, hp));
+      [...bar.children].forEach((el, i) => el.classList.toggle('off', i >= Math.ceil(k * 12)));
+      root.classList.toggle('low', k < 0.3);
+    },
+    hurt() {
+      hurtT = 0.25;
+    },
+    setObjective(text) {
+      const el = $('.hud-obj');
+      el.hidden = !text;
+      el.querySelector('.text').textContent = text || '';
+    },
+    setKills(n) {
+      const el = $('.hud-kills');
+      el.hidden = false;
+      el.querySelector('b').textContent = n;
+    },
+    // html may contain <kbd>. seconds = 0 keeps it up until replaced.
+    prompt(tag, html, { seconds = 0, danger = false } = {}) {
+      prompt.querySelector('.tag').textContent = tag;
+      prompt.querySelector('.text').innerHTML = html;
+      prompt.classList.toggle('danger', danger);
+      prompt.hidden = false;
+      promptTimer = seconds;
+    },
+    clearPrompt() {
+      prompt.hidden = true;
+      promptTimer = 0;
+    },
+    setMarker(worldPos, label = '') {
+      markerAt = worldPos ? worldPos.clone() : null;
+      marker.hidden = !markerAt;
+      marker.querySelector('span').textContent = label;
+    },
+    showReticle(on) {
+      reticle.hidden = !on;
+    },
+    // reload: 0 = just fired .. 1 = ready
+    setReticle(x, y, reload01) {
+      reticle.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      const ready = reload01 >= 1;
+      reload.setAttribute('stroke-dashoffset', String(RING_LEN * (1 - Math.min(1, reload01))));
+      reload.setAttribute('stroke', ready ? '#f1e9d8' : '#ffb347');
+      cross.setAttribute('stroke', ready ? '#f1e9d8' : '#8f877a');
+    },
+    damage(worldPos, amount, kind = 'mg') {
+      const el = document.createElement('div');
+      el.className = `hud-dmg${kind === 'big' ? ' big' : ''}${kind === 'kill' ? ' kill' : ''}`;
+      el.textContent = kind === 'kill' ? 'KILL' : Math.round(amount);
+      numbersEl.append(el);
+      numbers.push({ el, p: worldPos.clone(), t: 0, vx: (Math.random() - 0.5) * 0.8, life: kind === 'mg' ? 0.55 : 0.9 });
+      if (numbers.length > 40) numbers.shift().el.remove();
+    },
+    showEnd(kind, title, stats, button, onClick) {
+      end.hidden = false;
+      end.className = `hud-end panel ${kind}`;
+      end.querySelector('h2').textContent = title;
+      end.querySelector('.stats').innerHTML = stats.map(([k, val]) => `<span>${k}</span><b>${val}</b>`).join('');
+      end.querySelector('button').textContent = button;
+      onEnd = onClick;
+      reticle.hidden = true;
+      end.querySelector('button').focus();
+    },
+    hideEnd() {
+      end.hidden = true;
+    },
+    update(dt, camera, canvas) {
+      const rect = canvas.getBoundingClientRect();
+      if (promptTimer > 0) {
+        promptTimer -= dt;
+        if (promptTimer <= 0) prompt.hidden = true;
+      }
+      hurtT = Math.max(0, hurtT - dt);
+      hurt.style.opacity = String(Math.min(1, hurtT * 4));
+      if (markerAt) {
+        const [x, y] = toScreen(markerAt, camera, rect);
+        marker.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+      }
+      for (let i = numbers.length - 1; i >= 0; i--) {
+        const n = numbers[i];
+        n.t += dt;
+        if (n.t > n.life) {
+          n.el.remove();
+          numbers.splice(i, 1);
+          continue;
+        }
+        n.p.y += dt * 1.6;
+        n.p.x += n.vx * dt;
+        const [x, y] = toScreen(n.p, camera, rect);
+        const pop = n.t < 0.08 ? 1.5 : 1;
+        n.el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -50%) scale(${pop})`;
+        n.el.style.opacity = n.t > n.life * 0.7 ? '0.5' : '1';
+      }
+    },
+    reset() {
+      for (const n of numbers) n.el.remove();
+      numbers.length = 0;
+      end.hidden = true;
+      prompt.hidden = true;
+      marker.hidden = true;
+      markerAt = null;
+      this.setObjective('');
+    },
+  };
+}

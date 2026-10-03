@@ -202,7 +202,7 @@ export function car(B, x, z, yaw, { kind = 'sedan', paint = null, burnt = true, 
   g.position.set(x, 0, z);
   g.rotation.y = yaw;
   B.add(g);
-  B.solidGroup(g);
+  B.hitBox(x, 0.55, z, P.len, kind === 'van' ? 1.6 : 1.1, P.width, yaw);
   if (burnt) scorch(B, x, z, P.len * 0.75);
   if (solidBlock) B.block(x, z, P.len / 2, P.width / 2 + 0.05, yaw);
   return g;
@@ -239,7 +239,7 @@ export function bus(B, x, z, yaw) {
   g.position.set(x, -0.1, z);
   g.rotation.set(0, yaw, 0.02);
   B.add(g);
-  B.solidGroup(g);
+  B.hitBox(x, 1.3, z, L, 2.5, 2.0, yaw);
   scorch(B, x, z, 4.5);
   B.block(x, z, L / 2, 1.05, yaw);
   return g;
@@ -294,7 +294,7 @@ export function dumpster(B, x, y, z, yaw, color = 0x4e6355) {
   g.position.set(x, y, z);
   g.rotation.y = yaw;
   B.add(g);
-  B.solidGroup(g);
+  B.hitBox(x, y + 0.6, z, 1.8, 1.2, 1.05, yaw);
   B.block(x, z, 0.92, 0.55, yaw);
   return g;
 }
@@ -414,7 +414,6 @@ export function fallenPole(B, x, z, yaw, len = 6.2) {
   g.position.set(x, 0, z);
   g.rotation.y = yaw;
   B.add(g);
-  B.solidGroup(g);
   for (let i = 0; i < 4; i++) B.piece(0.25, 0.15, 0.2, 0x5e5d5a, x + (B.rand() - 0.5), 0.07, z + (B.rand() - 0.5), 0, B.rand() * 3, 0.3);
 }
 

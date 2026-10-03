@@ -793,6 +793,7 @@ export function createTank() {
     return {
       position: gunPivot.localToWorld(new THREE.Vector3(MUZZLE_X + 0.1, 0, 0)),
       direction: new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld),
+      breech: gunPivot.localToWorld(new THREE.Vector3(0, 0, 0)),
     };
   }
 

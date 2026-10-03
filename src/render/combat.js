@@ -74,6 +74,22 @@ export class CombatFx {
     fx.burst(m, { count: 6, speed: 5, color: 0xffd060, life: 0.12, size: 0.1 });
     this.shake = Math.max(this.shake, 0.12);
 
+    const { target, hit } = this.traceShot(m, d, breech, aimPoint, colliders);
+    if (target.clone().sub(m).dot(d) <= 0.05) {
+      this.explode(target, hit?.normal, hit?.mesh); // point blank: the muzzle is at (or in) the wall
+      return true;
+    }
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
+    mesh.position.copy(m);
+    mesh.lookAt(target);
+    this.scene.add(mesh);
+    this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)) });
+    return true;
+  }
+
+  // Where a shell fired now would land: along the gun's bearing to the aim
+  // distance and height, stopped by the first collider in the way.
+  traceShot(m, d, breech, aimPoint, colliders = []) {
     const flat = new THREE.Vector3(d.x, 0, d.z).normalize();
     const dist = aimPoint ? THREE.MathUtils.clamp(Math.hypot(aimPoint.x - m.x, aimPoint.z - m.z), 2, 18) : 12;
     let target = new THREE.Vector3(m.x, aimPoint ? aimPoint.y : 0, m.z).addScaledVector(flat, dist);
@@ -93,20 +109,45 @@ export class CombatFx {
         hit = { normal, mesh: h.object };
       }
     }
-    if (target.clone().sub(m).dot(d) <= 0.05) {
-      this.explode(target, hit?.normal, hit?.mesh); // point blank: the muzzle is at (or in) the wall
-      return true;
+    return { target, hit };
+  }
+
+  // An enemy rifle shot: red tracer from the muzzle; sparks where it lands.
+  enemyShot(from, to, hitTank) {
+    const { glow, fx } = this;
+    glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
+    glow.tracer(from, to, 0xff3b2f, 0.06, 0.08);
+    glow.light(from, 0xff4a30, 6, 0.06);
+    if (hitTank) {
+      glow.flash(to, 0xffd9a0, 0.06, 0.3, 0.06);
+      fx.burst(to, { count: 6, speed: 4, color: 0xffd36b, life: 0.2, size: 0.06, gravity: 9 });
+    } else {
+      fx.burst(to, { count: 3, speed: 2.5, color: 0x8d8b86, glow: false, life: 0.3, size: 0.06, gravity: 9 });
     }
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
-    mesh.position.copy(m);
-    mesh.lookAt(target);
-    this.scene.add(mesh);
-    this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)) });
-    return true;
+  }
+
+  // A machine blowing apart: a sharp flash, sparks, its own parts thrown,
+  // a puff of dark smoke.
+  machineDeath(at, color = 0x3e4247) {
+    const { glow, fx, puffs, debris } = this;
+    glow.flash(at, 0xfff0c8, 0.2, 1.1, 0.08);
+    glow.flash(at, 0xff9a40, 0.3, 1.4, 0.14);
+    glow.light(at, 0xff9a40, 40, 0.2);
+    fx.burst(at, { count: 22, speed: 8, color: 0xffd36b, life: 0.45, size: 0.08, gravity: 12 });
+    for (let i = 0; i < 9; i++) {
+      const a = Math.random() * Math.PI * 2;
+      debris.spawn(at, new THREE.Vector3(Math.cos(a) * (2 + Math.random() * 3), 4 + Math.random() * 4, Math.sin(a) * (2 + Math.random() * 3)), { color: i % 3 ? color : 0x1f2124, size: 0.06 + Math.random() * 0.07, life: 2.2 });
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2;
+      puffs.spawn(at, new THREE.Vector3(Math.cos(a) * 1.5, 1 + Math.random(), Math.sin(a) * 1.5), { color: i % 2 ? 0x3d3c40 : 0x55545a, s0: 0.12, s1: 0.4 + Math.random() * 0.2, life: 0.9, drag: 2.5, lift: 1.4, fadeAt: 0.3 });
+    }
+    this.shake = Math.max(this.shake, 0.12);
   }
 
   // at: impact point; normal/mesh: the surface hit (null for an airburst).
   explode(at, normal = null, mesh = null) {
+    this.onImpact?.(at, mesh);
     const { fx, glow, puffs, debris, craters } = this;
     const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
     const p = at.clone().addScaledVector(n, 0.3);

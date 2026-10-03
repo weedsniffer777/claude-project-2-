@@ -4,6 +4,7 @@
 // small debris pieces (one draw call instead of hundreds).
 import * as THREE from 'three';
 import { toon, gradientMap } from '../models/kit.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export function rng(seed) {
   let s = seed;
@@ -214,6 +215,57 @@ export class LevelBuilder {
     bake(this.lumps, new THREE.IcosahedronGeometry(1, 1));
     this.pieces = [];
     this.lumps = [];
+  }
+
+  // Mark a mesh (or group) as animated or swapped at runtime, so the static
+  // merge leaves it alone.
+  keep(obj) {
+    obj.traverse((o) => (o.userData.dynamic = true));
+    return obj;
+  }
+
+  // Bake every static, opaque, non-collider mesh into one mesh per material,
+  // and every wire into one line set per material: a few dozen draw calls
+  // instead of many hundreds.
+  mergeStatic() {
+    this.root.updateMatrixWorld(true);
+    const solid = new Set(this.colliders);
+    const meshes = new Map();
+    const lines = new Map();
+    const remove = [];
+    this.root.traverse((o) => {
+      if (o.userData.dynamic || solid.has(o) || !o.visible) return;
+      if (o.isMesh && !o.isInstancedMesh && !Array.isArray(o.material) && !o.material.transparent && o.material.visible !== false) {
+        const key = `${o.material.uuid}|${o.castShadow}`;
+        if (!meshes.has(key)) meshes.set(key, { material: o.material, cast: o.castShadow, geos: [] });
+        let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
+        if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+        if (!g.attributes.normal) g.computeVertexNormals();
+        g.clearGroups();
+        g.applyMatrix4(o.matrixWorld);
+        meshes.get(key).geos.push(g);
+        remove.push(o);
+      } else if (o.isLine) {
+        const pos = o.geometry.attributes.position;
+        if (!lines.has(o.material)) lines.set(o.material, []);
+        const out = lines.get(o.material);
+        const a = new THREE.Vector3();
+        const step = o.isLineSegments ? 2 : 1;
+        for (let i = 0; i < pos.count - 1; i += step) {
+          out.push(a.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).clone(), a.fromBufferAttribute(pos, i + 1).applyMatrix4(o.matrixWorld).clone());
+        }
+        remove.push(o);
+      }
+    });
+    for (const o of remove) o.removeFromParent();
+    for (const { material, cast, geos } of meshes.values()) {
+      const m = new THREE.Mesh(mergeGeometries(geos, false), material);
+      m.castShadow = cast;
+      m.receiveShadow = true;
+      this.root.add(m);
+    }
+    for (const [material, pts] of lines) this.root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), material));
   }
 
   update(dt, t, ctx) {

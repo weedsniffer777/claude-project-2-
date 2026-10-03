@@ -101,7 +101,7 @@ export function addDusk(scene, { shadowSize = 18, shadowMap = 2048 } = {}) {
   const sky = new THREE.CanvasTexture(c);
   sky.colorSpace = THREE.SRGBColorSpace;
   scene.background = sky;
-  scene.fog = new THREE.Fog(0x6b5568, 30, 72);
+  scene.fog = new THREE.Fog(0x6b5568, 79, 121); // the game camera sits ~65 units back
   scene.add(new THREE.HemisphereLight(0x9d97c8, 0x5a4a44, 2.1));
   const sun = new THREE.DirectionalLight(0xffbf7a, 5.2);
   const offset = DUSK_SUN.clone();
