@@ -446,7 +446,7 @@ function sunPatch(B, pts, opacity) {
 // ------------------------------------------------------------- the level
 export const avenue = {
   id: 'avenue',
-  name: 'Zone 1 · The avenue (tutorial)',
+  name: 'Level 1 · Ruined city street (tutorial)',
   build(scene) {
     setLowPoly(true);
     try {
@@ -1809,7 +1809,7 @@ function buildAvenue(scene) {
     function openShack(api, shack, text) {
       shack.openIn();
       api.objective('Enter the checkpoint');
-      api.prompt('Sector clear', text, { go: true });
+      api.prompt('Zone clear', text, { go: true });
       api.arrow(shack.door, 'Checkpoint');
     }
     const atDoor = (api, shack) => shack.inDoor > 0.6 && Math.hypot(api.tankPos.x - shack.door.x, api.tankPos.z - shack.door.z) < 5;
@@ -1843,8 +1843,8 @@ function buildAvenue(scene) {
         case -1:
           if (run.crushed > 0 || x > FIRST_WRECK.x + 6) {
             api.arrow(null);
-            api.revealScraps();
             api.prompt('Scraps', 'Destroying obstacles gives <b>scraps</b>, a valuable currency.', { go: true });
+            api.revealScraps();
             go(-2);
           }
           break;
@@ -1952,7 +1952,7 @@ function buildAvenue(scene) {
       setBounds(api, B2);
       api.sectors(SECTORS, 1);
       api.objective('Cross the bridge');
-      api.prompt('Sector 2', 'Over the bridge. Watch the far bank.', { seconds: 4 });
+      api.prompt('Zone 2', 'Over the bridge. Watch the far bank.', { seconds: 4 });
     }
     function sector2(api) {
       const x = api.tankPos.x;
@@ -2032,7 +2032,7 @@ function buildAvenue(scene) {
       S.hold = HOLD;
       S.waveT = 1;
       S.n = 0;
-      api.prompt('Sector 3', 'The street ahead is walled off. <b>Hold the intersection!</b>', { danger: true, seconds: 6 });
+      api.prompt('Zone 3', 'The street ahead is walled off. <b>Hold the intersection!</b>', { danger: true, seconds: 6 });
     }
     // walkers climbing in over the rubble in the side streets
     const fromNorth = (api, dx, delay = 0) => api.spawnDog(JX + dx, -20, { delay, via: [[JX + dx * 0.6, -9]] });
@@ -2064,7 +2064,7 @@ function buildAvenue(scene) {
             fromSouth(api, 3, 2);
             api.boss(S.boss, 'Large quadruped');
             api.prompt('Warning', 'A <b>large quadruped</b>, coming over the rubble! Pound it with the cannon, ram it when it gets close!', { danger: true, seconds: 7 });
-            api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 0.6, { maxTime: 2.5 });
+            api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 1.4, { maxTime: 2.5, frame: () => (S.boss.alive ? S.boss.pos.clone() : null) });
             go(1);
           }
           break;
@@ -2086,7 +2086,9 @@ function buildAvenue(scene) {
           if (api.tankPos.x > END_X - 0.5) {
             api.arrow(null);
             api.sectors(SECTORS, 3); // the last one ticked off too
-            api.win('Level clear');
+            // then off down the middle of the street, clear of the heaps
+            const z = api.tankPos.z;
+            api.win('Level clear', { path: [[END_X + 4, z * 0.4], [END_X + 9, 0], [END_X + 70, 0]] });
             go(4);
           }
           break;

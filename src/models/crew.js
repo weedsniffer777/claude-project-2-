@@ -76,7 +76,7 @@ function paint(skinned) {
     else if (/hand_[lr]_2/.test(name)) hex = C.sleeve;
     else if (name.startsWith('foot')) hex = y < 46 ? C.boots : C.trousers;
     else if (name.startsWith('body_00') && y < 250) hex = C.trousers;
-    c.setHex(hex).convertSRGBToLinear();
+    c.setHex(hex); // (setHex already gives linear values)
     col.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));

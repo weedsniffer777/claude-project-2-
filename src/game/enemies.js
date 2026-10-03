@@ -418,7 +418,7 @@ export class Enemies {
       }
       // the funnel: brightening through the wind-up, flaring on the burst
       const showing = e.windup > 0 || e.burstLeft > 0;
-      e.funnelK += ((showing ? 1 : 0) - e.funnelK) * Math.min(1, dt * (showing ? 10 : 6));
+      e.funnelK = showing ? 1 : Math.max(0, e.funnelK - dt * 6); // on at once, quick to fade after
       e.funnel.visible = e.funnelK > 0.02 && !!e.lock;
       if (e.funnel.visible) {
         const from = e.model.muzzle();

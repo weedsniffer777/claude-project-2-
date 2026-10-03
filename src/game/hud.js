@@ -39,6 +39,11 @@ const CSS = `
 .hud-obj { display: none !important; } /* objectives: off for now */
 .hud-sectors { justify-self: start; }
 .hud-prompt { padding: 10px 16px 12px; display: grid; gap: 6px; width: 100%; box-sizing: border-box; transition: opacity 0.2s, transform 0.2s; }
+/* on a computer the tutorial line sits up in the middle of the view, big
+   enough to actually get read */
+.hud:not(.touch) .hud-prompt { position: absolute; left: 50%; top: 26vh; transform: translateX(-50%); width: min(620px, calc(100vw - 64px)); padding: 14px 22px 16px; }
+.hud:not(.touch) .hud-prompt .text { font-size: 21px; text-align: center; }
+.hud:not(.touch) .hud .hud-prompt[hidden], .hud:not(.touch) .hud-prompt[hidden] { transform: translate(-50%, -10px); }
 .hud [hidden] { display: none !important; }
 .hud .hud-prompt[hidden] { display: grid !important; opacity: 0; transform: translateY(-10px); }
 .hud-prompt .tag { display: none; }
@@ -135,7 +140,10 @@ const CSS = `
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
-.hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 6px var(--danger), inset 0 0 80px rgba(255, 59, 47, 0.45); opacity: 0; transition: opacity 0.25s; }
+.hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 10px var(--danger), inset 0 0 160px 20px rgba(255, 40, 30, 0.6); background: rgba(255, 40, 30, 0.12); opacity: 0; }
+.hud-hull.hit { animation: hudhit 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--danger), 4px 4px 0 4px #000; }
+.hud-hull.hit .val { color: var(--danger); }
+@keyframes hudhit { 0% { transform: translate(-5px, 2px); } 33% { transform: translate(5px, -2px); } 66% { transform: translate(-3px, 1px); } }
 .hud-end { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: center;
   text-align: center; pointer-events: auto; min-width: min(360px, calc(100vw - 32px)); }
 .hud-end h2 { margin: 0; font: 400 28px/1.1 'Silkscreen', monospace; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -357,6 +365,7 @@ export function createHud() {
   cont.addEventListener('click', () => onContinue?.());
   let scrapShown = 0;
   let hurtT = 0;
+  let hitTimer = 0;
   let promptTimer = 0;
   let onEnd = null;
   let onAlt = null;
@@ -384,7 +393,13 @@ export function createHud() {
       root.classList.toggle('low', k < 0.3);
     },
     hurt() {
-      hurtT = 0.25;
+      hurtT = 0.45;
+      const el = $('.hud-hull');
+      el.classList.remove('hit');
+      void el.offsetWidth;
+      el.classList.add('hit');
+      clearTimeout(hitTimer);
+      hitTimer = setTimeout(() => el.classList.remove('hit'), 420);
     },
     setObjective(text) {
       const el = $('.hud-obj');
@@ -448,7 +463,7 @@ export function createHud() {
       spotSpec = spec;
       spot.classList.toggle('on', !!spec);
     },
-    setSectors(names, current, zone = 'Zone 1') {
+    setSectors(names, current, zone = 'Level 1') {
       const el = $('.hud-sectors');
       el.hidden = !names;
       if (!names) return;
@@ -507,6 +522,10 @@ export function createHud() {
       ability.querySelector('.key').hidden = touchMode;
     },
     abilityCenter,
+    scrapCenter() {
+      const r = $('.hud-scrap').getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
+    },
     // the scraps counter appears when the tutorial introduces scraps
     showScrap(on, highlight = false) {
       const el = $('.hud-scrap');
@@ -666,7 +685,7 @@ export function createHud() {
         }
       }
       hurtT = Math.max(0, hurtT - dt);
-      hurt.style.opacity = String(Math.min(1, hurtT * 4));
+      hurt.style.opacity = String(Math.min(1, hurtT * 3));
       if (arrowAt) {
         const p = typeof arrowAt === 'function' ? arrowAt() : arrowAt;
         if (!p) arrow.hidden = true;

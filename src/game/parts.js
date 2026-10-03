@@ -148,36 +148,32 @@ export const PARTS = {
       }
       t.chassis.add(g);
 
-      // the turret's crab
+      // the turret: round its front, either side of the gun, a row of
+      // units each a "<" in profile: an upper block sloping up and back, a
+      // lower block sloping down and back, meeting at a point out front
       const tg = new THREE.Group();
       const SX = 1.08;
+      const PL = 0.3; // each block's length up its slope
+      const TILT = 0.6;
+      const N = 4;
       for (const side of [-1, 1]) {
-        for (let i = 0; i < 5; i++) {
-          const a = side * (0.34 + i * 0.25);
-          // lower row: upright bricks round the cheek, low on the skirt
-          {
-            const rr = 0.99;
-            const holder = new THREE.Group();
-            holder.position.set(SX * rr * Math.cos(a), 0.17, rr * Math.sin(a));
-            holder.rotation.y = -a;
-            const b = brick(holder, 0.22, 0.07, 0.26, 0, 0, 0);
-            b.rotation.z = Math.PI / 2 - 0.35; // standing, leaning back onto the turret
-            tg.add(holder);
+        for (let i = 0; i < N; i++) {
+          const a = side * (0.36 + i * 0.3);
+          const rr = 0.98; // out on the rim, so the whole "<" stands proud
+          const u = new THREE.Group();
+          u.position.set(SX * rr * Math.cos(a), 0.19, rr * Math.sin(a)); // points level with the gun
+          u.rotation.y = -a; // +x out from the turret's middle
+          const tip = new THREE.Vector2(0.14, 0.17);
+          for (const s of [1, -1]) {
+            // s = 1 the upper block, -1 the lower one
+            const cx = tip.x - Math.cos(TILT) * PL * 0.5;
+            const cy = tip.y + s * Math.sin(TILT) * PL * 0.5;
+            const b = put(u, box(PL, 0.075, 0.28, G, { r: 0.012 }), cx, cy, 0);
+            b.rotation.z = -s * TILT;
+            put(b, box(PL + 0.004, 0.012, 0.012, EDGE), 0, 0.038 * s, 0.13); // seam at its end
           }
-        }
-        // upper row: two straight arms of bricks on brackets over the roof,
-        // a V opening back from just behind the mantlet, each brick tipped
-        // forward
-        for (let i = 0; i < 5; i++) {
-          const k = i / 4;
-          const x = 0.76 - 0.72 * k;
-          const z = side * (0.25 + 0.6 * k);
-          const holder = new THREE.Group();
-          holder.position.set(x, turretSurfaceY(x, z) + 0.1, z);
-          holder.rotation.y = -Math.atan2(side * 0.72, 0.6); // facing out and forward
-          put(holder, box(0.05, 0.12, 0.18, BRACKET, { r: 0.01 }), 0.02, -0.06, 0);
-          brick(holder, 0.3, 0.075, 0.27, 0, 0.01, 0).rotation.z = -0.42;
-          tg.add(holder);
+          put(u, box(0.2, 0.22, 0.08, BRACKET, { r: 0.01 }), -0.14, 0.17, 0); // the mount behind
+          tg.add(u);
         }
       }
       t.turret.add(tg);

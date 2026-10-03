@@ -144,6 +144,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       fading: false,
       auto: null,
       autoKeep: false,
+      autoPath: null,
       paused: false,
     });
     hud.showPause(null);
@@ -234,8 +235,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     // Slow the game and darken the screen except round the targets until
     // `until()` says the player has done the thing.
-    spotlight(spec, until, { maxTime = 3 } = {}) {
-      run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3) }; // never holds the game up for long
+    // frame: () => a world point the camera leans toward meanwhile (so a boss
+    // spotlit off screen comes into view, not necessarily centred)
+    spotlight(spec, until, { maxTime = 3, frame = null } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3), frame }; // never holds the game up for long
       hud.setSpot(spec);
     },
     get spotlit() {
@@ -284,8 +287,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     enableGun() {
       run.gun = true;
     },
-    revealScraps() {
-      hud.showScrap(true, true);
+    // the scraps counter appears, picked out by a spotlight (not a bounce)
+    revealScraps(until = () => false) {
+      hud.showScrap(true, false);
+      requestAnimationFrame(() => {
+        const c = hud.scrapCenter();
+        api.spotlight({ targets: [{ screen: [c.x, c.y], r: Math.max(80, c.w * 0.75) }, () => pos.clone().setY(1)], r: 90 }, until, { maxTime: 2.6 });
+      });
     },
     boss(e, name = 'Large quadruped') {
       run.boss = e ? { e, name } : null;
@@ -355,7 +363,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     get combat() {
       return combat;
     },
-    win(title = 'Zone cleared') {
+    // path: [[x, z], ...] the tank then drives off along (clear of obstacles)
+    win(title = 'Level clear', { path = null } = {}) {
       if (run.over) return;
       run.over = true;
       run.won = true;
@@ -372,7 +381,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // the tank drives on out of the shot; the camera stays where it is
       level.bounds = { minX: -1e4, maxX: 1e4, minZ: -1e4, maxZ: 1e4 };
       const yaw = tank.group.rotation.y;
-      run.auto = new THREE.Vector3(pos.x + Math.cos(yaw) * 40, 0, pos.z - Math.sin(yaw) * 40);
+      run.autoPath = path ? path.map(([x, z]) => new THREE.Vector3(x, 0, z)) : [new THREE.Vector3(pos.x + Math.cos(yaw) * 40, 0, pos.z - Math.sin(yaw) * 40)];
+      run.auto = run.autoPath.shift();
       run.autoKeep = true;
       setTimeout(() => {
         hud.showEnd(
@@ -468,7 +478,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.hp -= damage * stats.armor;
     hud.setHull(run.hp, stats.maxHp);
     hud.hurt();
-    combat.shake = Math.max(combat.shake, 0.08);
+    combat.shake = Math.max(combat.shake, 0.22);
+    // sparks and a red flash off the hull where it was hit
+    const at = pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.4, 1.0, (Math.random() - 0.5) * 1.2));
+    combat.glow.flash(at, 0xff5a3a, 0.12, 1.1, 0.1);
+    combat.glow.light(at, 0xff4a30, 18, 0.12);
+    combat.fx.burst(at, { count: 12, speed: 6, color: 0xffd36b, life: 0.3, size: 0.07, gravity: 12 });
     if (run.hp <= 0) lose();
   }
 
@@ -997,7 +1012,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         const dx = run.auto.x - pos.x;
         const dz = run.auto.z - pos.z;
         const dist = Math.hypot(dx, dz);
-        if (dist < 0.35) {
+        if (run.autoPath?.length && dist < 2.5) {
+          run.auto = run.autoPath.shift(); // on to the next point, without stopping
+        } else if (dist < 0.35) {
           run.auto = null;
           if (!run.autoKeep) speed = 0;
           run.autoKeep = false;
@@ -1119,6 +1136,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
       // camera follows; the aim is re-cast every frame so it tracks while driving
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
+      const lean = run.spot?.frame?.();
+      if (lean) camWant.lerp(lean.setY(camWant.y), 0.45);
       if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5); // frame the room (or the part hovered)
       if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : 6))); // once the zone's won the camera stays put
       camera.position.copy(camTarget).add(CAM_OFFSET);

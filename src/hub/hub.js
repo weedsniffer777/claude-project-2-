@@ -31,14 +31,16 @@ const BASE_CENTER = new THREE.Vector3(7.5, 0, -3.2);
 export const BANK_KEY = 'scavenger.bank';
 
 // The tank's own name: no real-world designations anywhere on screen.
-const TANK = { name: 'Mule', kind: 'Medium tank', blurb: 'Old, slow to start, hard to kill. Everything on it has been replaced at least once.' };
+const TANK = { name: 'Battle tank', blurb: 'Old, slow to start, hard to kill. Everything on it has been replaced at least once.' };
 
-// The campaign: the zones in order. Only the first is scouted.
-const ZONES = [
-  { n: 1, id: 'avenue', name: 'The avenue', at: [0.17, 0.66], open: true, text: 'Panel blocks along a wide avenue, a bridge over the river and the intersection beyond. A large quadruped holds it.', sectors: ['The avenue', 'The bridge', 'The intersection'], threats: ['Quadruped walkers', 'Large quadruped'] },
-  { n: 2, name: 'Not scouted', at: [0.4, 0.4], text: 'Somewhere past the river. Clear zone 1 to scout it.' },
-  { n: 3, name: 'Not scouted', at: [0.63, 0.62], text: 'Clear zone 2 to scout it.' },
-  { n: 4, name: 'Not scouted', at: [0.85, 0.3], text: 'Clear zone 3 to scout it.' },
+// The campaign: the levels in order, bottom of the map to the top. Each
+// level is made of zones (the avenue, the bridge, ...). Only the first is
+// scouted.
+const LEVELS = [
+  { n: 1, id: 'avenue', name: 'Ruined city street', at: [0.3, 0.84], open: true, text: 'Panel blocks along a wide avenue, a bridge over the river and the intersection beyond. A large quadruped holds it.', zones: ['The avenue', 'The bridge', 'The intersection'], threats: ['Quadruped walkers', 'Large quadruped'] },
+  { n: 2, name: 'Not scouted', at: [0.66, 0.62], text: 'Across the river. Clear level 1 to scout it.' },
+  { n: 3, name: 'Not scouted', at: [0.34, 0.38], text: 'Clear level 2 to scout it.' },
+  { n: 4, name: 'Not scouted', at: [0.68, 0.15], text: 'Clear level 3 to scout it.' },
 ];
 
 const CSS = `
@@ -67,21 +69,21 @@ const CSS = `
 .base .stats i { display: block; height: 8px; background: linear-gradient(90deg, var(--amber) var(--v), #2a2628 var(--v)); box-shadow: 0 0 0 2px #000; }
 /* briefing: the campaign map in the middle, the zone's details to its right */
 .base-brief { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 22px; padding: 64px 24px 24px; pointer-events: auto; background: rgba(5, 9, 12, 0.55); }
-.base-brief .map { position: relative; width: min(640px, 58vw); aspect-ratio: 3 / 2; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--holo), 4px 4px 0 4px #000, 0 0 30px #5fe0f033; }
+.base-brief .map { position: relative; height: min(78vh, 680px); aspect-ratio: 2 / 3; box-shadow: 0 0 0 2px #000, 0 0 0 4px #d8d4cb, 4px 4px 0 4px #000; }
 .base-brief .map canvas { position: static; inset: auto; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .base-brief .node { position: absolute; transform: translate(-50%, -50%); width: 34px; height: 34px; border: 0; padding: 0; cursor: var(--cursor); font: 400 15px/1 'Silkscreen', monospace;
-  color: #0b1418; background: var(--holo); box-shadow: 0 0 0 2px #000, 0 0 14px #5fe0f0aa; }
-.base-brief .node.open { background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 16px #ffb347bb; }
-.base-brief .node.locked { background: #24343a; color: #5f7f88; box-shadow: 0 0 0 2px #000; }
+  color: #141416; background: #f1e9d8; box-shadow: 0 0 0 2px #000; }
+.base-brief .node.open { background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #ffb347aa; }
+.base-brief .node.locked { background: #3a3b3f; color: #8a8a8e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; }
 .base-brief .node.sel { outline: 3px solid #f1e9d8; outline-offset: 3px; }
 .base-brief .info { width: min(300px, 32vw); padding: 16px 18px 18px; display: grid; gap: 10px; align-self: center; }
-.base-brief .info .tagline { font-size: 11px; color: var(--holo); }
+.base-brief .info .tagline { font-size: 11px; color: #ff6a5a; }
 .base-brief .info p { margin: 0; font-size: 13px; color: #d8d0c0; }
 .base-brief .info ul { margin: 0; padding: 0 0 0 14px; font-size: 13px; color: #d8d0c0; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 760px) {
   .base-brief { flex-direction: column; gap: 14px; padding: 56px 16px 16px; overflow-y: auto; justify-content: flex-start; }
-  .base-brief .map { width: 100%; }
+  .base-brief .map { width: 100%; height: auto; }
   .base-brief .info { width: auto; align-self: stretch; }
 }
 .base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; white-space: nowrap; }
@@ -166,63 +168,69 @@ function holoTexture(rand) {
   return tex(c);
 }
 
-// The briefing screen's campaign map, drawn small and shown big.
+// The briefing screen's campaign map, drawn small and shown big: a grey
+// city plan in white roads, the river through it, enemy ground hatched red,
+// the route north from level to level.
 function campaignMap() {
-  const W = 240;
-  const Hc = 160;
+  const W = 160;
+  const Hc = 240;
   const [c, g] = canvas(W, Hc);
   let seed = 41;
   const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-  g.fillStyle = '#0a171d';
+  g.fillStyle = '#1b1c1f';
   g.fillRect(0, 0, W, Hc);
-  g.fillStyle = '#10242c';
-  for (let x = 0; x < W; x += 12) g.fillRect(x, 0, 1, Hc);
-  for (let y = 0; y < Hc; y += 12) g.fillRect(0, y, W, 1);
-  // districts: clusters of blocks
-  for (const [cx, cy, n, r] of [[40, 106, 40, 30], [96, 64, 36, 28], [150, 100, 40, 30], [204, 48, 30, 26], [60, 30, 18, 20], [200, 130, 16, 18]]) {
+  g.fillStyle = '#232428';
+  for (let x = 0; x < W; x += 10) g.fillRect(x, 0, 1, Hc);
+  for (let y = 0; y < Hc; y += 10) g.fillRect(0, y, W, 1);
+  // city blocks, in districts
+  for (const [cx, cy, n, r] of [[44, 200, 46, 30], [110, 150, 40, 30], [50, 92, 40, 28], [112, 40, 34, 26], [130, 214, 14, 16], [20, 140, 16, 16]]) {
     for (let i = 0; i < n; i++) {
       const a = rand() * Math.PI * 2;
       const d = Math.sqrt(rand()) * r;
-      g.fillStyle = rand() < 0.5 ? '#173540' : '#1b3c48';
-      g.fillRect((cx + Math.cos(a) * d) | 0, (cy + Math.sin(a) * d * 0.8) | 0, 3 + ((rand() * 6) | 0), 2 + ((rand() * 5) | 0));
+      g.fillStyle = ['#3a3b3f', '#44454a', '#34353a'][(rand() * 3) | 0];
+      g.fillRect((cx + Math.cos(a) * d) | 0, (cy + Math.sin(a) * d * 0.9) | 0, 3 + ((rand() * 6) | 0), 2 + ((rand() * 5) | 0));
     }
   }
-  // the river winding across
-  const riverY = (x) => 78 + Math.sin(x / 26) * 16 + Math.sin(x / 9) * 3;
-  g.fillStyle = '#163f52';
-  for (let x = 0; x < W; x++) g.fillRect(x, riverY(x) | 0, 1, 7);
-  g.fillStyle = '#1f5a72';
-  for (let x = 0; x < W; x += 3) g.fillRect(x, (riverY(x) + 2) | 0, 1, 1);
-  // main roads
-  g.fillStyle = '#24505e';
-  g.fillRect(0, 108, W, 2);
-  g.fillRect(118, 0, 2, Hc);
-  for (let x = 0; x < W; x++) g.fillRect(x, (40 + x * 0.18) | 0, 1, 1);
-  // contour lines in the hills
-  g.strokeStyle = '#173a44';
-  for (let k = 0; k < 5; k++) {
-    g.beginPath();
-    g.ellipse(206, 40, 12 + k * 7, 7 + k * 4, -0.3, 0, Math.PI * 2);
-    g.stroke();
+  // the river, winding across low down
+  const riverY = (x) => 172 + Math.sin(x / 22) * 10 + Math.sin(x / 7) * 2;
+  g.fillStyle = '#2b3740';
+  for (let x = 0; x < W; x++) g.fillRect(x, riverY(x) | 0, 1, 6);
+  // roads in off-white: the avenue up the middle, cross streets
+  g.fillStyle = '#c9c6bd';
+  for (let y = 0; y < Hc; y++) g.fillRect((48 + Math.sin(y / 30) * 6) | 0, y, 2, 1);
+  for (const y of [60, 128, 206]) g.fillRect(0, y, W, 1);
+  g.fillStyle = '#8a877f';
+  for (let x = 0; x < W; x++) g.fillRect(x, (20 + x * 0.25) | 0, 1, 1);
+  // enemy ground: red hatching over the north, the front line dashed
+  g.fillStyle = '#5a1f1c';
+  for (let y = 0; y < 118; y += 4) for (let x = (y / 2) % 4 | 0; x < W; x += 6) if (rand() < 0.8) g.fillRect(x, y, 1, 1);
+  g.fillStyle = '#ff3b2f';
+  for (let x = 0; x < W; x += 6) g.fillRect(x, (118 + Math.sin(x / 15) * 4) | 0, 4, 1);
+  for (const [x, y] of [[40, 186], [70, 196], [58, 176], [118, 140], [92, 160], [44, 80], [120, 30]]) {
+    g.fillRect(x - 1, y - 1, 1, 1);
+    g.fillRect(x + 1, y - 1, 1, 1);
+    g.fillRect(x, y, 1, 1);
+    g.fillRect(x - 1, y + 1, 1, 1);
+    g.fillRect(x + 1, y + 1, 1, 1);
   }
-  // the route between the zones: dashed, cold
-  g.fillStyle = '#5fe0f0';
-  for (let i = 0; i < ZONES.length - 1; i++) {
-    const [ax, ay] = ZONES[i].at;
-    const [bx, by] = ZONES[i + 1].at;
+  // the route between the levels: dashed white
+  g.fillStyle = '#f1e9d8';
+  for (let i = 0; i < LEVELS.length - 1; i++) {
+    const [ax, ay] = LEVELS[i].at;
+    const [bx, by] = LEVELS[i + 1].at;
     for (let s = 0; s <= 40; s += 2) {
       const t = s / 40;
       g.fillRect(Math.round((ax + (bx - ax) * t) * W), Math.round((ay + (by - ay) * t) * Hc), 2, 2);
     }
   }
-  // enemy marks round zone 1
-  g.fillStyle = '#ff3b2f';
-  for (const [x, y] of [[54, 100], [60, 114], [68, 104]]) g.fillRect(x, y, 2, 2);
-  // corner brackets
-  g.fillStyle = '#5fe0f0';
+  // north arrow and corner brackets
+  g.fillStyle = '#d8d4cb';
+  g.fillRect(W - 12, 8, 1, 10);
+  g.fillRect(W - 13, 9, 3, 1);
+  g.fillRect(W - 14, 10, 5, 1);
   for (const [x, y, sx, sy] of [[2, 2, 1, 1], [W - 3, 2, -1, 1], [2, Hc - 3, 1, -1], [W - 3, Hc - 3, -1, -1]]) {
-    g.fillRect(Math.min(x, x + sx * 10), y, 10, 1);
-    g.fillRect(x, Math.min(y, y + sy * 10), 1, 10);
+    g.fillRect(Math.min(x, x + sx * 8), y, 8, 1);
+    g.fillRect(x, Math.min(y, y + sy * 8), 1, 8);
   }
   return c;
 }
@@ -765,6 +773,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // ----------------------------------------------------------- crewman
   const crew = createCrew({ layer: PLAYER_LAYER });
   scene.add(crew.group);
+  // a soft light that goes with him, so he reads anywhere in the gloom
+  const fillLight = new THREE.PointLight(0xffe2c0, 6, 3.6, 1.6);
+  fillLight.position.set(0.3, 2.0, 0.4);
+  crew.group.add(fillLight);
   const me = crew.group.position;
   const HOME = new THREE.Vector3(2, 0, 2.5);
   me.copy(HOME);
@@ -817,11 +829,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
     if (r.id === 'hangar') {
       const stat = (label, v) => `<span>${label}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
       menu.innerHTML = `
-        <h2>Hangar</h2><p class="sub">${TANK.name} is up on the lift.</p>
-        <div class="zone"><b>${TANK.name} · ${TANK.kind}</b><span>${TANK.blurb}</span>
+        <h2>Hangar</h2><p class="sub">The tank is up on the lift.</p>
+        <div class="zone"><b>${TANK.name}</b><span>${TANK.blurb}</span>
           <div class="stats">${stat('Armour', 0.55)}${stat('Gun', 0.5)}${stat('Speed', 0.45)}${stat('Boost', 0.4)}</div></div>
         <div class="zone"><b>Parts</b><span>Found at checkpoints during a run, lost when it ends.</span></div>
-        <div class="zone locked"><b>Workshop</b><span>Coming soon: spend scraps on ${TANK.name} for good.</span></div>
+        <div class="zone locked"><b>Workshop</b><span>Coming soon: spend scraps on the tank for good.</span></div>
         <button type="button" class="back">Back</button>`;
     } else {
       menu.innerHTML = `
@@ -832,26 +844,26 @@ export function createHub({ renderer, pixel, onDeploy }) {
     menu.querySelector('.back').addEventListener('click', closeRoom);
   }
   // the briefing: the campaign map in the middle, the zone's details beside it
-  let selZone = ZONES[0];
+  let selLevel = LEVELS[0];
   const mapCanvas = campaignMap();
   function openBriefing() {
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${ZONES.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}</button>`).join('')}</div>
+      <div class="map">${LEVELS.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
-    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showZone(ZONES[b.dataset.n - 1]));
-    showZone(selZone);
+    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(LEVELS[b.dataset.n - 1]));
+    showLevel(selLevel);
   }
-  function showZone(z) {
-    selZone = z;
+  function showLevel(z) {
+    selLevel = z;
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);
     const info = brief.querySelector('.info');
     info.innerHTML = `
-      <span class="tagline px">Zone ${z.n} · ${z.open ? 'Ready' : 'Locked'}</span>
+      <span class="tagline px">Level ${z.n} · ${z.open ? 'Ready' : 'Locked'}</span>
       <h2>${z.name}</h2>
       <p>${z.text}</p>
-      ${z.sectors ? `<div class="zone"><b>Sectors</b><ul>${z.sectors.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''}
+      ${z.zones ? `<div class="zone"><b>Zones</b><ul>${z.zones.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''}
       ${z.threats ? `<div class="zone"><b>Threats</b><ul>${z.threats.map((s) => `<li>${s}</li>`).join('')}</ul></div>` : ''}
       <div class="row"><button type="button" class="go" ${z.open ? '' : 'disabled'}>Deploy</button><button type="button" class="back">Back</button></div>`;
     info.querySelector('.back').addEventListener('click', closeRoom);
@@ -946,6 +958,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       aspect = w / h;
       pixel.setHeight(ROWS);
     },
+    debug: { crew, scene },
     // for the dev kit's data reset
     refresh() {
       bankEl.textContent = bankTotal();
