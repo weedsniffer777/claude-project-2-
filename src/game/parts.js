@@ -1,5 +1,7 @@
-// Parts bolted onto the tank at checkpoints during a run. Each one changes a
-// stat and shows up on the model; all of them are lost when the run ends.
+// Parts bolted onto the tank at checkpoints. Each one changes a stat and
+// shows up on the model: build(t) fits it to the battle tank, light(t) (where
+// it differs) to the light tank. A part found goes into storage; the fitting
+// screen (hangar and checkpoints) puts it in one of the tank's slots.
 // The boost (the fuel drums rigged as boosters) is the zone's fixed one-time
 // find: an ability, not a pick.
 import * as THREE from 'three';
@@ -60,13 +62,31 @@ export const PARTS = {
       t.chassis.add(g);
       return g;
     },
+    light(t) {
+      const g = new THREE.Group();
+      put(g, box(0.12, 0.5, 1.9, RUST, { r: 0.025 }), 2.0, 0.34, 0).rotation.z = 0.18;
+      put(g, box(0.04, 0.09, 1.92, 0xc99a2e, { r: 0.01 }), 2.07, 0.56, 0);
+      for (const z of [-0.6, 0.6]) put(g, box(0.5, 0.1, 0.1, STEEL, { r: 0.02 }), 1.78, 0.4, z).rotation.z = -0.12;
+      t.chassis.add(g);
+      return g;
+    },
   },
   autoloader: {
     name: 'Fast reload',
     text: 'Main gun reloads 40% faster.',
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
-      s.reload *= 0.6;
+      if (s.mag) s.magReload *= 0.6; // an autocannon: the magazine change
+      else s.reload *= 0.6;
+    },
+    // an ammo can strapped on the turret's left bin
+    light(t) {
+      const g = new THREE.Group();
+      put(g, box(0.62, 0.17, 0.3, DARKOLIVE, { r: 0.02 }), -0.08, 0.58, -0.66);
+      put(g, box(0.1, 0.175, 0.31, 0xc99a2e), 0.12, 0.58, -0.66); // stencil band
+      put(g, box(0.2, 0.03, 0.04, DARK), -0.12, 0.68, -0.66); // handle
+      t.turret.add(g);
+      return g;
     },
     build(t) {
       // a welded bustle box on the turret rear: the magazine lives in here
@@ -195,6 +215,32 @@ export const PARTS = {
       }
       return g;
     },
+    // the light tank: bricks shingled over the front slope, two rows on the
+    // front of each turret bin either side of the gun
+    light(t) {
+      const G = 0x56653a;
+      const slope = new THREE.Group();
+      slope.position.set(1.42, 0.745, 0);
+      slope.rotation.z = -Math.atan2(0.11, 0.56); // rising toward the turret
+      for (let k = 0; k < 5; k++) {
+        const z = -0.5 + k * 0.25;
+        put(slope, box(0.36, 0.07, 0.22, G, { r: 0.012 }), 0, 0.04, z);
+        put(slope, box(0.37, 0.02, 0.23, ERA_EDGE), 0, 0.005, z);
+      }
+      t.chassis.add(slope);
+      const cheeks = new THREE.Group();
+      for (const zc of [0.65, -0.66]) {
+        for (const y of [0.17, 0.33]) {
+          for (const dz of [-0.09, 0.09]) {
+            put(cheeks, box(0.08, 0.14, 0.16, G, { r: 0.012 }), 0.6, y, zc + dz);
+            put(cheeks, box(0.02, 0.15, 0.17, ERA_EDGE), 0.56, y, zc + dz);
+          }
+        }
+      }
+      t.turret.add(cheeks);
+      slope.userData.extra = [cheeks];
+      return slope;
+    },
   },
   twinmg: {
     name: 'Second gun',
@@ -286,6 +332,13 @@ export const PARTS = {
       t.turret.add(g);
       return g;
     },
+    light(t) {
+      const g = sightHead();
+      g.position.set(-0.5, 0.48, 0);
+      g.scale.setScalar(0.42);
+      t.turret.add(g);
+      return g;
+    },
     model() {
       const g = new THREE.Group();
       const head = sightHead();
@@ -297,11 +350,18 @@ export const PARTS = {
   },
   he: {
     name: 'Explosive shells',
-    text: 'Bigger blast and +20 damage per shot.',
+    text: 'Bigger blast and more damage per shot.',
     icon: ['................', '......+.........', '.....+++........', '.....+++........', '.....###........', '.....+++........', '.....###........', '................', '................', '................'],
     apply(s) {
       s.splash *= 1.5;
-      s.cannonDamage += 20;
+      s.cannonDamage += s.mag ? 5 : 20;
+    },
+    light(t) {
+      const g = new THREE.Group();
+      put(g, box(0.42, 0.2, 0.3, 0x6b5a3e, { r: 0.02 }), 1.0, 0.9, 0.1);
+      put(g, box(0.43, 0.05, 0.31, 0xc99a2e, { r: 0.01 }), 1.0, 0.94, 0.1);
+      t.chassis.add(g);
+      return g;
     },
     build(t) {
       const g = new THREE.Group();
@@ -324,6 +384,16 @@ export const PARTS = {
       for (const z of [-1.2, 1.2]) {
         put(g, box(1.5, 0.42, 0.05, RUST, { r: 0.01 }), 0.5, 0.72, z).rotation.x = z > 0 ? 0.08 : -0.08;
         put(g, box(1.3, 0.38, 0.05, 0x5d6650, { r: 0.01 }), -0.95, 0.7, z).rotation.x = z > 0 ? 0.05 : -0.05;
+      }
+      t.chassis.add(g);
+      return g;
+    },
+    light(t) {
+      const g = new THREE.Group();
+      for (const s of [-1, 1]) {
+        const z = s * 0.95;
+        put(g, box(0.95, 0.3, 0.04, RUST, { r: 0.01 }), 0.75, 0.58, z).rotation.x = s * 0.06;
+        put(g, box(0.75, 0.26, 0.04, 0x5d6650, { r: 0.01 }), -0.2, 0.56, z).rotation.x = s * 0.04;
       }
       t.chassis.add(g);
       return g;
@@ -357,7 +427,8 @@ function sightHead() {
 
 // Mark a freshly built part for the player's team outline.
 export function attachPart(tank, id) {
-  const g = PARTS[id].build(tank);
+  const p = PARTS[id];
+  const g = tank.kind === 'light' && p.light ? p.light(tank) : p.build(tank);
   for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
   g.userData.part = id;
   return g;

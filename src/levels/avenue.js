@@ -1829,15 +1829,15 @@ function buildAvenue(scene) {
 
     function start(api) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false });
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false });
       setBounds(api, B1);
       S.api = api;
       comb = api.combat;
       api.sectors(SECTORS, 0);
       api.objective('Drive up the street and destroy all enemies');
-      if (api.touch) api.prompt('Controls', 'Use the <b>stick</b> in the bottom left to drive.');
-      else api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys.');
-      api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
+      if (api.touch) api.teach('Controls', 'Use the <b>stick</b> in the bottom left to drive.');
+      else api.teach('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys.');
+      if (api.tutorial) api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
     }
 
     // ------------------------------------------------- sector 1: the avenue
@@ -1847,7 +1847,8 @@ function buildAvenue(scene) {
       switch (S.step) {
         // 1: crush the wreck ahead -> scraps are introduced
         case 0:
-          if (x > S.spawnX + 3 || S.t > 4) {
+          if (!api.tutorial && S.t > 1.5) go(1); // played before: straight to the first enemies
+          else if (x > S.spawnX + 3 || S.t > 4) {
             api.prompt('Crush', 'Drive over debris to <b>crush</b> it. Flatten that wreck!');
             api.arrow(new THREE.Vector3(FIRST_WRECK.x, 1.6, FIRST_WRECK.z), 'Crush it!');
             go(-1);
@@ -1881,8 +1882,11 @@ function buildAvenue(scene) {
           const e = api.nearestEnemy();
           if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
             S.shots = run.shots;
-            api.prompt('Contact', `Enemies incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
-            api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
+            const hold = api.tank.gun === 'autocannon';
+            const how = api.touch ? `${hold ? 'Touch and hold' : CLICK} on one to fire.` : `Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`;
+            if (!api.tutorial) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
+            else api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
+            if (api.tutorial) api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
             api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
             go(3);
           } else if (!e && S.t > 3) {
@@ -1894,13 +1898,14 @@ function buildAvenue(scene) {
         case 3:
           // after the first shot, while the cannon reloads, the MG takes over
           if (run.shots > S.shots && (api.mgActive || S.t > 4)) {
-            api.prompt('Machine gun', 'Your <b>machine gun</b> automatically attacks enemies while your cannon reloads!');
-            api.arrow(onEnemy(api), 'Auto MG');
+            api.teach('Machine gun', `Your <b>machine gun</b> automatically attacks enemies while your ${api.tank.gun === 'autocannon' ? 'autocannon' : 'cannon'} reloads!`);
+            if (api.tutorial) api.arrow(onEnemy(api), 'Auto MG');
             go(4);
           }
           break;
         case 4:
-          if (run.drops > 0 && !api.spotlit) {
+          if (!api.tutorial) go(5);
+          else if (run.drops > 0 && !api.spotlit) {
             const d = api.nearestDrop();
             if (d) {
               api.prompt('Scraps', 'Enemies drop <b>scraps</b> too. Drive close to collect them.', { go: true });
@@ -1919,7 +1924,8 @@ function buildAvenue(scene) {
             api.spawnDog(gx, -5.5, { delay: 0.3 });
             api.spawnDog(gx + 1, 4.5, { delay: 0.7 });
             api.spawnDog(gx + 2.5, -0.5, { delay: 1.1 });
-            api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
+            if (api.tutorial) api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
+            else api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
             go(6);
           }
           break;
@@ -1930,8 +1936,8 @@ function buildAvenue(scene) {
         case 6:
           if (api.enemiesAlive === 0 && S.t > 1.5 && S.n === 0) {
             S.n = 1;
-            api.prompt('Orders', 'Push on up the street.');
-            api.arrow(new THREE.Vector3(32, 0.4, 0), 'This way');
+            api.teach('Orders', 'Push on up the street.');
+            if (api.tutorial) api.arrow(new THREE.Vector3(32, 0.4, 0), 'This way');
           }
           if (x > 30 || (S.n === 1 && x > 28)) {
             api.arrow(null);
@@ -1976,7 +1982,9 @@ function buildAvenue(scene) {
             api.giveRockets();
             S.shots = run.boosts;
             api.objective('Break through the barricade');
-            api.prompt('Boost', api.touch ? 'Tap the <b>boost</b> button to ram the barricade, or shoot to destroy it!' : 'Press <kbd>Shift</kbd> to <b>boost</b> and ram the barricade, or shoot to destroy it!', { go: true });
+            const move = api.tank.moveName;
+            const verb = api.tank.move === 'dash' ? `<b>${move}</b> and smash` : `<b>${move.toLowerCase()}</b> and ram`;
+            if (api.tutorial) api.prompt(move, api.touch ? `Tap the <b>${move.toLowerCase()}</b> button to smash the barricade, or shoot to destroy it!` : `Press <kbd>Shift</kbd> to ${verb} the barricade, or shoot to destroy it!`, { go: true });
             api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Break it!');
             S.n = run.shots;
             api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || run.shots > S.n || barricadeParts.some((c) => c.done));
@@ -1987,7 +1995,7 @@ function buildAvenue(scene) {
           if (x > BARRICADE_X + 2) {
             api.arrow(null);
             api.objective('Destroy all enemies');
-            api.prompt('Contact', 'Enemies! Boost rams them too.', { danger: true, seconds: 5 });
+            api.prompt('Contact', api.tutorial ? `Enemies! ${api.tank.moveName} rams them too.` : 'Enemies!', { danger: true, seconds: 4 });
             api.spawnDog(94, -3);
             api.spawnDog(95, 2, { delay: 0.4 });
             api.spawnDog(96.5, 5, { delay: 0.8 });
@@ -2007,7 +2015,7 @@ function buildAvenue(scene) {
         case 3:
           if (api.enemiesAlive === 0 && S.t > 1) {
             api.objective('Break the gate');
-            api.prompt('Gate', api.touch ? `${CLICK} the gate to shoot it, or boost into it.` : `Shoot the gate (${CLICK}), or boost into it.`);
+            api.teach('Gate', api.touch ? `${CLICK} the gate to shoot it, or ${api.tank.moveName.toLowerCase()} into it.` : `Shoot the gate (${CLICK}), or ${api.tank.moveName.toLowerCase()} into it.`);
             api.arrow(gateMark, 'Break it!');
             go(4);
           }
@@ -2065,10 +2073,16 @@ function buildAvenue(scene) {
             }
           }
           if (S.hold <= 0) {
-            // just out of sight up the north street, so it's on screen quickly;
-            // it clambers in over the rubble
-            const at = api.offscreen(new THREE.Vector3(JX, 0, -9), new THREE.Vector3(0, 0, -1));
-            S.boss = api.spawnHound(at.x, at.z, { via: [[JX, -8]], noclip: true });
+            // just out of sight up a side street, so it's on screen quickly;
+            // it clambers in over the rubble. The street where the camera can
+            // see it come in (no building in front of it), north first.
+            const ways = [
+              { from: new THREE.Vector3(JX, 0, -9), dir: new THREE.Vector3(0, 0, -1), via: [JX, -8] },
+              { from: new THREE.Vector3(JX, 0, 9), dir: new THREE.Vector3(0, 0, 1), via: [JX, 8] },
+            ].map((w) => ({ ...w, at: api.offscreen(w.from, w.dir) }));
+            const seen = (w) => [0, 0.33, 0.66, 1].every((k) => api.clearView(w.at.clone().lerp(new THREE.Vector3(w.via[0], 0, w.via[1]), k), 2.2));
+            const way = ways.find(seen) || ways[1];
+            S.boss = api.spawnHound(way.at.x, way.at.z, { via: [way.via], noclip: true });
             fromSouth(api, -3, 1.5);
             fromSouth(api, 3, 2);
             api.boss(S.boss, 'Large quadruped');
@@ -2078,6 +2092,15 @@ function buildAvenue(scene) {
           }
           break;
         case 1:
+          // the first time through, the tank's own ability comes online for
+          // the boss (played before, it's had it all along)
+          if (S.t > 3 && !S.taught && api.tank.ability && api.tutorial && S.boss.alive) {
+            S.taught = true;
+            api.giveAbility();
+            const how = api.touch ? 'tap the <b>E</b> button' : 'press <kbd>E</kbd>';
+            api.prompt('Ability', `Your tank's ability is ready! Line up a shot and ${how} to fire a <b>${api.tank.abilityName.toLowerCase()}</b>!`, { go: true, seconds: 8 });
+            api.spotlight({ targets: [api.ability2Screen(), () => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null)], r: 110 }, () => (api.run.abilities || 0) > 0, { maxTime: 2.5 });
+          }
           if (!S.boss.alive) {
             S.strike = airstrike(api);
             go(2);
@@ -2216,6 +2239,7 @@ function buildAvenue(scene) {
       spawn: { x: START_X + 7, z: -0.5, yaw: 0 },
       bounds,
       script: S, // for tests
+      shacks, // for tests
       start,
       onImpact,
       update,

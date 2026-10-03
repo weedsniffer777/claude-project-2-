@@ -12,13 +12,16 @@ import * as THREE from 'three';
 import { LevelBuilder, canvas, tex, blob, speckle } from '../levels/builder.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly, approachAngle } from '../models/kit.js';
 import { createCrew } from '../models/crew.js';
-import { createTank } from '../models/tank.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
 import { PARTS, attachPart } from '../game/parts.js';
+import { TANKS, tankDef } from '../game/tanks.js';
+import { createFitting, anchorWorld } from '../ui/fitting.js';
 import { save } from '../game/save.js';
 import { partPicture } from '../render/partPictures.js';
+import { snapshotCanvas } from '../render/snapshot.js';
+import { CAMPAIGN } from '../game/campaign.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -32,29 +35,7 @@ const INPUT_FORWARD = new THREE.Vector3(1, 0, -1).normalize();
 const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 const BASE_CENTER = new THREE.Vector3(7.5, 0, -3.2);
 
-// The tank's own name: no real-world designations anywhere on screen.
-const TANK = { name: 'Battle tank' };
-// where each part sits on the tank (tank-local), for the fitting screen's lines
-const ANCHOR = {
-  dozer: [2.1, 0.5, 0],
-  autoloader: [-1.0, 1.35, 0],
-  era: [1.45, 0.95, -0.3],
-  twinmg: [-0.15, 1.75, -0.42],
-  afterburner: [-2.05, 0.95, 0.55],
-  optics: [0.25, 1.7, 0.45],
-  he: [2.6, 1.42, 0],
-  plating: [0, 0.85, 1.1],
-};
-
-// The campaign: the levels in order, bottom of the map to the top. Each
-// level is made of zones (the avenue, the bridge, ...). Only the first is
-// scouted.
-export const CAMPAIGN = [
-  { n: 1, id: 'avenue', name: 'Ruined city street', at: [0.3, 0.84], open: true, steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'era', 'afterburner', 'twinmg', 'optics'] },
-  { n: 2, at: [0.66, 0.62] },
-  { n: 3, at: [0.34, 0.38] },
-  { n: 4, at: [0.68, 0.15] },
-];
+export { CAMPAIGN } from '../game/campaign.js';
 
 const CSS = `
 .base { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --holo: #5fe0f0; }
@@ -105,29 +86,25 @@ const CSS = `
 .base-brief .rewards span[data-tip]:hover::before { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 190px; padding: 7px 9px; z-index: 3;
   font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
 .base-brief .rewards span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
-/* hangar: the tank in the middle, a box per fitted part with a line to it */
-.base-fit { position: absolute; inset: 0; pointer-events: none; }
-.base-fit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.base-fit .head { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 10px 16px; display: flex; gap: 14px; align-items: center; pointer-events: auto; }
-.base-fit .head h2 { font-size: 16px; }
-.base-fit .fit-back { position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); pointer-events: auto; }
-.base-fit .part { position: absolute; transform: translate(-50%, -50%); width: 112px; padding: 6px 6px 8px; display: grid; gap: 4px; justify-items: center; pointer-events: auto; cursor: var(--cursor);
-  background: rgba(12, 11, 13, 0.9); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font: 400 10px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; text-align: center; border: 0; }
-.base-fit .part:hover, .base-fit .part.on { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
-.base-fit .part img { width: 84px; height: 56px; image-rendering: pixelated; }
-.base-fit .part.add { color: var(--amber); }
-.base-fit .note { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 13px; color: #b9b0a0; text-align: center; max-width: min(460px, calc(100vw - 32px)); }
-.base-fit .pop { position: absolute; padding: 8px; display: grid; gap: 6px; pointer-events: auto; z-index: 2; }
-.base-fit .pop button { display: flex; gap: 8px; align-items: center; padding: 4px 8px 4px 4px; border: 0; cursor: var(--cursor); background: #1d1b1e; color: #f1e9d8; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; box-shadow: 0 0 0 2px #000; }
-.base-fit .pop button:hover { background: #2a2628; color: var(--amber); }
-.base-fit .pop img { width: 48px; height: 32px; image-rendering: pixelated; }
-.base-fit .pop .remove { justify-content: center; padding: 8px; color: #ff9a8a; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 760px) {
   .base-brief { flex-direction: column; gap: 14px; padding: 56px 16px 16px; overflow-y: auto; justify-content: flex-start; }
   .base-brief .map { width: 100%; height: auto; }
   .base-brief .info { width: auto; align-self: stretch; }
 }
+.base-brief .diff { display: flex; gap: 0; }
+.base-brief .diff button { padding: 7px 12px 8px; border: 0; cursor: var(--cursor); font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; background: #1d1b1e; box-shadow: 0 0 0 2px #000; }
+.base-brief .diff button.on { color: #111; background: var(--amber); }
+.base-brief .diff button.on.hard { background: #ff6a5a; }
+.base-brief .note { font-size: 12px; color: #b9b0a0; }
+.base-brief .unlock { display: flex; gap: 10px; align-items: center; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font-size: 13px; }
+.base-brief .unlock img { width: 72px; height: 42px; image-rendering: pixelated; }
+.base-brief .unlock.got img { filter: brightness(0.45) saturate(0.4); }
+.base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
+.base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
+.base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
+.base-news .row { display: flex; gap: 10px; }
 .base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; white-space: nowrap; }
 .base-fade { position: absolute; inset: 0; background: #070609; opacity: 1; transition: opacity 0.45s steps(5); }
 .base-fade.off { opacity: 0; }
@@ -517,7 +494,9 @@ export function createHub({ renderer, pixel, onDeploy }) {
   };
 
   // -------------------------------------------------------- the hangar
-  const tank = createTank();
+  let tank = null;
+  let tankId = null;
+  const LIFT = { x: 15, y: 0.3, z: 0 };
   const hangarOverhead = new THREE.Group();
   B.add(hangarOverhead);
   {
@@ -529,11 +508,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
     for (let i = 0; i < 9; i++) B.piece(0.28, 0.02, 0.5, i % 2 ? 0x1f2022 : 0xc99a2e, lx - 4.1, 0.015, lz - 2.4 + i * 0.6);
     for (const s of [-1, 1]) B.piece(9.2, 0.02, 0.12, 0xc99a2e, lx, 0.015, lz + s * 3.4);
     B.block(lx, lz, 3.4, 2.3);
-    tank.group.position.set(lx, 0.3, lz);
-    tank.group.name = 'hangar-tank';
-    tank.group.rotation.y = Math.PI * 0.86;
-    tank.update(0.016, 0, {});
-    scene.add(tank.group);
     // gantry crane over it: four legs, two runway beams, the bridge, a hoist.
     // It and the near roof beam stand between the camera and the tank, so
     // they're kept apart and hidden while the fitting screen is up.
@@ -816,12 +790,26 @@ export function createHub({ renderer, pixel, onDeploy }) {
     e.light = l;
   }
 
-  // the parts on the tank up on the lift: its saved loadout
+  // the tank up on the lift (the one you drive), with its saved loadout
   const hubParts = [];
-  function fitHubTank(loadout = save.loadout()) {
+  function fitHubTank() {
+    const id = save.tank();
+    if (id !== tankId) {
+      tank?.group.removeFromParent();
+      tankId = id;
+      tank = TANKS[id].create();
+      tank.group.position.set(LIFT.x, LIFT.y, LIFT.z);
+      tank.group.name = 'hangar-tank';
+      tank.group.rotation.y = Math.PI * 0.86;
+      tank.update(0.016, 0, {});
+      tank.group.traverse((o) => {
+        if (o.isMesh || o.isInstancedMesh) o.castShadow = true;
+      });
+      scene.add(tank.group);
+    }
     for (const m of hubParts) m.removeFromParent();
     hubParts.length = 0;
-    for (const id of loadout) {
+    for (const id of save.loadout(tankId)) {
       if (!PARTS[id]) continue;
       const g = attachPart(tank, id);
       for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.layers.disable(PLAYER_LAYER)); // no see-through outline here
@@ -874,7 +862,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     ${ROOMS.map((r) => `<div class="base-tag" data-id="${r.id}">${r.name}</div>`).join('')}
     <div class="base-menu panel" hidden></div>
     <div class="base-brief" hidden></div>
-    <div class="base-fit" hidden><svg></svg><div class="head panel"><h2>${TANK.name}</h2></div><button type="button" class="back fit-back">Back</button><div class="boxes"></div><div class="note panel" hidden></div></div>
+    <div class="base-news panel" hidden></div>
     <div class="base-hint panel">Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
@@ -884,8 +872,9 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const hint = root.querySelector('.base-hint');
   const fade = root.querySelector('.base-fade');
   const bankEl = root.querySelector('.base-bank b');
-  const fit = root.querySelector('.base-fit');
-  fit.querySelector('.back').addEventListener('click', () => closeRoom());
+  const news = root.querySelector('.base-news');
+  const fitting = createFitting({ renderer, cursor: CURSOR });
+  let freshTanks = []; // tanks unlocked since the hangar was last opened
   let open = null;
   let hover = null;
   let hoverTag = null;
@@ -910,8 +899,13 @@ export function createHub({ renderer, pixel, onDeploy }) {
     } else {
       menu.innerHTML = `
         <h2>Quarters</h2><p class="sub">Bunks, lockers, a stove going.</p>
+        <div class="zone"><b>Tutorial</b><span>Play level 1 again with all the tips and lessons.</span><button type="button" class="go replay">Replay tutorial</button></div>
         <div class="zone locked"><b>Crew</b><span>Coming soon.</span></div>
         <button type="button" class="back">Back</button>`;
+      menu.querySelector('.replay').addEventListener('click', () => {
+        save.setTutorialDone(false);
+        deploy('avenue');
+      });
     }
     menu.querySelector('.back').addEventListener('click', closeRoom);
   }
@@ -939,134 +933,102 @@ export function createHub({ renderer, pixel, onDeploy }) {
         <p>Beat level ${z.n - 1} to unlock.</p>
         <div class="row"><button type="button" class="back">Back</button></div>`;
     } else {
+      const cleared = save.cleared();
+      const hard = save.difficulty() === 'hard';
+      const tankGot = z.unlock && save.tanks().includes(z.unlock);
       info.innerHTML = `
-        <span class="tagline px">Level ${z.n}${save.cleared().includes(z.id) ? ' · Cleared' : ''}</span>
+        <span class="tagline px">Level ${z.n}${cleared.includes(z.id) ? ' · Cleared' : ''}${cleared.includes(`${z.id}:hard`) ? ' · Hard cleared' : ''}</span>
         <h2>${z.name}</h2>
         <div class="steps">${z.steps.map((t, i) => `${i ? '<i></i>' : ''}<b class="${t === 'Boss' ? 'boss' : ''}">${t}</b>`).join('')}</div>
-        <span class="label">Possible rewards</span>
+        <span class="label">Difficulty</span>
+        <div class="diff"><button type="button" data-d="easy" class="${hard ? '' : 'on'}">Easy</button><button type="button" data-d="hard" class="hard ${hard ? 'on' : ''}">Hard</button></div>
+        <span class="note">${hard ? 'No repairs at checkpoints.' : 'Checkpoints repair your tank.'}</span>
+        ${z.unlock ? `<span class="label">First clear reward</span><div class="unlock ${tankGot ? 'got' : ''}"><img alt="" src="${tankIcon(z.unlock)}"><span>${TANKS[z.unlock].name}${tankGot ? ' ✓' : ''}</span></div>` : ''}
+        ${hard && z.hard ? `<span class="label">Hard clear reward</span><div class="unlock ${cleared.includes(`${z.id}:hard`) ? 'got' : ''}"><span>+${z.hard.scraps} scraps${cleared.includes(`${z.id}:hard`) ? ' ✓' : ''}</span></div>` : ''}
+        <span class="label">Possible parts</span>
         <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'got' : ''}" data-tip="${PARTS[id].name}: ${PARTS[id].text}${owned.includes(id) ? ' (found)' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"></span>`).join('')}</div>
         <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
       info.querySelector('.go').addEventListener('click', () => deploy(z.id));
+      for (const b of info.querySelectorAll('.diff button'))
+        b.addEventListener('click', () => {
+          save.setDifficulty(b.dataset.d);
+          showLevel(z);
+        });
     }
     info.querySelector('.back').addEventListener('click', closeRoom);
   }
 
   // ---------------------------------------------------- the fitting screen
-  // The tank's loadout (what it had at the end of its last level), a box per
-  // part with a line to where it sits; click a box to swap or remove it.
+  // The shared fitting screen over the tank on its lift: slots with lines to
+  // where each part sits, storage, the tanks to choose from.
   const partIcon = (id) => partPicture(renderer, id);
-  const fitBoxes = fit.querySelector('.boxes');
-  const fitSvg = fit.querySelector('svg');
-  const fitNote = fit.querySelector('.note');
-  let fitItems = []; // { id, el, anchor }
-  let popFor = null;
-  function openFitting() {
-    fit.hidden = false;
-    buildFitting();
-  }
-  function buildFitting() {
-    closePop();
-    const loadout = save.loadout().filter((id) => PARTS[id]);
-    const spare = save.owned().filter((id) => PARTS[id] && !loadout.includes(id));
-    fitBoxes.innerHTML = '';
-    fitItems = loadout.map((id) => {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'part';
-      el.innerHTML = `<img alt="" src="${partIcon(id)}"><span>${PARTS[id].name}</span>`;
-      el.addEventListener('click', (e) => (e.stopPropagation(), openPop(id, el, spare)));
-      fitBoxes.append(el);
-      return { id, el, anchor: new THREE.Vector3(...(ANCHOR[id] || [0, 1, 0])) };
-    });
-    if (spare.length) {
-      const el = document.createElement('button');
-      el.type = 'button';
-      el.className = 'part add';
-      el.innerHTML = `<span>+ Add part</span><span style="color:#b9b0a0">${spare.length} spare</span>`;
-      el.addEventListener('click', (e) => (e.stopPropagation(), openPop(null, el, spare)));
-      fitBoxes.append(el);
-      fitItems.push({ id: null, el, anchor: null });
+  const tankIcons = new Map();
+  function tankIcon(id) {
+    if (!tankIcons.has(id)) {
+      const t = TANKS[id].create();
+      t.update(0.016, 0, {});
+      tankIcons.set(id, snapshotCanvas(renderer, t.group, 144, 84).toDataURL());
     }
-    fitNote.hidden = loadout.length > 0;
-    fitNote.textContent = save.owned().length ? 'Nothing fitted. Add a part to start the next level with it.' : 'No parts yet. Parts picked at checkpoints stay on the tank for its next level.';
-    fitHubTank(loadout);
+    return tankIcons.get(id);
   }
-  function openPop(id, el, spare) {
-    closePop();
-    const pop = document.createElement('div');
-    pop.className = 'pop panel';
-    for (const s of spare) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.innerHTML = `<img alt="" src="${partIcon(s)}">${PARTS[s].name}`;
-      b.addEventListener('click', () => setLoadout(id ? save.loadout().map((x) => (x === id ? s : x)) : [...save.loadout(), s]));
-      pop.append(b);
-    }
-    if (id) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'remove';
-      b.textContent = 'Remove';
-      b.addEventListener('click', () => setLoadout(save.loadout().filter((x) => x !== id)));
-      pop.append(b);
-    }
-    if (!pop.children.length) return;
-    const r = el.getBoundingClientRect();
-    pop.style.left = `${Math.round(r.left)}px`;
-    pop.style.top = `${Math.round(r.bottom + 10)}px`;
-    fit.append(pop);
-    popFor = pop;
-    el.classList.add('on');
-  }
-  function closePop() {
-    popFor?.remove();
-    popFor = null;
-    for (const it of fitItems) it.el.classList.remove('on');
-  }
-  function setLoadout(list) {
-    save.setLoadout(list);
-    buildFitting();
-  }
-  document.addEventListener('pointerdown', (e) => {
-    if (popFor && !popFor.contains(e.target)) closePop();
-  });
-  // lay the boxes out either side of the tank, lines to each part
   const sv = new THREE.Vector3();
-  function layoutFitting() {
+  function toScreen(p) {
     const rect = canvasEl.getBoundingClientRect();
-    const toScreen = (p) => {
-      sv.copy(p).project(camera);
-      return [rect.left + ((sv.x + 1) / 2) * rect.width, rect.top + ((1 - sv.y) / 2) * rect.height];
-    };
-    tank.group.updateMatrixWorld(true);
-    const [cx, cy] = toScreen(tank.group.position.clone().setY(1));
-    const reach = Math.min(rect.width * 0.36, 380);
-    const parts = fitItems.filter((it) => it.anchor).map((it) => ({ it, at: toScreen(tank.group.localToWorld(it.anchor.clone())) }));
-    const sides = [parts.filter((p) => p.at[0] < cx), parts.filter((p) => p.at[0] >= cx)];
-    let lines = '';
-    sides.forEach((list, side) => {
-      list.sort((a, b) => a.at[1] - b.at[1]);
-      list.forEach((p, i) => {
-        const x = cx + (side ? 1 : -1) * reach;
-        const y = cy + (i - (list.length - 1) / 2) * 110;
-        p.it.el.style.left = `${Math.round(x)}px`;
-        p.it.el.style.top = `${Math.round(y)}px`;
-        const ex = x + (side ? -60 : 60);
-        lines += `<polyline points="${ex},${y} ${(ex + p.at[0]) / 2},${y} ${p.at[0]},${p.at[1]}" fill="none" stroke="#000" stroke-width="5"/><polyline points="${ex},${y} ${(ex + p.at[0]) / 2},${y} ${p.at[0]},${p.at[1]}" fill="none" stroke="#ffb347" stroke-width="2"/><rect x="${p.at[0] - 4}" y="${p.at[1] - 4}" width="8" height="8" fill="#ffb347" stroke="#000" stroke-width="2"/>`;
-      });
+    sv.copy(p).project(camera);
+    return [rect.left + ((sv.x + 1) / 2) * rect.width, rect.top + ((1 - sv.y) / 2) * rect.height];
+  }
+  function openFitting() {
+    const tanks = save.tanks();
+    fitting.show({
+      tag: 'Hangar',
+      tankId,
+      loadout: save.loadout(tankId),
+      owned: save.owned(),
+      tanks,
+      newTanks: freshTanks,
+      onSet(list) {
+        save.setLoadout(list, tankId);
+        fitHubTank();
+        openFitting();
+      },
+      onTank(id) {
+        save.setTank(id);
+        fitHubTank();
+        openFitting();
+      },
+      buttons: [['Back', () => closeRoom()]],
+      anchor: (id) => {
+        const w = anchorWorld(tank, tankId, id);
+        return w ? toScreen(w) : null;
+      },
     });
-    const add = fitItems.find((it) => !it.anchor);
-    if (add) {
-      add.el.style.left = `${Math.round(cx)}px`;
-      add.el.style.top = `${Math.round(Math.min(rect.bottom - 130, cy + 190))}px`;
-    }
-    fitSvg.innerHTML = lines;
+    freshTanks = [];
+  }
+
+  // "New!": what the last level unlocked, once, on coming back to the base
+  function showNews() {
+    const items = save.news().filter((n) => n.kind === 'tank' && TANKS[n.id]);
+    save.clearNews();
+    if (!items.length) return;
+    const n = items[0];
+    freshTanks = items.map((i) => i.id);
+    news.hidden = false;
+    news.innerHTML = `
+      <span class="newtag">New!</span>
+      <h2>${TANKS[n.id].name} unlocked</h2>
+      <img alt="" src="${tankIcon(n.id)}">
+      <p>${tankDef(n.id).blurb} Pick it in the hangar.</p>
+      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
+    news.querySelector('.go').addEventListener('click', () => {
+      news.hidden = true;
+      clickRoom(ROOMS.find((r) => r.id === 'hangar'));
+    });
+    news.querySelector('.back').addEventListener('click', () => (news.hidden = true));
   }
 
   function closeRoom() {
-    if (popFor) return closePop();
     open = null;
-    fit.hidden = true;
+    fitting.hide();
     menu.hidden = true;
     brief.hidden = true;
     hint.hidden = false;
@@ -1099,12 +1061,13 @@ export function createHub({ renderer, pixel, onDeploy }) {
     return ray.intersectObjects(floorMeshes, false)[0];
   };
   const onKeyDown = (e) => {
+    if (e.code === 'Escape' && !news.hidden) return void (news.hidden = true);
     if (e.code === 'Escape' && open) return closeRoom();
     keys.add(e.code);
   };
   const onKeyUp = (e) => keys.delete(e.code);
   const onDown = (e) => {
-    if (open) return;
+    if (open || !news.hidden) return;
     const hit = pick(e);
     if (!hit) return;
     const r = hit.object.userData.room;
@@ -1125,7 +1088,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
   return {
     enter() {
-      document.body.append(root);
+      document.body.append(root, fitting.el);
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
       window.addEventListener('blur', onBlur);
@@ -1140,9 +1103,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
       fitHubTank();
       fade.classList.remove('off');
       requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('off')));
+      news.hidden = true;
+      setTimeout(showNews, 500);
     },
     exit() {
       root.remove();
+      fitting.el.remove();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
@@ -1160,7 +1126,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     refresh() {
       bankEl.textContent = bankTotal();
       fitHubTank();
-      if (open?.id === 'hangar') buildFitting();
+      if (open?.id === 'hangar') openFitting();
     },
     frame(dt, t) {
       // walking: keys (screen-relative), or toward a clicked spot
@@ -1229,7 +1195,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         r.outline.visible = r === lit;
         if (r === lit) r.outlineMat.opacity = 0.75 + Math.sin(t * 8) * 0.2;
       }
-      if (open?.id === 'hangar') layoutFitting();
+      if (open?.id === 'hangar') fitting.layout();
       hangarOverhead.visible = open?.id !== 'hangar';
       const rect = canvasEl.getBoundingClientRect();
       for (const r of ROOMS) {

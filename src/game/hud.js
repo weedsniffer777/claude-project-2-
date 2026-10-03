@@ -129,6 +129,9 @@ const CSS = `
   color: #111; background: var(--ink); box-shadow: 0 2px 0 #6d655a; }
 .hud-reticle { position: absolute; left: 0; top: 0; width: 52px; height: 52px; margin: -26px 0 0 -26px; }
 .hud-reticle svg { width: 100%; height: 100%; overflow: visible; }
+.hud-reticle .mag { position: absolute; left: 44px; top: 34px; font: 400 14px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-reticle .mag.low { color: var(--amber); }
+.hud-reticle .mag.out { color: #8f877a; }
 .hud-dmg { position: absolute; left: 0; top: 0; font: 400 16px/1 'Silkscreen', monospace; color: var(--ink);
   text-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, 2px 2px #000; white-space: nowrap; transform: translate(-50%, -50%); }
 .hud-dmg.big { font-size: 24px; color: var(--amber); }
@@ -289,7 +292,7 @@ export function createHud() {
       <div class="hud-scrap panel px" hidden><i></i>Scraps <b>0</b></div>
       <div class="hud-chain px" hidden><span><small>Multiplier </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
     </div>
-    <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip">Skip</button></div>
+    <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip" hidden>Skip</button></div>
     <button type="button" class="hud-continue" hidden>Continue &#9654;</button>
     <div class="hud-arrow" hidden><span class="lbl"></span><i></i></div>
     <div class="hud-center">
@@ -297,7 +300,8 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-ability" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -307,6 +311,7 @@ export function createHud() {
         <g class="cross" stroke="#f1e9d8" stroke-width="2"><path d="M-12 0H-5M5 0H12M0 -12V-5M0 5V12"></path></g>
         <rect x="-1.5" y="-1.5" width="3" height="3" fill="#f1e9d8"></rect>
       </svg>
+      <span class="mag" hidden></span>
     </div>
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
@@ -349,10 +354,18 @@ export function createHud() {
   let spotSpec = null;
   const SPOT_PX = 4; // one spotlight pixel = 4 screen pixels
   // ability button / icon
-  const ability = $('.hud-ability');
-  const abilityCanvas = ability.querySelector('canvas');
-  let abilityKey = '';
+  // two ability buttons: the movement one (Shift) in the corner, the
+  // signature one (E) beside it
   const abilityCenter = () => (touchMode ? { x: window.innerWidth - 92, y: window.innerHeight - 104 } : { x: window.innerWidth - 70, y: window.innerHeight - 84 });
+  const ability2Center = () => {
+    const c = abilityCenter();
+    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 84, y: c.y };
+  };
+  const abilities = [
+    { el: $('.hud-ability.one'), key: '', center: abilityCenter },
+    { el: $('.hud-ability.two'), key: '', center: ability2Center },
+  ];
+  const magEl = $('.hud-reticle .mag');
   // depot cards
   const picker = $('.hud-picker');
   const cont = $('.hud-continue');
@@ -503,24 +516,28 @@ export function createHud() {
       el.querySelector('.name').textContent = name;
       el.querySelector('.bar i').style.width = `${Math.max(0, k01) * 100}%`;
     },
-    // ability: null hides it; k01 = cooldown progress (1 = ready)
-    setAbility(state) {
-      ability.hidden = !state;
+    // ability: null hides it; k = cooldown progress (1 = ready). which: 0
+    // the movement ability (Shift), 1 the signature one (E)
+    setAbility(state, which = 0) {
+      const a = abilities[which];
+      const el = a.el;
+      el.hidden = !state;
       if (!state) return;
       const key = `${Math.round(state.k * 26)}|${state.lit}|${state.art?.width}|${state.art && artId(state.art)}`;
-      if (key !== abilityKey) {
-        abilityKey = key;
-        drawAbility(abilityCanvas, state.k, state.lit, state.art);
+      if (key !== a.key) {
+        a.key = key;
+        drawAbility(el.querySelector('canvas'), state.k, state.lit, state.art);
       }
-      ability.classList.toggle('ready', state.k >= 1 && !state.lit);
+      el.classList.toggle('ready', state.k >= 1 && !state.lit);
       const cooling = state.left > 0 && !state.lit;
-      ability.classList.toggle('cooling', cooling);
-      ability.querySelector('.cd').textContent = cooling ? Math.ceil(state.left) : '';
-      const c = abilityCenter();
-      ability.style.transform = `translate(${c.x}px, ${c.y}px)`;
-      ability.querySelector('.key').hidden = touchMode;
+      el.classList.toggle('cooling', cooling);
+      el.querySelector('.cd').textContent = cooling ? Math.ceil(state.left) : '';
+      const c = a.center();
+      el.style.transform = `translate(${c.x}px, ${c.y}px)`;
+      el.querySelector('.key').hidden = touchMode;
     },
     abilityCenter,
+    ability2Center,
     scrapCenter() {
       const r = $('.hud-scrap').getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };
@@ -537,6 +554,7 @@ export function createHud() {
     showPicker(list, onPick, skip, onHover) {
       picker.hidden = !list;
       onSkip = skip;
+      picker.querySelector('.skip').hidden = !skip;
       const row = picker.querySelector('.row');
       row.innerHTML = '';
       for (const c of list || []) {
@@ -573,8 +591,16 @@ export function createHud() {
     showReticle(on) {
       reticle.hidden = !on;
     },
-    // reload: 0 = just fired .. 1 = ready
-    setReticle(x, y, reload01) {
+    // reload: 0 = just fired .. 1 = ready. mag (an autocannon): { n, max,
+    // reloading } shown as a count beside it
+    setReticle(x, y, reload01, mag = null) {
+      magEl.hidden = !mag;
+      if (mag) {
+        const txt = mag.reloading ? 'Reload' : String(mag.n);
+        if (magEl.textContent !== txt) magEl.textContent = txt;
+        magEl.classList.toggle('low', !mag.reloading && mag.n <= 3);
+        magEl.classList.toggle('out', mag.reloading);
+      }
       reticle.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
       const ready = reload01 >= 1;
       reload.setAttribute('stroke-dashoffset', String(RING_LEN * (1 - Math.min(1, reload01))));
@@ -723,6 +749,7 @@ export function createHud() {
       this.setBoss(null, null);
       this.setChain(0, 0);
       this.setAbility(null);
+      this.setAbility(null, 1);
       this.fade(false);
       for (const n of numbers) n.el.remove();
       numbers.length = 0;

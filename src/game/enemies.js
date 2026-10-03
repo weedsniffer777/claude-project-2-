@@ -234,6 +234,33 @@ export class Enemies {
     return hits;
   }
 
+  // Smoke (the light tank's Breakthrough): machines within radius lose
+  // their aim: a wind-up or burst in progress is dropped, and they can't
+  // lock on again for a moment.
+  breakLocks(at, radius, blind = 1.2) {
+    for (const e of this.list) {
+      if (!e.alive || Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > radius) continue;
+      e.windup = 0;
+      e.burstLeft = 0;
+      e.fireTimer = Math.max(e.fireTimer, blind);
+      e.blind = blind;
+    }
+  }
+
+  // A shockwave: machines within radius are shoved away from its centre.
+  shove(at, radius, dist) {
+    for (const e of this.list) {
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5) continue;
+      const dx = e.pos.x - at.x;
+      const dz = e.pos.z - at.z;
+      const d = Math.hypot(dx, dz);
+      if (d > radius || d < 0.01) continue;
+      const k = dist * (1 - d / radius) + 0.3;
+      e.pos.x += (dx / d) * k;
+      e.pos.z += (dz / d) * k;
+    }
+  }
+
   // Blow a machine into its parts: every mesh becomes a loose piece thrown
   // away from the blast, tumbling, bouncing and settling on the ground.
   shatter(e, from) {
@@ -417,7 +444,8 @@ export class Enemies {
         e.windup = 0; // lost sight of it: no shot (never fires into a wall)
         e.fireTimer = 0.3;
       }
-      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5 && e.los) {
+      if (e.blind > 0) e.blind -= dt;
+      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5 && e.los && !(e.blind > 0)) {
         e.windup = DOG.windup;
         const lead = ctx.tankVel || { x: 0, z: 0 };
         e.lock = new THREE.Vector3(tankPos.x + lead.x * 0.2, 0, tankPos.z + lead.z * 0.2);

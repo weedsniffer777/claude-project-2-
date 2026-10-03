@@ -250,10 +250,10 @@ export function createLightTank() {
   const tracks = new THREE.Group();
   group.add(tracks);
   const slotGroups = { tracks: [tracks], armor: [], engine: [], gun: [], mg: [], sights: [], module: [] };
-  // boost flame materials (shared by both exhausts); see setFlameStyle
-  const flameOuter = new THREE.MeshBasicMaterial({ color: 0xff7a22, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide });
-  const flameMid = new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide });
-  const flameInner = new THREE.MeshBasicMaterial({ color: 0xfff1b8, side: THREE.DoubleSide });
+  // boost flame: three nested layers (outer plume, middle, the hot core),
+  // vertex-painted along their length; see paintFlames
+  const flameMats = [0.5, 0.75, 1].map((opacity) => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+  const plumes = [];
   const mgSlot = new THREE.Group();
   turret.add(mgSlot);
   slotGroups.mg.push(mgSlot);
@@ -333,19 +333,24 @@ export function createLightTank() {
     flame.position.set(EX.x0 - 0.26, EX.y, exZ);
     flame.visible = false;
     chassis.add(flame);
-    // a lathed plume: tight at the outlet, flaring out wide, then closing to
-    // a ragged tip; three nested layers, the hot core showing through
-    const plume = (prof, mat) => {
+    // the plume: cones flaring out from the outlet, painted along their
+    // length (white-hot at the mouth, a faint blue, then rocket orange) and
+    // fading out toward a soft, closing tail
+    const plume = (prof, layer) => {
       const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 10);
       g.rotateZ(Math.PI / 2); // +y to -x: out the back
-      const m = new THREE.Mesh(g, mat);
+      g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 4), 4));
+      const m = new THREE.Mesh(g, flameMats[layer]);
       m.userData.fx = true;
+      m.userData.len = prof[prof.length - 1][1];
+      m.userData.layer = layer;
       flame.add(m);
+      plumes.push(m);
       return m;
     };
-    plume([[0.075, 0], [0.2, 0.25], [0.34, 0.7], [0.36, 1.05], [0.26, 1.45], [0.1, 1.75], [0, 1.85]], flameOuter);
-    plume([[0.065, 0], [0.14, 0.2], [0.2, 0.55], [0.17, 0.9], [0.06, 1.15], [0, 1.2]], flameMid);
-    plume([[0.055, 0], [0.085, 0.12], [0.08, 0.32], [0.04, 0.5], [0, 0.56]], flameInner);
+    plume([[0.08, 0], [0.17, 0.3], [0.27, 0.75], [0.36, 1.25], [0.42, 1.6], [0.36, 1.85], [0.18, 2.0], [0, 2.05]], 0);
+    plume([[0.07, 0], [0.12, 0.25], [0.18, 0.65], [0.22, 1.0], [0.16, 1.2], [0, 1.3]], 1);
+    plume([[0.058, 0], [0.07, 0.12], [0.075, 0.3], [0.05, 0.5], [0, 0.62]], 2);
     nozzles.push({ flame, at: new THREE.Vector3(EX.x0 - 0.26, EX.y, exZ) });
   }
   // the right side: a short stowage bin ahead of the exhaust
@@ -684,11 +689,41 @@ export function createLightTank() {
     group.updateWorldMatrix(true, true);
     return nozzles.map((n) => chassis.localToWorld(n.at.clone()));
   }
+  // Colour stops along each layer's length (0 at the outlet): white-hot,
+  // a faint blue, then the rocket's orange; alpha fades out the tail. The
+  // improved boost burns hotter: the blue runs further, pink at the edges.
+  const RAMPS = {
+    normal: [[0, 0xfffaf0], [0.12, 0xe8f2ff], [0.24, 0xbcd8ff], [0.4, 0xffd27a], [0.65, 0xff8a2a], [1, 0xd8461a]],
+    afterburner: [[0, 0xffffff], [0.15, 0xdcecff], [0.38, 0x9fcfff], [0.55, 0xff9ad0], [0.75, 0xff7a5a], [1, 0xc8406a]],
+  };
+  const tmpC = new THREE.Color();
+  const tmpD = new THREE.Color();
+  function rampAt(stops, k) {
+    let i = 1;
+    while (i < stops.length - 1 && stops[i][0] < k) i++;
+    const [k0, c0] = stops[i - 1];
+    const [k1, c1] = stops[i];
+    return tmpC.setHex(c0).lerp(tmpD.setHex(c1), THREE.MathUtils.clamp((k - k0) / (k1 - k0 || 1), 0, 1));
+  }
+  function paintFlames(style) {
+    const stops = RAMPS[style] || RAMPS.normal;
+    for (const m of plumes) {
+      const pos = m.geometry.attributes.position;
+      const col = m.geometry.attributes.color;
+      const len = m.userData.len;
+      for (let i = 0; i < pos.count; i++) {
+        const k = THREE.MathUtils.clamp(-pos.getX(i) / len, 0, 1); // along the plume
+        // inner layers sit higher up the ramp: the core stays white-hot
+        const c = rampAt(stops, k * [1, 0.7, 0.35][m.userData.layer]);
+        const fade = k < 0.55 ? 1 : 1 - ((k - 0.55) / 0.45) ** 1.4; // dissipating tail
+        col.setXYZW(i, c.r, c.g, c.b, Math.max(0, fade));
+      }
+      col.needsUpdate = true;
+    }
+  }
+  paintFlames('normal');
   function setFlameStyle(style) {
-    const hot = style === 'afterburner';
-    flameOuter.color.set(hot ? 0xff7a5a : 0xff7a22);
-    flameMid.color.set(hot ? 0xff9ad0 : 0xffa040);
-    flameInner.color.set(hot ? 0xa8e8ff : 0xfff1b8);
+    paintFlames(style);
   }
   return {
     kind: 'light',
