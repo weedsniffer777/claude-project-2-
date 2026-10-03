@@ -36,14 +36,14 @@ export function groundTexture(repeat = 10) {
 
 // Daylight rig used by the proving ground and the viewer. The sun's shadow
 // box can follow a moving subject via `follow`.
-export function addDaylight(scene) {
+export function addDaylight(scene, { shadowSize = 7, shadowMap = 1024 } = {}) {
   scene.background = new THREE.Color(0xa9bdd1);
   scene.add(new THREE.HemisphereLight(0xe4eeff, 0x8d8a82, 1.15));
   const sun = new THREE.DirectionalLight(0xfff0d6, 2.3);
   sun.position.set(-5, 10, 4);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 30 });
+  sun.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: 40 });
   sun.shadow.bias = -0.0006;
   scene.add(sun, sun.target);
   const offset = sun.position.clone();

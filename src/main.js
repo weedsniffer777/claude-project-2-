@@ -41,6 +41,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 setMode(params.get('devkit') === 'viewer' ? viewer : game);
+window.__game = game.debug; // dev/test hook
 
 const clock = new THREE.Timer();
 clock.connect(document);

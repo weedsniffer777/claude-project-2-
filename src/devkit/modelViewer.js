@@ -135,7 +135,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
 
   function fire() {
     if (!model.fire) return;
-    if (!combat.fireCannon(model, hasAim || params.has('shot') ? aimPoint : null)) {
+    if (!combat.fireCannon(model, hasAim || params.has('shot') ? aimPoint : null, [ground])) {
       note('The gun is lifted over the fuel drums. Traverse off the rear to fire.');
     }
   }

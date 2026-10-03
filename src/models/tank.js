@@ -102,7 +102,7 @@ const MG_SPEED = 9;
 const GUN_Y = 0.36; // turret-local
 const GUN_BASE_X = 0.86;
 const MUZZLE_X = 2.38;
-const GUN_DEPRESSION = -0.12; // about -7 deg
+const GUN_DEPRESSION = -0.32; // about -18 deg: small-ized, so it can point down at nearby ground
 const GUN_ELEVATION = 0.31; // about +18 deg
 const GUN_PITCH_SPEED = 1.2; // rad/s
 const MG_DEPRESSION = -0.3;
@@ -773,7 +773,8 @@ export function createTank() {
     group.updateWorldMatrix(true, true);
     const position = gunPivot.localToWorld(new THREE.Vector3(MUZZLE_X + 0.1, 0, 0));
     const direction = new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld);
-    return { position, direction, quadrant };
+    const breech = gunPivot.localToWorld(new THREE.Vector3(0, 0, 0)); // inside the turret: rays start here
+    return { position, direction, breech, quadrant };
   }
 
   function setSlotVisible(name, visible) {

@@ -1,5 +1,6 @@
 // Tiny pooled cube-particle system for muzzle smoke, blasts and debris.
 import * as THREE from 'three';
+import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
 import { glowMat, toon } from '../models/kit.js';
 
 const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -335,84 +336,111 @@ export class Debris {
   }
 }
 
-// Fragmented craters: a jagged dark pit, cracks radiating out, and rubble
-// on the rim. Each lives a while, then sinks away.
+// Fragmented craters, projected onto whatever was hit. A DecalGeometry is
+// cut from the target mesh's own triangles inside a small projector box, so
+// a crater on a wall sits on (and wraps round the edges of) that wall, and a
+// crater on the ground lies on the ground. Ground hits also leave rim rubble.
+const craterTexture = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const cx = 64;
+  // soft scorch
+  const grad = g.createRadialGradient(cx, cx, 10, cx, cx, 62);
+  grad.addColorStop(0, 'rgba(24,19,14,0.85)');
+  grad.addColorStop(0.6, 'rgba(30,24,18,0.45)');
+  grad.addColorStop(1, 'rgba(30,24,18,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const poly = (pts, fill) => {
+    g.beginPath();
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.fillStyle = fill;
+    g.fill();
+  };
+  // radiating cracks
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + Math.random() * 0.4;
+    const r0 = 18;
+    const r1 = 40 + Math.random() * 22;
+    const w = 2.5 + Math.random() * 2;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const mid = (r0 + r1) / 2;
+    const kink = (Math.random() - 0.5) * 8;
+    poly([[cx + ca * r0 - sa * w, cx + sa * r0 + ca * w], [cx + ca * mid - sa * kink, cx + sa * mid + ca * kink], [cx + ca * r1, cx + sa * r1], [cx + ca * r0 + sa * w, cx + sa * r0 - ca * w]], '#231d17');
+  }
+  // jagged pit, darker core
+  const pit = [];
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2;
+    const r = i % 2 ? 17 + Math.random() * 5 : 26 + Math.random() * 7;
+    pit.push([cx + Math.cos(a) * r, cx + Math.sin(a) * r]);
+  }
+  poly(pit, '#3a322a');
+  poly(pit.map(([x, y]) => [cx + (x - cx) * 0.55, cx + (y - cx) * 0.55]), '#15120f');
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  return tex;
+})();
+
 export class Craters {
-  constructor(scene, size = 8) {
+  constructor(scene, size = 12) {
     this.scene = scene;
     this.size = size;
     this.items = [];
   }
 
-  add(at, radius = 1) {
+  // at: hit point, normal: world-space surface normal, mesh: what was hit.
+  add(at, normal, mesh, radius = 1) {
     if (this.items.length >= this.size) this.remove(0);
-    const g = new THREE.Group();
-    g.position.set(at.x, 0, at.z);
-    g.rotation.y = Math.random() * Math.PI * 2;
-    const flat = (pts, color, y) => {
-      const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z)));
-      const geo = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2); // face up
-      const mesh = new THREE.Mesh(geo, toon(color));
-      mesh.position.y = y;
-      mesh.receiveShadow = true;
-      g.add(mesh);
-      return mesh;
-    };
-    // jagged pit
-    const pit = [];
-    const n = 13;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const r = radius * (i % 2 ? 0.42 + Math.random() * 0.12 : 0.6 + Math.random() * 0.2);
-      pit.push([Math.cos(a) * r, Math.sin(a) * r]);
+    const parts = [];
+    if (mesh) {
+      mesh.updateMatrixWorld();
+      const helper = new THREE.Object3D();
+      helper.position.copy(at);
+      helper.lookAt(at.clone().add(normal));
+      const orientation = helper.rotation.clone();
+      orientation.z = Math.random() * Math.PI * 2;
+      const geo = new DecalGeometry(mesh, at, orientation, new THREE.Vector3(radius * 2, radius * 2, 0.8));
+      const mat = new THREE.MeshToonMaterial({
+        map: craterTexture, transparent: true, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      });
+      const decal = new THREE.Mesh(geo, mat);
+      decal.receiveShadow = true;
+      decal.renderOrder = 2;
+      this.scene.add(decal);
+      parts.push(decal);
     }
-    flat(pit, 0x3a332b, 0.014);
-    const inner = pit.map(([x, z]) => [x * 0.55, z * 0.55]);
-    flat(inner, 0x1f1b17, 0.018);
-    // radiating cracks: long thin shards
-    const cracks = 6 + Math.floor(Math.random() * 4);
-    for (let i = 0; i < cracks; i++) {
-      const a = (i / cracks) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
-      const r0 = radius * 0.45;
-      const r1 = radius * (0.9 + Math.random() * 0.6);
-      const w = 0.07 + Math.random() * 0.06;
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
-      const kink = (Math.random() - 0.5) * 0.25;
-      const mid = (r0 + r1) / 2;
-      flat(
-        [
-          [ca * r0 - sa * w, sa * r0 + ca * w],
-          [ca * mid - sa * kink, sa * mid + ca * kink],
-          [ca * r1, sa * r1],
-          [ca * r0 + sa * w, sa * r0 - ca * w],
-        ],
-        0x2e2923,
-        0.012,
-      );
+    if (normal.y > 0.7) {
+      // rubble kicked up round the rim (ground hits only)
+      for (let i = 0; i < 9; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = radius * (0.55 + Math.random() * 0.4);
+        const sz = 0.06 + Math.random() * 0.1;
+        const rock = new THREE.Mesh(rockGeo, toon(Math.random() < 0.5 ? 0x6b6258 : 0x57504a));
+        rock.position.set(at.x + Math.cos(a) * r, at.y + sz * 0.3, at.z + Math.sin(a) * r);
+        rock.scale.set(sz, sz * 0.7, sz);
+        rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        rock.castShadow = rock.receiveShadow = true;
+        this.scene.add(rock);
+        parts.push(rock);
+      }
     }
-    // rubble on the rim
-    for (let i = 0; i < 10; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = radius * (0.6 + Math.random() * 0.35);
-      const s = 0.06 + Math.random() * 0.1;
-      const rock = new THREE.Mesh(rockGeo, toon(Math.random() < 0.5 ? 0x6b6258 : 0x57504a));
-      rock.position.set(Math.cos(a) * r, s * 0.3, Math.sin(a) * r);
-      rock.scale.set(s, s * 0.7, s);
-      rock.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-      rock.castShadow = rock.receiveShadow = true;
-      g.add(rock);
-    }
-    this.scene.add(g);
-    this.items.push({ g, life: 9, max: 9 });
+    this.items.push({ parts, life: 10, max: 10 });
   }
 
   remove(i) {
-    const { g } = this.items[i];
-    this.scene.remove(g);
-    g.traverse((o) => {
-      if (o.geometry && o.geometry !== rockGeo) o.geometry.dispose();
-    });
+    for (const o of this.items[i].parts) {
+      this.scene.remove(o);
+      if (o.geometry !== rockGeo) {
+        o.geometry.dispose();
+        o.material.dispose();
+      }
+    }
     this.items.splice(i, 1);
   }
 
@@ -424,7 +452,13 @@ export class Craters {
         this.remove(i);
         continue;
       }
-      if (c.life < 1.5) c.g.position.y = -(1 - c.life / 1.5) * 0.3; // sink away
+      if (c.life < 2) {
+        const k = c.life / 2;
+        for (const o of c.parts) {
+          if (o.geometry === rockGeo) o.scale.multiplyScalar(0.97);
+          else o.material.opacity = k;
+        }
+      }
     }
   }
 }
