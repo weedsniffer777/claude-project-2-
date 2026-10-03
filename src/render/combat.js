@@ -18,10 +18,11 @@ export class CombatFx {
     this.scene = scene;
     this.fx = new Fx(scene, 220);
     this.glow = new Glow(scene);
-    this.puffs = new Puffs(scene);
+    this.puffs = new Puffs(scene, 280);
     this.debris = new Debris(scene);
     this.craters = new Craters(scene);
     this.shells = [];
+    this.purges = [];
     this.shake = 0;
     this.offset = new THREE.Vector3();
     this.ray = new THREE.Raycaster();
@@ -61,21 +62,9 @@ export class CombatFx {
       const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
       puffs.spawn(m.clone().addScaledVector(r, 0.15), r.multiplyScalar(3).addScaledVector(d, 0.8), { color: 0xc4c7bf, s0: 0.1, s1: 0.26, life: 0.45, drag: 4, lift: 0.8, fadeAt: 0.3 });
     }
-    // the purge: the fume extractor vents in pulses for about a second,
-    // then a few lazy wisps curl off the muzzle
-    const vent = m.clone().addScaledVector(d, -0.76);
-    for (let pulse = 0; pulse < 5; pulse++) {
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2 + pulse * 0.7;
-        const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
-        puffs.spawn(vent.clone().addScaledVector(r, 0.17), r.multiplyScalar(0.9 - pulse * 0.1).addScaledVector(d, 0.6), {
-          color: pulse < 2 ? 0xc6c9c0 : 0xadb1a8, s0: 0.05, s1: 0.15 - pulse * 0.015, life: 0.7, drag: 2.5, lift: 0.9, delay: 0.1 + pulse * 0.22, fadeAt: 0.35,
-        });
-      }
-    }
-    for (let i = 0; i < 4; i++) {
-      puffs.spawn(m.clone().addScaledVector(d, 0.1 + Math.random() * 0.3), new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.7, (Math.random() - 0.5) * 0.4), { color: 0xa9ada4, s0: 0.05, s1: 0.16 + Math.random() * 0.06, life: 0.9, drag: 1.5, lift: 0.9, delay: 0.3 + i * 0.25, fadeAt: 0.35 });
-    }
+    // the purge: the fume extractor keeps venting for a while after the shot;
+    // update() emits it from wherever the barrel is now (see emitPurge)
+    this.purges.push({ tank, t: 0, carry: 0 });
     // dust kicked up off the ground under the muzzle
     const ground = new THREE.Vector3(m.x, 0.08, m.z);
     for (let i = 0; i < 8; i++) {
@@ -158,7 +147,7 @@ export class CombatFx {
       const dir = out();
       glow.tracer(p, p.clone().addScaledVector(dir, 1 + Math.random() * 1.2), 0xffc24a, 0.05, 0.12); // spark streaks
     }
-    if (mesh) craters.add(at, n, mesh, 1.0);
+    if (mesh && !mesh.isInstancedMesh && !mesh.userData.noDecal) craters.add(at, n, mesh, 1.0);
     this.shake = Math.max(this.shake, 0.35);
   }
 
@@ -190,12 +179,50 @@ export class CombatFx {
         this.removeShell(i);
       }
     }
+    for (let i = this.purges.length - 1; i >= 0; i--) {
+      if (!this.emitPurge(this.purges[i], dt)) this.purges.splice(i, 1);
+    }
     this.fx.update(dt);
     this.glow.update(dt);
     this.puffs.update(dt);
     this.debris.update(dt);
     this.craters.update(dt);
     this.shake *= Math.exp(-dt * 9);
+  }
+
+  // Fume-extractor purge, emitted from the barrel's current position so it
+  // stays on the gun while the tank drives and the turret turns. Dense at the
+  // start (overlapping puffs read as one plume, not a trail of dots), then
+  // thinning to lazy wisps off the muzzle. Returns false when done.
+  emitPurge(p, dt) {
+    const PURGE = 1.5;
+    p.t += dt;
+    if (p.t > PURGE) return false;
+    const { position: m, direction: d } = p.tank.muzzle();
+    const { u, v } = basis(d);
+    const vent = m.clone().addScaledVector(d, -0.76);
+    const k = p.t / PURGE;
+    const rate = 70 * (1 - k) ** 1.5 + 6; // puffs per second
+    p.carry += rate * dt;
+    while (p.carry >= 1) {
+      p.carry -= 1;
+      const a = Math.random() * Math.PI * 2;
+      const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+      const fromMuzzle = k > 0.45 && Math.random() < 0.5;
+      const at = fromMuzzle ? m.clone().addScaledVector(d, 0.05) : vent.clone().addScaledVector(r, 0.12).addScaledVector(d, (Math.random() - 0.5) * 0.2);
+      const vel = r.clone().multiplyScalar(fromMuzzle ? 0.2 : 0.7 * (1 - k)).addScaledVector(d, fromMuzzle ? 0.3 : 0.4);
+      const big = 1 - k * 0.6;
+      this.puffs.spawn(at, vel, {
+        color: k < 0.3 ? 0xd3d5cc : k < 0.6 ? 0xbcbfb6 : 0xa9ada4,
+        s0: 0.09 * big,
+        s1: (0.2 + Math.random() * 0.08) * big,
+        life: 0.55 + Math.random() * 0.25,
+        drag: 2.5,
+        lift: 0.9,
+        fadeAt: 0.4,
+      });
+    }
+    return true;
   }
 
   removeShell(i) {

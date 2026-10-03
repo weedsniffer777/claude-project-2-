@@ -79,6 +79,10 @@ export function addNight(scene, { shadowSize = 14, shadowMap = 2048 } = {}) {
   };
 }
 
+// Where the dusk sun sits relative to its target: low, from behind the far
+// (north) side of the street. Levels use it to aim fake light shafts.
+export const DUSK_SUN = new THREE.Vector3(7, 8.5, -30);
+
 // Dusk rig for the first zones: a low golden sun behind the far-side
 // buildings, so their long shadows fill the street and light spills through
 // the gaps between them. A violet-to-amber sky, warm haze, and a cool ambient
@@ -98,9 +102,9 @@ export function addDusk(scene, { shadowSize = 18, shadowMap = 2048 } = {}) {
   sky.colorSpace = THREE.SRGBColorSpace;
   scene.background = sky;
   scene.fog = new THREE.Fog(0x6b5568, 30, 72);
-  scene.add(new THREE.HemisphereLight(0x8d86b8, 0x3a2e2c, 1.25));
-  const sun = new THREE.DirectionalLight(0xffb36b, 3.0);
-  const offset = new THREE.Vector3(6, 11, -30); // low, from behind the far (north) side of the street
+  scene.add(new THREE.HemisphereLight(0x9d97c8, 0x5a4a44, 2.1));
+  const sun = new THREE.DirectionalLight(0xffbf7a, 5.2);
+  const offset = DUSK_SUN.clone();
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMap, shadowMap);
   Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: 80 });

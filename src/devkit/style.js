@@ -63,6 +63,9 @@ const CSS = `
 }
 .dk-menu h2 { margin: 2px 4px 6px; font: 600 11px/1 var(--dk-font-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--dk-muted); }
 .dk-menu button { display: grid; gap: 4px; width: 100%; margin: 0; padding: 9px 10px; text-align: left; }
+.dk-setting { display: grid; gap: 4px; margin: 0 4px 8px; font: 600 11px/1 var(--dk-font-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dk-muted); }
+.dk-setting select { padding: 7px 6px; border-radius: 6px; border: 1px solid var(--dk-edge); background: transparent; color: var(--dk-ink); font: 400 13px/1.2 var(--dk-font-body); text-transform: none; letter-spacing: 0; }
+.dk-setting select option { color: #111; }
 .dk-menu button span { font: 400 12px/1.35 var(--dk-font-body); text-transform: none; letter-spacing: 0; opacity: 0.8; }
 .dk-panel [hidden], .dk-menu[hidden] { display: none !important; }
 .dk-shot .dk-panel, .dk-shot .dk-hint, .dk-shot .dk-button, .dk-shot .dk-menu { display: none !important; }

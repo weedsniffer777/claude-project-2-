@@ -6,15 +6,28 @@ import { createGame } from './game/game.js';
 import { createModelViewer } from './devkit/modelViewer.js';
 import { createDevKit } from './devkit/devkit.js';
 import { MODELS } from './models/registry.js';
+import { LEVELS } from './levels/index.js';
 
 const params = new URLSearchParams(location.search);
 if (params.has('shot')) document.body.classList.add('dk-shot');
 
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;
-const game = createGame({ renderer, pixel });
+const game = createGame({ renderer, pixel, level: params.get('level') });
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
 const devkit = createDevKit({
   tools: [{ id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) }],
+  settings: [
+    {
+      id: 'level',
+      label: 'Level',
+      options: LEVELS.map((l) => ({ value: l.id, label: l.name })),
+      value: game.levelId,
+      onChange: (id) => {
+        game.loadLevel(id);
+        setMode(game);
+      },
+    },
+  ],
 });
 
 let mode = null;

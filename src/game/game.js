@@ -1,20 +1,21 @@
-// The game, for now: a proving ground. Drive the starter tank with WASD or
-// arrows, aim with the pointer, click or Space to fire. Fixed isometric game
-// camera that follows the tank. Concrete blocks are solid: the tank collides
-// with them and shells burst on them.
+// The game: drive the starter tank through a level with WASD or arrows, aim
+// with the pointer, click or Space to fire. Fixed isometric game camera that
+// follows the tank. Levels (src/levels) supply the scene, its lighting, the
+// solid blocks the tank collides with, the colliders shells burst on, and
+// light emitters that share a small fixed pool of point lights.
 import * as THREE from 'three';
 import { createTank } from '../models/tank.js';
 import { CombatFx } from '../render/combat.js';
-import { addDaylight, groundTexture } from '../render/setup.js';
-import { box, put, wrapAngle, approachAngle } from '../models/kit.js';
+import { wrapAngle, approachAngle } from '../models/kit.js';
 import { injectDevKitStyles } from '../devkit/style.js';
+import { LEVELS } from '../levels/index.js';
 
 const VIEW_H = 13; // world units visible vertically
 const CAM_OFFSET = new THREE.Vector3(-10, 8.2, 10); // ~30 deg down; tank forward runs up-right on screen
 const MAX_SPEED = 5.5;
 const ACCEL = 12;
 const TURN_RATE = 3.4;
-const ARENA = 38;
+const LAMP_LIGHTS = 6; // point lights shared by the level's emitters nearest the tank
 
 // Screen-relative input: W drives straight up the screen, D straight right.
 // (The camera looks along world (1, 0, -1), so "up the screen" on the ground
@@ -25,39 +26,57 @@ const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 // Tank footprint for collisions: hull, covers and the rear drums.
 const TANK_BOX = { cx: -0.25, hx: 2.25, hz: 1.15 };
 
-export function createGame({ renderer, pixel }) {
+export function createGame({ renderer, pixel, level: startLevel }) {
   injectDevKitStyles();
   const canvas = renderer.domElement;
-  const scene = new THREE.Scene();
-  const daylight = addDaylight(scene, { shadowSize: 13, shadowMap: 2048 });
-
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(ARENA * 2 + 4, ARENA * 2 + 4), new THREE.MeshToonMaterial({ map: groundTexture(40) }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Solid concrete blocks. Each keeps a 2D oriented box for collisions.
-  const props = new THREE.Group();
-  scene.add(props);
-  const blocks = [];
-  let seed = 7;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 46; i++) {
-    const x = (rand() - 0.5) * 66;
-    const z = (rand() - 0.5) * 66;
-    if (Math.hypot(x, z) < 7) continue;
-    const w = 0.8 + rand() * 1.8;
-    const d = 0.8 + rand() * 1.6;
-    const h = 0.6 + rand() * 1.6;
-    const mesh = put(props, box(w, h, d, rand() < 0.5 ? 0x8c8a80 : 0x6f7378, { r: 0.08 }), x, h / 2, z);
-    mesh.rotation.y = rand() * Math.PI;
-    blocks.push({ mesh, x, z, hx: w / 2, hz: d / 2, yaw: mesh.rotation.y });
-  }
-  const colliders = [ground, ...blocks.map((b) => b.mesh)];
-
   const tank = createTank();
-  scene.add(tank.group);
-  const combat = new CombatFx(scene);
+  let scene, level, levelDef, combat, colliders, blocks, lamps;
+
+  // Builds a fresh scene for the level and drops the tank at its spawn.
+  function loadLevel(id) {
+    levelDef = LEVELS.find((l) => l.id === id) || LEVELS[0];
+    scene = new THREE.Scene();
+    level = levelDef.build(scene);
+    colliders = level.colliders;
+    blocks = level.blocks;
+    scene.add(tank.group);
+    combat = new CombatFx(scene);
+    lamps = [];
+    for (let i = 0; i < LAMP_LIGHTS; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 9, 1.4);
+      scene.add(l);
+      lamps.push(l);
+    }
+    tank.group.position.set(level.spawn.x, 0, level.spawn.z);
+    tank.group.rotation.y = level.spawn.yaw;
+    speed = 0;
+    hasAim = false;
+    camTarget.set(level.spawn.x + 0.6, 0.8, level.spawn.z);
+    return levelDef.id;
+  }
+
+  // Hand the pooled point lights to the lit emitters nearest the tank.
+  const nearest = [];
+  function assignLamps() {
+    nearest.length = 0;
+    for (const e of level.emitters) {
+      if (e.level <= 0.01) continue;
+      const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
+      if (d < 26 * 26) nearest.push([d, e]);
+    }
+    nearest.sort((a, b) => a[0] - b[0]);
+    lamps.forEach((l, i) => {
+      const e = nearest[i]?.[1];
+      if (!e) {
+        l.intensity = 0;
+        return;
+      }
+      l.position.copy(e.pos);
+      l.color.copy(e.color);
+      l.distance = e.distance;
+      l.intensity = e.intensity * e.level;
+    });
+  }
 
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 120);
   const camTarget = new THREE.Vector3(0.6, 0.8, 0);
@@ -135,7 +154,8 @@ export function createGame({ renderer, pixel }) {
     let hit = false;
     for (let pass = 0; pass < 2; pass++) {
       for (const b of blocks) {
-        if (Math.abs(b.x - pos.x) > 5 || Math.abs(b.z - pos.z) > 5) continue;
+        const reach = 3 + Math.max(b.hx, b.hz);
+        if (Math.abs(b.x - pos.x) > reach || Math.abs(b.z - pos.z) > reach) continue;
         const push = separate(tankBox(), b);
         if (!push) continue;
         pos.x += push.x * push.overlap;
@@ -150,6 +170,7 @@ export function createGame({ renderer, pixel }) {
   let speed = 0;
   const pos = tank.group.position;
   const input = new THREE.Vector3();
+  loadLevel(startLevel);
 
   return {
     enter() {
@@ -197,12 +218,16 @@ export function createGame({ renderer, pixel }) {
       const yaw = tank.group.rotation.y;
       pos.x += Math.cos(yaw) * speed * dt;
       pos.z += -Math.sin(yaw) * speed * dt;
-      pos.x = THREE.MathUtils.clamp(pos.x, -ARENA, ARENA);
-      pos.z = THREE.MathUtils.clamp(pos.z, -ARENA, ARENA);
+      const bounds = level.bounds;
+      pos.x = THREE.MathUtils.clamp(pos.x, bounds.minX, bounds.maxX);
+      pos.z = THREE.MathUtils.clamp(pos.z, bounds.minZ, bounds.maxZ);
       if (resolveCollisions()) speed *= 0.85; // scrape along blocks instead of sticking
+      // ride up onto sidewalks and other raised ground
+      const groundY = level.heightAt ? level.heightAt(pos.x, pos.z) : 0;
+      pos.y += (groundY - pos.y) * (1 - Math.exp(-dt * 14));
 
       // camera follows; the aim is re-cast every frame so it tracks while driving
-      camTarget.lerp(new THREE.Vector3(pos.x + 0.6, 0.8, pos.z), 1 - Math.exp(-dt * 6));
+      camTarget.lerp(new THREE.Vector3(pos.x + 0.6, 0.8 + pos.y, pos.z), 1 - Math.exp(-dt * 6));
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       if (pointer) {
@@ -215,7 +240,9 @@ export function createGame({ renderer, pixel }) {
           hasAim = true;
         }
       }
-      daylight.follow(pos);
+      level.light.follow(pos);
+      level.update(dt, t, { combat, focus: camTarget });
+      assignLamps();
 
       tank.update(dt, t, { aimPoint: hasAim ? aimPoint : null, mgPoint: null, speed });
       combat.handleTankEvents(tank);
@@ -229,11 +256,23 @@ export function createGame({ renderer, pixel }) {
       combat.endShake(camera);
     },
     // for tests and dev tools
+    loadLevel,
+    get levelId() {
+      return levelDef.id;
+    },
     debug: {
       tank,
-      blocks,
+      get blocks() {
+        return blocks;
+      },
+      get combat() {
+        return combat;
+      },
+      get scene() {
+        return scene;
+      },
+      loadLevel,
       fire,
-      combat,
       setAim(v) {
         aimPoint.copy(v);
         hasAim = true;

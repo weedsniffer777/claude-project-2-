@@ -786,6 +786,16 @@ export function createTank() {
     return { position, direction, breech, quadrant };
   }
 
+  // Current muzzle position and gun direction (for effects that follow the
+  // barrel after the shot, like the fume-extractor purge).
+  function muzzle() {
+    gunPivot.updateWorldMatrix(true, false);
+    return {
+      position: gunPivot.localToWorld(new THREE.Vector3(MUZZLE_X + 0.1, 0, 0)),
+      direction: new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld),
+    };
+  }
+
   function setSlotVisible(name, visible) {
     for (const g of slotGroups[name] || []) g.visible = visible;
   }
@@ -928,5 +938,5 @@ export function createTank() {
     }
   }
 
-  return { group, slotGroups, setSlotVisible, turret, fire, update, events };
+  return { group, slotGroups, setSlotVisible, turret, fire, muzzle, update, events };
 }

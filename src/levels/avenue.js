@@ -1,0 +1,1122 @@
+// Zone 1, first segment: a wide avenue through a ruined panel-block district
+// at winter dusk. Far future and deliberately placeless: no readable text,
+// only worn glyph panels.
+//
+// Layout (world +X runs bottom-left to top-right on screen):
+//  - tall panel blocks on the far (north, -Z) side, facades facing the street,
+//    the low sun behind them: the street sits in their shadow, and sunlight
+//    spills through the cross street, the alleys and gutted windows
+//  - the avenue: slush over wet asphalt between raised, snow-banked
+//    sidewalks; overhead trolley wires; sodium and cold-white lamps; a
+//    signalled intersection; burnt-out cars and a trolleybus
+//  - the near (south) side kept low: heat pipes, garages, fences, ruined
+//    walls and street clutter, backlit so it frames the street in silhouette
+//  - a heat-pipe arch over the road halfway, and a gated checkpoint at the end
+import * as THREE from 'three';
+import { addDusk, DUSK_SUN } from '../render/setup.js';
+import { box, cyl, put, toon, glowMat, gradientMap } from '../models/kit.js';
+import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
+import * as P from './props.js';
+
+const FH = 1.35; // floor height
+const PX = 12; // facade texels per world unit
+const GPX = 10; // ground texels per world unit
+const MAP = { x0: -44, x1: 132, z0: -46, z1: 34 }; // ground extent
+const CURB = { n: -7.5, s: 6.5 };
+const WALK = { n: -10, s: 9 };
+const SW = 0.16; // sidewalk height
+const CROSS = { x0: 17, x1: 27 }; // the cross street running north
+
+const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
+const COLD = 0xcfe8ff;
+const SUN = 0xffc98a;
+
+const PANELS = ['#9a978f', '#a5a095', '#91959a', '#aca393', '#8b8e92'];
+const ACCENTS = ['#5f8784', '#a3874e', '#5c6f8c', '#8f8550', '#6f7f6a'];
+const PAINT = [0x8a8172, 0x6d7a72, 0x5d6b80, 0x9b9277, 0x707a5c, 0xb3ad9c];
+const CONCRETE = [0x8d8b86, 0x7d7c78, 0x9a978f, 0x6f6e6b, 0x85898c];
+const BURNT_PAINT = [0x5d6b80, 0x8a8172, 0x6f7f6a, 0x9b9277, null, 0x7a6a5a];
+
+// Where a sun ray through p lands at height h.
+const SUN_DIR = DUSK_SUN.clone().negate().normalize();
+function toGround(p, h = 0) {
+  const t = (p.y - h) / -SUN_DIR.y;
+  return new THREE.Vector3(p.x + SUN_DIR.x * t, h, p.z + SUN_DIR.z * t);
+}
+
+const onSidewalk = (x, z) => z >= CURB.s || (z <= CURB.n && !(x > CROSS.x0 && x < CROSS.x1));
+const heightAt = (x, z) => (onSidewalk(x, z) ? SW : 0);
+
+// ---------------------------------------------------------------- textures
+function glyphs(g, x, y, w, h, cells, color, rand) {
+  const cw = w / cells;
+  g.fillStyle = color;
+  for (let i = 0; i < cells; i++) {
+    if (rand() < 0.18) continue;
+    const gx = x + i * cw + cw * 0.15;
+    const gw = cw * 0.7;
+    const strokes = 2 + ((rand() * 3) | 0);
+    for (let s = 0; s < strokes; s++) {
+      if (rand() < 0.5) g.fillRect(Math.round(gx + rand() * gw * 0.6), y, Math.max(1, Math.round(gw * 0.22)), h);
+      else g.fillRect(gx, Math.round(y + rand() * h * 0.8), Math.round(gw * (0.5 + rand() * 0.5)), Math.max(1, Math.round(h * 0.2)));
+    }
+  }
+}
+
+// Worn sign panel with abstract glyphs: reads as signage, is no real script.
+function glyphSign(w, h, { board = '#2c3034', ink = '#c9c1a8', rand }) {
+  const S = 16;
+  const [c, g] = canvas(w * S, h * S);
+  g.fillStyle = board;
+  g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = 'rgba(255,255,255,0.08)';
+  g.fillRect(0, 0, c.width, 2);
+  const cells = Math.max(2, Math.round(w / (h * 0.75)));
+  glyphs(g, c.width * 0.06, c.height * 0.22, c.width * 0.88, c.height * 0.56, cells, ink, rand);
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = board;
+    blob(g, rand() * c.width, rand() * c.height, 3 + rand() * 8, 2 + rand() * 6, rand);
+  }
+  g.fillStyle = 'rgba(110,70,40,0.5)';
+  for (let i = 0; i < 5; i++) g.fillRect((rand() * c.width) | 0, (rand() * c.height * 0.5) | 0, 1, 4 + rand() * 10);
+  return tex(c);
+}
+
+function hazardTexture() {
+  const [c, g] = canvas(32, 32);
+  g.fillStyle = '#2a2b2d';
+  g.fillRect(0, 0, 32, 32);
+  g.fillStyle = '#c99a2e';
+  for (let i = -32; i < 64; i += 16) {
+    g.beginPath();
+    g.moveTo(i, 32);
+    g.lineTo(i + 8, 32);
+    g.lineTo(i + 40, 0);
+    g.lineTo(i + 32, 0);
+    g.fill();
+  }
+  const t = tex(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// Road surface: wet asphalt under slush, ruts, faded markings, craters.
+function roadTexture(rand, craters) {
+  const W = (MAP.x1 - MAP.x0) * GPX;
+  const H = (MAP.z1 - MAP.z0) * GPX;
+  const [c, g] = canvas(W, H);
+  const X = (x) => (x - MAP.x0) * GPX;
+  const Z = (z) => (z - MAP.z0) * GPX;
+  const rect = (x0, z0, x1, z1, color) => {
+    g.fillStyle = color;
+    g.fillRect(X(x0), Z(z0), X(x1) - X(x0), Z(z1) - Z(z0));
+  };
+  rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#c3c6cc');
+  rect(MAP.x0, CURB.n, MAP.x1, CURB.s, '#5c5d62');
+  rect(CROSS.x0, -32, CROSS.x1, CURB.n, '#5c5d62');
+  speckle(g, W, Z(CURB.s) - Z(CURB.n), ['#66676c', '#525358', '#6c6c70'], W * 40, rand, Z(CURB.n));
+
+  g.fillStyle = '#aaa79e';
+  for (const z of [-4, -0.6, -0.3, 3]) {
+    const center = z === -0.6 || z === -0.3;
+    for (let x = MAP.x0; x < MAP.x1; x += center ? 1 : 4) {
+      if (rand() < 0.45) continue;
+      g.fillRect(X(x), Z(z), (center ? 1 : 2) * GPX, 2);
+    }
+  }
+  g.fillStyle = '#a19e95';
+  for (const x of [CROSS.x0 - 2.2, CROSS.x1 + 0.4]) {
+    for (let z = CURB.n + 0.4; z < CURB.s - 0.4; z += 1.1) {
+      if (rand() < 0.3) continue;
+      g.fillRect(X(x), Z(z), 1.8 * GPX, 0.55 * GPX);
+    }
+  }
+  for (let i = 0; i < 1300; i++) {
+    const x = MAP.x0 + rand() * (MAP.x1 - MAP.x0);
+    const z = CURB.n + 0.3 + rand() * (CURB.s - CURB.n - 0.6);
+    const nearCurb = Math.min(z - CURB.n, CURB.s - z) < 1.3;
+    g.fillStyle = nearCurb ? (rand() < 0.5 ? '#a9a8a6' : '#9a9996') : rand() < 0.5 ? '#86847f' : '#76746f';
+    blob(g, X(x), Z(z), (0.5 + rand() * 1.3) * GPX, (0.35 + rand() * 0.6) * GPX, rand, 9);
+  }
+  g.fillStyle = '#44454a';
+  for (const z of [-6.2, -5.1, -2.8, -1.7, 1.0, 2.1, 4.1, 5.2]) {
+    let x = MAP.x0;
+    while (x < MAP.x1) {
+      const len = 2 + rand() * 9;
+      if (rand() < 0.55) g.fillRect(X(x), Z(z + (rand() - 0.5) * 0.2), len * GPX, 2);
+      x += len + rand() * 2;
+    }
+  }
+  for (let i = 0; i < 50; i++) {
+    const x = MAP.x0 + 30 + rand() * 120;
+    const z = CURB.n + 1 + rand() * (CURB.s - CURB.n - 2);
+    g.fillStyle = rand() < 0.5 ? '#4d5568' : '#43475a';
+    blob(g, X(x), Z(z), (0.4 + rand() * 1.0) * GPX, (0.3 + rand() * 0.6) * GPX, rand);
+  }
+  for (let x = -30; x < 110; x += 17) {
+    g.fillStyle = '#3c3d40';
+    g.beginPath();
+    g.arc(X(x), Z(-2.3), 0.4 * GPX, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (const { x, z, r } of craters) {
+    g.fillStyle = '#3b3836';
+    blob(g, X(x), Z(z), r * 1.8 * GPX, r * 1.5 * GPX, rand, 13);
+    g.fillStyle = '#6f6c66';
+    blob(g, X(x), Z(z), r * 1.15 * GPX, r * GPX, rand, 11);
+    g.fillStyle = '#242427';
+    blob(g, X(x), Z(z), r * 0.85 * GPX, r * 0.7 * GPX, rand, 11);
+  }
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = ['#bdb7a6', '#8d7c62', '#3d3f44', '#6c7a74'][(rand() * 4) | 0];
+    g.fillRect(X(MAP.x0 + rand() * (MAP.x1 - MAP.x0)), Z(CURB.n + rand() * (CURB.s - CURB.n)), 2, 1);
+  }
+  return tex(c);
+}
+
+function sidewalkTexture(rand) {
+  const [c, g] = canvas(64, 64);
+  g.fillStyle = '#b9bbbf';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#a7a8aa';
+  for (let i = 0; i < 26; i++) blob(g, rand() * 64, rand() * 64, 3 + rand() * 8, 2 + rand() * 5, rand);
+  g.fillStyle = '#8f8f8f';
+  for (let i = 0; i < 6; i++) blob(g, rand() * 64, rand() * 64, 2 + rand() * 4, 1 + rand() * 3, rand);
+  g.fillStyle = '#00000018';
+  for (let x = 0; x < 64; x += 16) g.fillRect(x, 0, 1, 64);
+  for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 1);
+  speckle(g, 64, 64, ['#9d9ea1', '#c9cbcf', '#7b7a78', '#d3d5d9'], 520, rand);
+  const t = tex(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+// pierce: windows the sun shines straight through (gutted rooms), as
+// [{ f, k }] (floor from the ground, column from the west end).
+function facadeTextures(w, floors, o, rand, pierce = []) {
+  const H = floors * FH + 0.5;
+  const [c, g] = canvas(w * PX, H * PX);
+  const [ce, ge] = canvas(w * PX, H * PX);
+  ge.fillStyle = '#000';
+  ge.fillRect(0, 0, ce.width, ce.height);
+  g.fillStyle = o.panel;
+  g.fillRect(0, 0, c.width, c.height);
+  speckle(g, c.width, c.height, ['#00000018', '#ffffff10', '#00000010'], c.width * c.height * 0.08, rand);
+
+  const cols = Math.max(2, Math.round(w / 1.7));
+  const cw = (w / cols) * PX;
+  const fh = FH * PX;
+  const top = 0.5 * PX;
+  const doors = new Set();
+  for (let i = 1; i < cols; i += 4) doors.add(i);
+  const pierced = new Set(pierce.map((p) => `${p.f},${p.k}`));
+  const R = (x, y, ww, hh, ctx) => ctx.fillRect(Math.round(x), Math.round(y), Math.round(ww), Math.round(hh));
+
+  for (let f = 0; f < floors; f++) {
+    const fy = c.height - (f + 1) * fh;
+    g.fillStyle = '#00000030';
+    g.fillRect(0, Math.round(fy + fh - 1), c.width, 1);
+    if (o.accent && f > 0) {
+      g.fillStyle = o.accent;
+      g.fillRect(0, Math.round(fy + fh - 0.32 * PX), c.width, Math.round(0.24 * PX));
+    }
+    for (let k = 0; k < cols; k++) {
+      const x0 = k * cw;
+      g.fillStyle = '#00000022';
+      g.fillRect(Math.round(x0), Math.round(fy), 1, Math.round(fh));
+      let wx = x0 + cw * 0.22;
+      let ww = cw * 0.56;
+      let wy = fy + 0.28 * PX;
+      let wh = 0.62 * PX;
+      if (f === 0 && o.shop) {
+        wx = x0 + 0.12 * PX;
+        ww = cw - 0.24 * PX;
+        wy = fy + 0.3 * PX;
+        wh = 0.8 * PX;
+      } else if (f === 0 && doors.has(k)) {
+        g.fillStyle = '#2b2a2a';
+        R(x0 + cw * 0.3, fy + 0.2 * PX, cw * 0.4, fh - 0.2 * PX, g);
+        continue;
+      }
+      if (pierced.has(`${f},${k}`)) {
+        // sun blazing straight through a gutted room
+        g.fillStyle = ge.fillStyle = '#ffe2b0';
+        R(wx, wy, ww, wh, g);
+        R(wx, wy, ww, wh, ge);
+        g.fillStyle = ge.fillStyle = '#ffc77e';
+        R(wx, wy + wh * 0.6, ww, wh * 0.4, g);
+        R(wx, wy + wh * 0.6, ww, wh * 0.4, ge);
+        continue;
+      }
+      const roll = rand();
+      let glass = '#2c3242';
+      let lit = null;
+      if (roll < o.broken) glass = '#111215';
+      else if (roll < o.broken + 0.05) lit = '#ffbe72';
+      else if (roll < o.broken + 0.08) lit = '#cfe6ff';
+      g.fillStyle = lit || glass;
+      R(wx, wy, ww, wh, g);
+      if (lit) {
+        ge.fillStyle = lit;
+        R(wx, wy, ww, wh, ge);
+        if (rand() < 0.5) {
+          g.fillStyle = ge.fillStyle = '#2a2622';
+          R(wx, wy, ww * 0.3, wh, g);
+          R(wx, wy, ww * 0.3, wh, ge);
+        }
+      } else if (glass === '#111215') {
+        g.fillStyle = '#1b1b1d55';
+        blob(g, wx + ww / 2, wy - wh * 0.3, ww * 0.7, wh * 0.9, rand);
+      } else {
+        g.fillStyle = '#4a5366';
+        g.fillRect(Math.round(wx), Math.round(wy), Math.round(ww * 0.3), 1);
+      }
+      g.fillStyle = '#d5d8dc';
+      g.fillRect(Math.round(wx - 1), Math.round(wy + wh), Math.round(ww + 2), 1);
+      g.fillStyle = '#00000020';
+      g.fillRect(Math.round(wx + ww * 0.4), Math.round(wy + wh + 1), 2, Math.round(fh * (0.3 + rand() * 0.5)));
+    }
+  }
+  g.fillStyle = '#00000038';
+  g.fillRect(0, 0, c.width, Math.round(top));
+  g.fillStyle = '#d6d9de';
+  g.fillRect(0, 0, c.width, 1);
+  for (let i = 0; i < o.holes; i++) {
+    const hx = rand() * c.width;
+    const hy = top + rand() * (c.height - top - fh);
+    const r = (0.5 + rand() * 0.9) * PX;
+    g.fillStyle = '#26262833';
+    blob(g, hx, hy - r * 0.6, r * 2, r * 1.8, rand, 11);
+    g.fillStyle = '#6f6c66';
+    blob(g, hx, hy, r * 1.25, r * 1.1, rand, 11);
+    g.fillStyle = '#121214';
+    blob(g, hx, hy, r, r * 0.85, rand, 11);
+  }
+  return { map: tex(c), emissiveMap: tex(ce) };
+}
+
+function endTexture(d, floors, o, rand, mural) {
+  const H = floors * FH + 0.5;
+  const [c, g] = canvas(d * PX, H * PX);
+  g.fillStyle = o.panel;
+  g.fillRect(0, 0, c.width, c.height);
+  speckle(g, c.width, c.height, ['#00000018', '#ffffff10'], c.width * c.height * 0.08, rand);
+  g.fillStyle = '#00000028';
+  for (let y = c.height; y > 0; y -= FH * PX) g.fillRect(0, Math.round(y), c.width, 1);
+  for (let x = 0; x < c.width; x += 2.4 * PX) g.fillRect(Math.round(x), 0, 1, c.height);
+  if (mural) {
+    const cx = c.width * 0.5;
+    const cy = c.height * 0.42;
+    const Rr = Math.min(c.width, c.height) * 0.28;
+    const tile = 3;
+    for (let y = 0; y < c.height; y += tile) {
+      for (let x = 0; x < c.width; x += tile) {
+        const dx = x - cx;
+        const dy = y - cy;
+        const r = Math.hypot(dx, dy);
+        const a = Math.atan2(dy, dx);
+        let col = null;
+        if (r < Rr) col = r < Rr * 0.55 ? '#c6a35a' : '#5f8a9a';
+        else if (r < Rr * 1.9 && Math.sin(a * 9) > 0.55 && y < cy) col = '#a3874e';
+        else if (y > c.height * 0.72 && y < c.height * 0.8) col = '#4e6f86';
+        else if (Math.abs(y - (cy + Rr * 1.2 + Math.sin(x * 0.05) * 12)) < 5) col = '#7b8f6e';
+        if (!col || rand() < 0.16) continue;
+        g.fillStyle = col;
+        g.fillRect(x, y, tile - 1, tile - 1);
+      }
+    }
+    for (let i = 0; i < 7; i++) {
+      g.fillStyle = o.panel;
+      blob(g, rand() * c.width, rand() * c.height, 6 + rand() * 14, 5 + rand() * 12, rand);
+    }
+  }
+  return tex(c);
+}
+
+function cutawayTexture(d, floors, rand) {
+  const H = floors * FH + 0.5;
+  const [c, g] = canvas(d * PX, H * PX);
+  g.fillStyle = '#1d1c1e';
+  g.fillRect(0, 0, c.width, c.height);
+  const papers = ['#5d6a5a', '#6e6250', '#56607a', '#7a6c5e', '#4f5a5c'];
+  for (let f = 0; f < floors; f++) {
+    const y = c.height - (f + 1) * FH * PX;
+    for (let x = 0; x < c.width; x += 2.6 * PX) {
+      if (rand() < 0.3) continue;
+      g.fillStyle = papers[(rand() * papers.length) | 0];
+      g.fillRect(Math.round(x + 2), Math.round(y + 3), Math.round(2.6 * PX - 4), Math.round(FH * PX - 6));
+      g.fillStyle = '#00000044';
+      g.fillRect(Math.round(x + 2), Math.round(y + 3), 3, Math.round(FH * PX - 6));
+    }
+    g.fillStyle = '#8c8a85';
+    g.fillRect(0, Math.round(y + FH * PX - 3), c.width, 3);
+  }
+  return tex(c);
+}
+
+const facadeMat = (t) => new THREE.MeshToonMaterial({ map: t.map, emissiveMap: t.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.1, gradientMap });
+const mapMat = (map) => new THREE.MeshToonMaterial({ map, gradientMap });
+
+// Additive light volume between a polygon in the air and its sun-projection
+// on the ground: bright where the light enters, fading toward the ground.
+function sunVolume(B, top, opacity, groundY = 0) {
+  const bottom = top.map((p) => toGround(p, groundY));
+  const pos = [];
+  const col = [];
+  const n = top.length;
+  for (let i = 0; i < n; i++) {
+    const a = top[i];
+    const b = top[(i + 1) % n];
+    const c = bottom[(i + 1) % n];
+    const d = bottom[i];
+    for (const [p, k] of [[a, 1], [b, 1], [c, 0.15], [a, 1], [c, 0.15], [d, 0.15]]) {
+      pos.push(p.x, p.y, p.z);
+      col.push(k, k, k);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  B.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: SUN, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
+  return bottom;
+}
+
+// Hard-edged patch of sunlight on the ground (a quad from 4 ground points).
+function sunPatch(B, pts, opacity) {
+  const geo = new THREE.BufferGeometry().setFromPoints([pts[0], pts[1], pts[2], pts[0], pts[2], pts[3]].map((p) => p.clone().setY(p.y + 0.03)));
+  B.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: SUN, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
+}
+
+// ------------------------------------------------------------- the level
+export const avenue = {
+  id: 'avenue',
+  name: 'Ruined avenue · winter dusk',
+  build(scene) {
+    const B = new LevelBuilder(scene, 20241);
+    const rand = B.rand;
+    const light = addDusk(scene, { shadowSize: 22, shadowMap: 2048 });
+    const hazard = hazardTexture();
+    const sign = (w, h, o = {}) => mapMat(glyphSign(w, h, { rand, ...o }));
+
+    // ------------------------------------------------- ground and sidewalks
+    const craters = [];
+    for (let i = 0; i < 12; i++) craters.push({ x: -10 + rand() * 100, z: CURB.n + 2 + rand() * (CURB.s - CURB.n - 4), r: 0.6 + rand() * 0.6 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(MAP.x1 - MAP.x0, MAP.z1 - MAP.z0), mapMat(roadTexture(rand, craters)));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set((MAP.x0 + MAP.x1) / 2, 0, (MAP.z0 + MAP.z1) / 2);
+    ground.receiveShadow = true;
+    B.add(ground);
+    B.solid(ground);
+
+    const walkTex = sidewalkTexture(rand);
+    const curbMat = toon(0x9a9893);
+    function slab(x0, x1, z0, z1) {
+      const t = walkTex.clone();
+      t.needsUpdate = true;
+      t.repeat.set((x1 - x0) / 3.2, (z1 - z0) / 3.2);
+      const top = new THREE.MeshToonMaterial({ map: t, gradientMap });
+      const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, SW, z1 - z0), [curbMat, curbMat, top, curbMat, curbMat, curbMat]);
+      m.position.set((x0 + x1) / 2, SW / 2, (z0 + z1) / 2);
+      m.receiveShadow = true;
+      B.add(m);
+      B.solid(m);
+    }
+    slab(MAP.x0, CROSS.x0, -16, CURB.n);
+    slab(CROSS.x1, MAP.x1, -16, CURB.n);
+    slab(MAP.x0, MAP.x1, CURB.s, MAP.z1);
+
+    // snow banks plowed up along both curbs, with gaps where paths were cut
+    for (const [z, dir] of [[CURB.n - 0.35, -1], [CURB.s + 0.35, 1]]) {
+      for (let x = MAP.x0; x < MAP.x1; x += 0.55) {
+        if (dir < 0 && x > CROSS.x0 - 0.5 && x < CROSS.x1 + 0.5) continue;
+        if (rand() < 0.12) x += 2;
+        B.lump(x, SW, z + dir * rand() * 0.25, 0.5 + rand() * 0.4, 0.2 + rand() * 0.18, 0.35 + rand() * 0.2, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
+      }
+    }
+    for (const z of [CURB.n + 0.3, CURB.s - 0.3]) {
+      for (let x = MAP.x0; x < MAP.x1; x += 0.8) {
+        if (rand() < 0.35) continue;
+        B.lump(x, 0, z, 0.45 + rand() * 0.4, 0.08 + rand() * 0.08, 0.25, 0x8f8e8b, rand() * 3);
+      }
+    }
+    // broken asphalt slabs tipped up around the craters
+    for (const { x, z, r } of craters) {
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2 + rand() * 0.4;
+        const d = r * (0.95 + rand() * 0.3);
+        B.piece(0.35 + rand() * 0.35, 0.1, 0.3 + rand() * 0.25, rand() < 0.6 ? 0x4c4d52 : 0x5e5c58, x + Math.cos(a) * d, 0.06, z + Math.sin(a) * d * 0.85, Math.sin(a) * 0.5, -a, Math.cos(a) * 0.5);
+      }
+    }
+    // chunks and bricks scattered across the whole street
+    for (let i = 0; i < 420; i++) {
+      const x = MAP.x0 + 8 + rand() * 150;
+      const z = WALK.n + rand() * (WALK.s - WALK.n + 6);
+      const s = 0.08 + rand() * 0.22;
+      B.piece(s * (1 + rand()), s * 0.6, s, rand() < 0.25 ? 0x7a5e50 : CONCRETE[(rand() * 5) | 0], x, heightAt(x, z) + s * 0.25, z, rand(), rand() * 3, rand());
+    }
+
+    function rubble(x, z, radius, height, { solid = false, slabs = 2, y = heightAt(x, z) } = {}) {
+      const n = Math.round(radius * radius * 6) + 8;
+      for (let i = 0; i < n; i++) {
+        const a = rand() * Math.PI * 2;
+        const r = Math.sqrt(rand()) * radius;
+        const k = 1 - r / radius;
+        const s = 0.25 + rand() * 0.6;
+        B.piece(s * (1 + rand()), s * 0.7, s, CONCRETE[(rand() * 5) | 0], x + Math.cos(a) * r, y + k * height * (0.4 + rand() * 0.6), z + Math.sin(a) * r * 0.8, rand() * 3, rand() * 3, rand() * 3);
+      }
+      for (let i = 0; i < slabs; i++) {
+        const m = B.chunk(1.4 + rand() * 1.4, 0.16, 1 + rand() * 0.8, CONCRETE[(rand() * 5) | 0], x + (rand() - 0.5) * radius, y + height * 0.5, z + (rand() - 0.5) * radius * 0.6, (rand() - 0.5) * 1.2, rand() * 3, (rand() - 0.5) * 1.4);
+        if (solid) B.solid(m);
+      }
+      for (let i = 0; i < 3; i++) B.lump(x + (rand() - 0.5) * radius, y + height * 0.7, z + (rand() - 0.5) * radius * 0.5, radius * 0.3, 0.12, radius * 0.25, 0xc9ccd1, rand() * 3);
+      if (rand() < 0.6) B.rebar(x, y + height * 0.5, z, 2 + ((rand() * 3) | 0));
+      if (solid) {
+        B.hitBox(x, y + height * 0.4, z, radius * 1.4, height * 0.8, radius * 1.1);
+        B.block(x, z, radius * 0.8, radius * 0.65);
+      }
+    }
+
+    // ---------------------------------------------------------- buildings
+    function building(o) {
+      const { x0, x1, zf = WALK.n, depth = 13, floors } = o;
+      if (o.bite) {
+        const bx = x0 + o.bite.w;
+        building({ ...o, x1: bx, floors: floors - o.bite.floors, bite: null, mural: false, sign: null, letters: false, pierce: 0 });
+        building({ ...o, x0: bx, bite: null, cutaway: true, mural: false });
+        rubble(x0 + o.bite.w * 0.5, zf - 1.5, o.bite.w * 0.45, 1.2, { slabs: 3 });
+        const lowH = (floors - o.bite.floors) * FH + 0.5;
+        for (let i = 0; i < 6; i++) B.piece(0.6 + rand(), 0.4, 0.8, CONCRETE[i % 5], x0 + rand() * o.bite.w, lowH + 0.15, zf - 1 - rand() * depth * 0.6, rand(), rand() * 3, rand() * 0.5);
+        B.rebar(bx - 0.2, lowH, zf - 1, 5);
+        return;
+      }
+      const w = x1 - x0;
+      const H = floors * FH + 0.5;
+      const cols = Math.max(2, Math.round(w / 1.7));
+      const cw = w / cols;
+      const pierce = [];
+      for (let i = 0; i < (o.pierce ?? 2); i++) pierce.push({ f: 1 + ((rand() * Math.min(3, floors - 1)) | 0), k: (rand() * cols) | 0 });
+      const look = { panel: o.panel, accent: o.accent, broken: o.broken ?? 0.25, holes: o.holes ?? 2, shop: o.shop };
+      const front = facadeMat(facadeTextures(w, floors, look, rand, pierce));
+      const end = mapMat(endTexture(depth, floors, look, rand, false));
+      const west = o.cutaway ? mapMat(cutawayTexture(depth, floors, rand)) : o.mural ? mapMat(endTexture(depth, floors, look, rand, true)) : end;
+      const roof = toon(0xc6c9ce);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, H, depth), [end, west, roof, roof, front, end]);
+      m.position.set((x0 + x1) / 2, H / 2, zf - depth / 2);
+      m.castShadow = m.receiveShadow = true;
+      B.add(m);
+      B.solid(m);
+      B.block((x0 + x1) / 2, zf - depth / 2, w / 2, depth / 2);
+
+      // sun shafts out of the gutted windows, landing as bright patches
+      for (const { f, k } of pierce) {
+        const cx = x0 + (k + 0.5) * cw;
+        const cy = (f + 1) * FH - 0.59;
+        const hw = cw * 0.28;
+        const hh = 0.31;
+        const z = zf + 0.02;
+        const corners = [new THREE.Vector3(cx - hw, cy + hh, z), new THREE.Vector3(cx + hw, cy + hh, z), new THREE.Vector3(cx + hw, cy - hh, z), new THREE.Vector3(cx - hw, cy - hh, z)];
+        const landing = toGround(corners[0]);
+        const bottom = sunVolume(B, corners, 0.15, heightAt(landing.x, landing.z));
+        sunPatch(B, bottom, 0.3);
+      }
+
+      for (let k = 0; k < cols; k++) {
+        if (k % 3 !== 1 || rand() < 0.3) continue;
+        const bx = x0 + (k + 0.5) * cw;
+        for (let f = 1; f < floors; f++) {
+          if (rand() < 0.12) continue;
+          const y = f * FH + 0.28;
+          const glazed = rand() < 0.4;
+          B.piece(cw * 0.8, 0.55, 0.45, glazed ? 0xb9b4a6 : PAINT[(rand() * PAINT.length) | 0], bx, y, zf + 0.22, 0, 0, rand() < 0.05 ? 0.4 : 0);
+          B.piece(cw * 0.86, 0.07, 0.55, 0x7b7a76, bx, y - 0.3, zf + 0.26);
+          if (rand() < 0.5) B.piece(cw * 0.7, 0.05, 0.4, 0xd5d8dc, bx, y + 0.3, zf + 0.22);
+        }
+      }
+      for (let k = 1; k < cols; k += 4) {
+        B.piece(cw * 0.7, 0.1, 0.8, 0x7e7c78, x0 + (k + 0.5) * cw, 1.25, zf + 0.4);
+        B.piece(cw * 0.6, 0.06, 0.7, 0xd5d8dc, x0 + (k + 0.5) * cw, 1.33, zf + 0.4);
+      }
+      if (o.shop) {
+        for (let k = 0; k < cols; k++) {
+          if (rand() < 0.3) continue;
+          B.piece(cw * 0.9, 0.05, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][k % 3], x0 + (k + 0.5) * cw, 1.45 - rand() * 0.3, zf + 0.42, -0.35 - rand() * 0.5, 0, (rand() - 0.5) * 0.3);
+        }
+      }
+      P.facadeClutter(B, x0, x1, zf, H);
+      for (let i = 0; i < 3; i++) B.piece(0.6 + rand(), 0.5 + rand() * 0.6, 0.6 + rand(), 0x7b7a76, x0 + 1 + rand() * (w - 2), H + 0.3, zf - 2 - rand() * (depth - 4));
+      put(B.root, cyl(0.03, 2.4, 0x3a3c3f, { seg: 4 }), x0 + rand() * w, H + 1.2, zf - 3);
+
+      if (o.sign) {
+        const sw = Math.min(w * 0.6, 8);
+        const s = new THREE.Mesh(new THREE.PlaneGeometry(sw, 0.55), sign(sw, 0.55, { ink: o.sign }));
+        s.position.set(x0 + w * 0.35, 1.08, zf + 0.06);
+        B.add(s);
+      }
+      if (o.letters) {
+        const fx = x0 + w * 0.25;
+        const span = w * 0.5;
+        const n = 5;
+        for (let i = 0; i <= n; i++) B.piece(0.08, 2.0, 0.08, 0x3b3d40, fx + (i / n) * span, H + 1.0, zf - 1.2);
+        B.piece(span, 0.08, 0.08, 0x3b3d40, fx + span / 2, H + 0.25, zf - 1.2);
+        B.piece(span, 0.08, 0.08, 0x3b3d40, fx + span / 2, H + 1.9, zf - 1.2);
+        for (let i = 0; i < n; i++) {
+          if (i === 2) continue;
+          const panel = new THREE.Mesh(new THREE.PlaneGeometry(span / n - 0.2, 1.5), sign(span / n - 0.2, 1.5, { board: '#3a3d40', ink: '#bdb49a' }));
+          panel.material.side = THREE.DoubleSide;
+          panel.position.set(fx + ((i + 0.5) / n) * span, H + 1.08, zf - 1.12);
+          if (i === 3) {
+            panel.rotation.z = -0.5;
+            panel.position.y -= 0.35;
+            panel.position.x += 0.2;
+          }
+          panel.castShadow = true;
+          B.add(panel);
+        }
+      }
+    }
+
+    // North side, with gaps the sun comes through.
+    building({ x0: -40, x1: -20, floors: 9, panel: PANELS[0], accent: ACCENTS[0], pierce: 3 });
+    building({ x0: -15, x1: 4, floors: 5, panel: PANELS[3], accent: null, holes: 3, broken: 0.35, pierce: 3 });
+    building({ x0: 4, x1: CROSS.x0, floors: 5, panel: PANELS[1], shop: true, sign: '#b7c9c4', letters: true, holes: 1 });
+    building({ x0: CROSS.x1, x1: 39, floors: 9, panel: PANELS[2], accent: ACCENTS[2], mural: true, bite: { w: 4.5, floors: 4 }, holes: 3, pierce: 3 });
+    building({ x0: 44, x1: 61, floors: 12, panel: PANELS[0], accent: ACCENTS[1], holes: 4, broken: 0.3, pierce: 4 });
+    building({ x0: 66, x1: 71, floors: 5, panel: PANELS[4], holes: 2, broken: 0.5 });
+    building({ x0: 78, x1: 84, floors: 3, panel: PANELS[4], broken: 0.6, cutaway: true });
+    building({ x0: 87, x1: 110, floors: 9, panel: PANELS[1], accent: ACCENTS[3], holes: 2, pierce: 3 });
+    building({ x0: 8, x1: 36, zf: -29, depth: 8, floors: 2, panel: PANELS[2], broken: 0.6, pierce: 0 });
+
+    // haze in the gaps: light pouring through between the blocks
+    for (const [gx0, gx1, h] of [[-20, -15, 9], [CROSS.x0, CROSS.x1, 9], [39, 44, 12], [61, 66, 12], [71, 78, 6], [84, 87, 9]]) {
+      const y = h * FH;
+      sunVolume(B, [new THREE.Vector3(gx0, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n), new THREE.Vector3(gx0, y, WALK.n)], 0.05);
+    }
+
+    rubble(74.5, -12.5, 3.4, 2.2, { solid: true, slabs: 6 });
+    rubble(74, -9.4, 2.0, 1.0, { slabs: 2 });
+    rubble(41.5, -12.5, 1.8, 1.4, { solid: true });
+    rubble(63.5, -12.5, 1.8, 1.5, { solid: true });
+    rubble(-17.5, -12.2, 1.6, 1.0, { solid: true });
+    rubble(22, -23, 3.2, 1.6, { solid: true, slabs: 4 });
+    B.block(41.5, -14, 2.4, 3);
+    B.block(63.5, -14, 2.4, 3);
+    B.block(-17.5, -14, 2.4, 3);
+    B.block(74.5, -14, 3.6, 3);
+    B.block(22, -24, 5, 2);
+    for (const [x, r] of [[-24, 1.3], [-4, 0.9], [33, 1.7], [52, 1.2], [58, 0.8], [93, 1.1]]) rubble(x, WALK.n + 0.9, r, 0.8, { solid: true });
+    // facade slabs that came down whole, leaning on the sidewalk
+    for (const [x, ry] of [[-30, 0.2], [12, -0.3], [49, 0.4], [98, -0.2]]) {
+      const s = B.chunk(2.4, 1.6, 0.2, CONCRETE[1], x, SW + 0.7, WALK.n + 0.9, -0.55, ry, 0.05);
+      B.solid(s);
+      B.block(x, WALK.n + 0.9, 1.2, 0.5, ry);
+      B.rebar(x - 1, SW + 0.2, WALK.n + 1.2, 3);
+    }
+
+    // ------------------------------------------- poles, lamps and wires
+    const poleXs = [];
+    for (let x = -34; x < 104; x += 14) poleXs.push(x);
+    const spanY = 5.9;
+    const flickers = [];
+    let lampIndex = 0;
+    const poleTops = new Map();
+    for (const x of poleXs) {
+      for (const side of [-1, 1]) {
+        const z = side < 0 ? CURB.n - 0.45 : CURB.s + 0.45;
+        const idx = lampIndex++;
+        const tilt = rand() < 0.35 ? (rand() - 0.5) * 0.5 : (rand() - 0.5) * 0.06;
+        const pole = cyl(0.09, 6.6, 0x8b8984, { seg: 8, radiusEnd: 0.14 });
+        pole.position.set(x, SW + 3.3, z);
+        pole.rotation.x = tilt;
+        B.add(pole);
+        B.solid(pole);
+        B.block(x, z, 0.2, 0.2);
+        const top = new THREE.Vector3(x, SW + 6.25, z - Math.sin(tilt) * 3.2);
+        poleTops.set(`${x},${side}`, top);
+        // mostly cobra heads, a few older globes; some dead, some hanging
+        // off their arms by the cable
+        const dir = -side;
+        const kind = idx % 7 === 3 ? 'globe' : idx % 9 === 5 ? 'hanging' : 'cobra';
+        const dead = [1, 4, 12, 15].includes(idx);
+        const cold = idx % 5 === 2;
+        const color = cold ? COLD : SODIUM[idx % 3];
+        const armLen = 1.6 + (idx % 3) * 0.3;
+        const arm = put(B.root, box(0.08, 0.08, armLen, 0x4a4c50, { r: 0.02 }), top.x, top.y, top.z + (dir * armLen) / 2);
+        arm.rotation.x = -dir * 0.12;
+        let head = new THREE.Vector3(top.x, top.y - 0.05, top.z + dir * armLen);
+        let lens;
+        if (kind === 'globe') {
+          head = new THREE.Vector3(top.x, top.y + 0.1, top.z + dir * armLen);
+          lens = put(B.root, cyl(0.24, 0.38, dead ? 0x2a2b2e : color, { seg: 8, glow: !dead }), head.x, head.y - 0.15, head.z);
+          put(B.root, cyl(0.28, 0.08, 0x3c3e42, { seg: 8 }), head.x, head.y + 0.08, head.z);
+        } else if (kind === 'hanging') {
+          const hz = top.z + dir * armLen;
+          B.line([new THREE.Vector3(top.x, top.y, hz), new THREE.Vector3(top.x + 0.1, top.y - 1.1, hz + 0.1)]);
+          head = new THREE.Vector3(top.x + 0.1, top.y - 1.4, hz + 0.1);
+          put(B.root, box(0.34, 0.6, 0.14, 0x3c3e42, { r: 0.05 }), head.x, head.y, head.z).rotation.z = 0.3;
+          lens = put(B.root, box(0.04, 0.44, 0.24, dead ? 0x2a2b2e : color, { r: 0.01, glow: !dead }), head.x + 0.18, head.y, head.z);
+          lens.rotation.z = 0.3;
+        } else {
+          put(B.root, box(0.34, 0.14, 0.6, 0x3c3e42, { r: 0.05 }), head.x, head.y, head.z);
+          lens = put(B.root, box(0.24, 0.04, 0.44, dead ? 0x2a2b2e : color, { r: 0.01, glow: !dead }), head.x, head.y - 0.08, head.z);
+        }
+        if (!dead) {
+          const power = (cold ? 13 : 17) * (0.7 + rand() * 0.5);
+          const e = B.emit(head.clone().add(new THREE.Vector3(0, -0.7, 0)), color, power, 9 + rand() * 3);
+          const groundY = heightAt(head.x, head.z);
+          const p = B.pool(head.x + (rand() - 0.5) * 0.6, head.z + (rand() - 0.5) * 0.6, 2.6 + rand() * 1.4, color, (cold ? 0.16 : 0.22) * (0.7 + rand() * 0.5), { sx: 0.8 + rand() * 0.5, sz: 0.8 + rand() * 0.4, yaw: rand() * 3, y: groundY + 0.03 });
+          if (idx === 6 || idx === 13 || kind === 'hanging') flickers.push({ e, lens, p, color, base: p.material.opacity, seed: idx });
+        }
+      }
+      B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
+    }
+    for (let i = 0; i < poleXs.length - 1; i++) {
+      const xa = poleXs[i];
+      const xb = poleXs[i + 1];
+      for (const z of [-4.4, -3.9, 2.6, 3.1]) {
+        const y = spanY - 0.3;
+        if (rand() < 0.2) {
+          for (const [from, toward] of [[xa, 1], [xb, -1]]) {
+            const len = 2 + rand() * 3;
+            const pts = [];
+            for (let k = 0; k <= 12; k++) {
+              const t = k / 12;
+              pts.push(new THREE.Vector3(from + toward * len * t * 0.7, Math.max(0.03, y * (1 - t * 1.3)), z + Math.sin(t * 4) * 0.4 * t));
+            }
+            let px = from + toward * len * 0.7;
+            let pz = z;
+            for (let k = 0; k < 8; k++) {
+              px += toward * (0.3 + rand() * 0.4);
+              pz += (rand() - 0.5) * 0.8;
+              pts.push(new THREE.Vector3(px, 0.035, pz));
+            }
+            B.line(pts);
+          }
+        } else {
+          B.sagging(new THREE.Vector3(xa, y, z), new THREE.Vector3(xb, y, z), 0.12);
+        }
+      }
+    }
+    for (const x of poleXs) {
+      if (rand() < 0.5) continue;
+      B.sagging(new THREE.Vector3(x + (rand() - 0.5) * 4, 3 + rand() * 4, WALK.n), new THREE.Vector3(x, 4.8, CURB.n - 0.45), 0.6 + rand() * 1.2);
+    }
+    for (let i = 0; i < 12; i++) B.groundCable(-30 + rand() * 128, CURB.n + rand() * (CURB.s - CURB.n), rand() * Math.PI * 2, 8 + ((rand() * 10) | 0));
+
+    // ------------------------------------------------- the intersection
+    const signals = [];
+    function signal(x, z, armDir, mode) {
+      put(B.root, cyl(0.1, 5.2, 0x5a5d61, { seg: 8 }), x, SW + 2.6, z);
+      B.block(x, z, 0.2, 0.2);
+      const armLen = 4.6;
+      put(B.root, box(0.1, 0.1, armLen, 0x4d5054, { r: 0.02 }), x, SW + 4.9, z + (armDir * armLen) / 2);
+      const hz = z + armDir * armLen * 0.8;
+      put(B.root, box(0.34, 0.42, 1.36, 0x2e3033, { r: 0.06 }), x, SW + 4.6, hz);
+      const lamps = [0x3fe0b4, 0xffb428, 0xff3b30].map((c, i) => {
+        const z2 = hz + (i - 1) * 0.42 * -armDir;
+        return { c, meshes: [-1, 1].map((sx) => put(B.root, cyl(0.14, 0.04, 0x1f2124, { axis: 'x', seg: 10 }), x + sx * 0.18, SW + 4.6, z2)) };
+      });
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.36), sign(1.2, 0.36, { board: '#3c5a7a', ink: '#d4d9de' }));
+      plate.material.side = THREE.DoubleSide;
+      plate.position.set(x - 0.12, SW + 3.2, z);
+      plate.rotation.set(0, -Math.PI / 2, 0.18);
+      B.add(plate);
+      const e = B.emit(new THREE.Vector3(x - 0.5, 4.2, hz), 0xffffff, 3, 5);
+      const p = B.pool(x - 0.8, hz, 1.4, 0xffffff, 0);
+      signals.push({ lamps, mode, e, p });
+    }
+    signal(CROSS.x0 - 1, CURB.s + 0.5, -1, 'cycle');
+    signal(CROSS.x1 + 1, CURB.n - 0.5, 1, 'blink');
+    const dark = toon(0x1f2124);
+    const setLamp = (lamp, on) => {
+      for (const m of lamp.meshes) m.material = on ? glowMat(lamp.c) : dark;
+    };
+
+    // ------------------------------------------------ heat pipes + arch
+    const FOIL = 0xb4b8bd;
+    const TORN = 0x6d604d;
+    const PZ = WALK.s + 1.5;
+    function pipeRun(xa, xb, z, y) {
+      for (const dz of [-0.28, 0.28]) {
+        let x = xa;
+        while (x < xb) {
+          const len = Math.min(xb - x, 3 + rand() * 5);
+          put(B.root, cyl(0.2, len, rand() < 0.2 ? TORN : FOIL, { axis: 'x', seg: 10 }), x + len / 2, SW + y, z + dz);
+          x += len;
+        }
+      }
+      for (let x = xa + 1; x < xb; x += 4) {
+        B.piece(0.22, y - 0.1, 0.22, 0x7e7c78, x, SW + (y - 0.1) / 2, z);
+        B.piece(0.2, 0.12, 1.0, 0x7e7c78, x, SW + y - 0.2, z);
+      }
+      B.block((xa + xb) / 2, z, (xb - xa) / 2, 0.45);
+      B.hitBox((xa + xb) / 2, SW + (y + 0.25) / 2, z, xb - xa, y + 0.25, 0.9);
+    }
+    pipeRun(-40, 38.6, PZ, 1.05);
+    pipeRun(44.4, 76, PZ, 1.05);
+    pipeRun(80, 120, PZ, 1.05);
+    const AX = 41.5;
+    const AY = 6.6;
+    for (const dx of [-0.28, 0.28]) {
+      put(B.root, cyl(0.2, AY - 1.05, FOIL, { seg: 10 }), AX + dx, SW + (AY + 1.05) / 2, PZ);
+      put(B.root, cyl(0.2, PZ + 11.5, FOIL, { axis: 'z', seg: 10 }), AX + dx, AY, (PZ - 11.5) / 2);
+      put(B.root, cyl(0.2, AY, FOIL, { seg: 10 }), AX + dx, AY / 2, -11.5);
+    }
+    for (const dz of [-0.28, 0.28]) put(B.root, cyl(0.2, 44.4 - 38.6, FOIL, { axis: 'x', seg: 10 }), 41.5, SW + 1.05, PZ + dz);
+    for (let i = 0; i < 4; i++) put(B.root, cyl(0.21, 0.6, TORN, { axis: 'z', seg: 10 }), AX + (i % 2 ? 0.28 : -0.28), AY, -6 + i * 4.3);
+    for (const z of [PZ, -11.5]) {
+      for (const dx of [-0.7, 0.7]) put(B.root, box(0.16, AY + 0.3, 0.16, 0x4b4e52, { r: 0.02 }), AX + dx, (AY + 0.3) / 2, z);
+      put(B.root, box(1.6, 0.16, 0.2, 0x4b4e52, { r: 0.02 }), AX, AY - 0.32, z);
+      B.block(AX, z, 0.9, 0.3);
+    }
+    const sheet = put(B.root, box(0.6, 1.1, 0.03, 0x8d8f91, { r: 0.01 }), AX + 0.2, AY - 0.75, -1.2);
+    B.animate((dt, t) => (sheet.rotation.x = Math.sin(t * 1.3) * 0.18));
+
+    // ------------------------------------------------------------- wrecks
+    P.car(B, -8, -5.5, 0.12, { kind: 'sedan', paint: BURNT_PAINT[0] });
+    P.car(B, 1.5, 4.8, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1], flipped: true });
+    P.car(B, 11, -5.4, -0.35, { kind: 'sedan', paint: BURNT_PAINT[2] });
+    P.car(B, 24.5, 4.5, 0.55, { kind: 'van', paint: 0x6b7458 });
+    P.bus(B, 33, -1.2, 0.32);
+    P.car(B, 47, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
+    P.car(B, 56.5, -6.0, 0.05, { kind: 'sedan', paint: BURNT_PAINT[4] });
+    P.car(B, 69, 1.6, 1.25, { kind: 'sedan', paint: BURNT_PAINT[5] });
+    P.car(B, 63, 4.9, -0.2, { kind: 'van', paint: 0x7b7f78 });
+    P.car(B, 80, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
+    P.car(B, 88.6, -4.4, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
+    P.car(B, 88.4, 4.6, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
+    {
+      // the trolleybus is still smouldering
+      const fire = B.emit(new THREE.Vector3(33.4, 1.5, -1.0), 0xff8a35, 16, 8);
+      const smokeAt = new THREE.Vector3(32.6, 2.8, -1.4);
+      let carry = 0;
+      B.animate((dt, t, ctx) => {
+        fire.level = 0.75 + Math.sin(t * 17) * 0.12 + Math.sin(t * 7.3) * 0.13;
+        carry += dt * 11;
+        while (carry > 1 && ctx?.combat) {
+          carry -= 1;
+          ctx.combat.puffs.spawn(smokeAt.clone().add(new THREE.Vector3((rand() - 0.5) * 1.6, 0, (rand() - 0.5) * 0.9)), new THREE.Vector3(0.6 + rand() * 0.3, 1.3 + rand() * 0.6, 0.2), {
+            color: rand() < 0.5 ? 0x45444a : 0x37373c,
+            s0: 0.18,
+            s1: 0.45 + rand() * 0.25,
+            life: 2.4,
+            drag: 0.2,
+            lift: 0.3,
+            fadeAt: 0.35,
+          });
+        }
+      });
+    }
+
+    function barrelFire(x, z) {
+      const y = heightAt(x, z);
+      put(B.root, cyl(0.3, 0.8, 0x5a4636, { seg: 10 }), x, y + 0.4, z);
+      B.block(x, z, 0.32, 0.32);
+      const flames = [0xffb347, 0xffd27a, 0xff8a35].map((c, i) => {
+        const f = new THREE.Mesh(new THREE.ConeGeometry(0.22 - i * 0.04, 0.6, 6), glowMat(c));
+        f.position.set(x + (i - 1) * 0.08, y + 0.95, z);
+        B.add(f);
+        return f;
+      });
+      const e = B.emit(new THREE.Vector3(x, y + 1.3, z), 0xff9a40, 12, 7);
+      const p = B.pool(x, z, 2.2, 0xff9a40, 0.3, { y: y + 0.03, yaw: rand() * 3 });
+      const phase = rand() * 10;
+      B.animate((dt, t, ctx) => {
+        flames.forEach((f, i) => {
+          const s = 0.75 + Math.sin(t * (11 + i * 3) + phase + i) * 0.25 + Math.sin(t * 23 + i) * 0.1;
+          f.scale.set(1, s, 1);
+          f.position.y = y + 0.8 + s * 0.3;
+        });
+        const k = 0.8 + Math.sin(t * 13 + phase) * 0.12 + Math.sin(t * 29) * 0.08;
+        e.level = k;
+        p.material.opacity = 0.3 * k;
+        if (ctx?.combat && rand() < dt * 3) ctx.combat.fx.spawn(new THREE.Vector3(x, y + 1.2, z), new THREE.Vector3((rand() - 0.5) * 0.6, 1.4 + rand(), (rand() - 0.5) * 0.6), { color: 0xffb347, life: 0.9, size: 0.05, glow: true });
+      });
+    }
+    barrelFire(46.5, WALK.s - 0.9);
+    barrelFire(8, WALK.s + 4.2);
+    barrelFire(83, WALK.n + 1.2);
+
+    // ------------------------------------------------------ street clutter
+    P.bench(B, -27, SW, WALK.n + 1.2, 0);
+    P.bench(B, -1, SW, WALK.n + 1.1, 0.2, { tipped: true });
+    P.bench(B, 52.5, SW, WALK.n + 1.3, -0.1);
+    P.bin(B, -25, SW, WALK.n + 1.0);
+    P.bin(B, 2, SW, WALK.n + 1.4, { tipped: true });
+    P.bin(B, 55, SW, WALK.n + 1.1, { tipped: true });
+    P.planter(B, -12, SW, WALK.n + 1.2);
+    P.planter(B, 30, SW, WALK.n + 1.4);
+    P.cabinet(B, 15.5, SW, WALK.n + 0.6, 0);
+    P.cabinet(B, 68, SW, WALK.n + 0.6, 0.3);
+    P.crates(B, 8, SW, WALK.n + 1.2);
+    P.dumpster(B, 42, SW, WALK.n + 1.2, 0.3, 0x4e6355);
+    P.dumpster(B, 63.8, SW, WALK.n + 1.1, -0.4, 0x4f5d73);
+    P.tires(B, 72.5, SW, WALK.n + 1.4, 5);
+    P.bollards(B, 18, 26, 0, CURB.n - 0.1);
+    P.fallenPole(B, 58, CURB.s + 0.4, -2.5);
+    for (const [x, z, bend, color] of [[5, CURB.s + 0.6, 0.5, '#3d5f86'], [37, CURB.n - 0.5, -0.4, '#3d5f86'], [-20, CURB.s + 0.6, 0.25, '#8c7a3e'], [77, CURB.n - 0.5, 1.2, '#3d5f86']]) {
+      const top = P.bentPole(B, x, heightAt(x, z), z, 2.7, rand() * 3, bend, 0x5a5d61);
+      const plate = new THREE.Mesh(new THREE.CircleGeometry(0.34, 12), sign(0.7, 0.7, { board: color, ink: '#dfe2e4' }));
+      plate.material.side = THREE.DoubleSide;
+      plate.position.set(0, 1.0, 0.08);
+      top.add(plate);
+    }
+
+    {
+      // kiosk with a dying cold tube
+      const kx = 49.5;
+      const kz = WALK.s - 0.7;
+      const kiosk = put(B.root, box(2.4, 2.2, 1.6, 0x58707a, { r: 0.08 }), kx, SW + 1.1, kz);
+      put(B.root, box(2.0, 1.0, 0.04, 0x75736e, { r: 0.01 }), kx, SW + 1.2, kz - 0.82);
+      put(B.root, box(2.6, 0.08, 1.9, 0x3e4043, { r: 0.02 }), kx, SW + 2.25, kz);
+      put(B.root, box(2.4, 0.06, 1.7, 0xd2d5da, { r: 0.02 }), kx, SW + 2.32, kz);
+      const s = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.34), sign(2.0, 0.34, { board: '#2c3a40', ink: '#bfe0e8' }));
+      s.position.set(kx, SW + 1.92, kz - 0.83);
+      s.rotation.y = Math.PI;
+      B.add(s);
+      const tube = put(B.root, box(1.8, 0.05, 0.05, COLD, { r: 0.01, glow: true }), kx, SW + 2.12, kz - 0.9);
+      const e = B.emit(new THREE.Vector3(kx, 2.0, kz - 1.4), COLD, 9, 6);
+      const p = B.pool(kx, kz - 1.6, 2.0, COLD, 0.2, { sx: 1.4, sz: 0.8 });
+      flickers.push({ e, lens: tube, p, color: COLD, base: 0.2, seed: 99, fast: true });
+      B.block(kx, kz, 1.2, 0.8);
+      B.solid(kiosk);
+    }
+    {
+      // bus shelter, roof slumped, a flaking mosaic on the back wall
+      const sx = -2;
+      const sz = WALK.s - 0.9;
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(3.6, 2.1, 0.18), [toon(0x8d8b86), toon(0x8d8b86), toon(0xc6c9ce), toon(0x8d8b86), mapMat(endTexture(3.6, 1, { panel: '#8d8b86' }, rand, true)), toon(0x8d8b86)]);
+      wall.position.set(sx, SW + 1.05, sz + 0.45);
+      wall.castShadow = wall.receiveShadow = true;
+      B.add(wall);
+      put(B.root, box(0.18, 2.1, 1.0, 0x8d8b86, { r: 0.02 }), sx - 1.7, SW + 1.05, sz);
+      const roofSlab = put(B.root, box(4.0, 0.18, 1.4, 0x7e7c78, { r: 0.03 }), sx + 0.1, SW + 2.18, sz);
+      roofSlab.rotation.z = 0.12;
+      put(B.root, box(3.9, 0.06, 1.3, 0xd2d5da, { r: 0.02 }), sx + 0.1, SW + 2.3, sz);
+      P.bench(B, sx, SW, sz + 0.1, 0);
+      B.solid(wall);
+      B.solid(roofSlab);
+      B.block(sx, sz, 1.9, 0.7);
+    }
+
+    // ------------------------------------------- the near side (foreground)
+    function garages(x0, count, z) {
+      const doors = [0x6b5a48, 0x56606a, 0x5f6b5a, 0x6e6152, 0x4d5560];
+      for (let i = 0; i < count; i++) {
+        const x = x0 + i * 3.1;
+        if (rand() < 0.15) {
+          rubble(x, z + 2, 1.4, 1.0, { slabs: 2 });
+          continue;
+        }
+        const h = 2.1 + (rand() - 0.5) * 0.2;
+        put(B.root, box(3.0, h, 5, 0x7f7d79, { r: 0.04 }), x, SW + h / 2, z + 2.5);
+        const open = rand() < 0.3;
+        put(B.root, box(2.3, open ? 0.5 : 1.7, 0.06, doors[(rand() * 5) | 0], { r: 0.01 }), x, SW + (open ? 1.55 : 0.9), z - 0.01);
+        if (open) put(B.root, box(2.2, 1.2, 0.02, 0x141415, { r: 0.005 }), x, SW + 0.65, z + 0.02);
+        const roofSlab = put(B.root, box(3.1, 0.12, 5.2, 0x45474a, { r: 0.02 }), x, SW + h + 0.06, z + 2.5);
+        if (rand() < 0.25) roofSlab.rotation.x = 0.18;
+        B.lump(x, SW + h + 0.12, z + 2.5, 1.4, 0.12, 2.4, 0xd0d3d8, 0);
+      }
+    }
+    garages(-30, 9, WALK.s + 4);
+    garages(52, 7, WALK.s + 4);
+    P.fence(B, -2, 22, SW, WALK.s + 4.4);
+    P.fence(B, 76, 86, SW, WALK.s + 4.4);
+
+    function ruinedWall(x0, x1, z) {
+      let x = x0;
+      while (x < x1) {
+        const w = 0.5 + rand() * 0.7;
+        const h = 1.2 + rand() * 2.6;
+        if (rand() < 0.8) put(B.root, box(w, h, 0.4, CONCRETE[(rand() * 5) | 0], { r: 0.02 }), x + w / 2, SW + h / 2, z);
+        if (rand() < 0.35) B.piece(1.6, 0.3, 0.42, CONCRETE[0], x + w, SW + Math.min(h, 2.4), z, 0, 0, (rand() - 0.5) * 0.6);
+        x += w + 0.4 + rand() * 0.9;
+      }
+      rubble((x0 + x1) / 2, z - 1, (x1 - x0) * 0.22, 0.8, { slabs: 2 });
+    }
+    ruinedWall(26, 37, WALK.s + 6);
+    ruinedWall(86, 97, WALK.s + 5);
+
+    function birch(x, z, h) {
+      put(B.root, cyl(0.1, h, 0xd9d6cc, { seg: 6, radiusEnd: 0.14 }), x, SW + h / 2, z);
+      for (let i = 0; i < 4; i++) B.piece(0.1, 0.03, 0.1, 0x2a2826, x, SW + 0.4 + i * h * 0.22, z + 0.12);
+      for (let i = 0; i < 6; i++) {
+        const b = cyl(0.035, 1.2 + rand(), 0x4a4440, { seg: 4, radiusEnd: 0.05 });
+        b.position.set(x, SW + h * (0.45 + rand() * 0.5), z);
+        b.rotation.set((rand() - 0.5) * 1.6, rand() * 3, (rand() - 0.5) * 1.6);
+        b.translateY(0.5);
+        B.add(b);
+      }
+    }
+    for (const [x, z, h] of [[-12, 12.8, 4.2], [-9.5, 13.4, 3.6], [15, 12.5, 4.4], [39, 13.2, 3.8], [73, 12.6, 4.0], [101, 12.8, 4.2]]) birch(x, z, h);
+    {
+      const t = cyl(0.12, 5, 0xd9d6cc, { seg: 6 });
+      t.position.set(20, SW + 1.1, WALK.s + 1.5);
+      t.rotation.set(0.3, 0.4, 1.45);
+      B.add(t);
+    }
+
+    // foreground clutter along the bottom edge of the screen
+    for (let i = 0; i < 14; i++) rubble(-34 + i * 10 + rand() * 4, WALK.s + 7.5 + rand() * 4, 1 + rand() * 1.3, 0.8 + rand() * 1.1, { slabs: 2 });
+    P.billboard(B, 6, WALK.s + 9, 0.15, (w, h) => sign(w, h, { board: '#4f5b62', ink: '#c6bfa8' }));
+    P.billboard(B, 66, WALK.s + 9.5, -0.2, (w, h) => sign(w, h, { board: '#5d5546', ink: '#9fb5b3' }));
+    P.crates(B, -18, SW, WALK.s + 3.4);
+    P.crates(B, 35, SW, WALK.s + 3.6);
+    P.tires(B, 44, SW, WALK.s + 3.2, 6);
+    P.dumpster(B, 79, SW, WALK.s + 3.0, 0.5, 0x5e5a4c);
+    P.cabinet(B, 12, SW, WALK.s + 0.6, Math.PI);
+    P.bench(B, 28, SW, WALK.s - 0.8, Math.PI + 0.3, { tipped: true });
+    P.bin(B, 26.5, SW, WALK.s - 0.6);
+    P.bin(B, 70, SW, WALK.s - 0.6, { tipped: true });
+    for (let i = 0; i < 5; i++) {
+      const x = -24 + i * 26 + rand() * 6;
+      const drum = put(B.root, cyl(0.85, 0.7, 0x6b5843, { axis: 'z', seg: 12 }), x, SW + 0.85, WALK.s + 3.6);
+      drum.rotation.y = rand();
+      put(B.root, cyl(0.45, 0.72, 0x1d1f22, { axis: 'z', seg: 10 }), x, SW + 0.85, WALK.s + 3.6).rotation.y = drum.rotation.y;
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = -30 + i * 22 + rand() * 6;
+      B.heavyCable([
+        new THREE.Vector3(x, SW + 0.05, WALK.s + 4.5),
+        new THREE.Vector3(x + 0.8, SW + 1.3, PZ),
+        new THREE.Vector3(x + 1.6, SW + 0.4, WALK.s + 0.3),
+        new THREE.Vector3(x + 2.6 + rand() * 2, 0.05, CURB.s - 0.4 - rand() * 2),
+      ]);
+    }
+
+    // ------------------------------------------------------ the checkpoint
+    const GX = 92;
+    {
+      for (let z = CURB.n + 0.2; z < CURB.s; z += 1.7) {
+        if (z > -2.6 && z < 2.6) continue;
+        const j = put(B.root, box(0.7, 0.9, 1.6, 0x9a978f, { r: 0.06 }), GX, 0.45, z);
+        j.rotation.y = (rand() - 0.5) * 0.15;
+        B.solid(j);
+      }
+      B.block(GX, -5, 0.45, 2.7);
+      B.block(GX, 4.6, 0.45, 2.1);
+      const beacons = [];
+      for (const z of [-2.9, 2.9]) {
+        B.solid(put(B.root, box(0.9, 3.2, 0.9, 0x7d7c78, { r: 0.06 }), GX, 1.6, z));
+        B.block(GX, z, 0.45, 0.45);
+        put(B.root, cyl(0.16, 0.24, 0x2b2c2e, { seg: 8 }), GX, 3.32, z);
+        const lens = put(B.root, box(0.26, 0.2, 0.08, 0xffb02a, { r: 0.02, glow: true }), GX, 3.4, z);
+        beacons.push({ lens, e: B.emit(new THREE.Vector3(GX - 0.6, 3.2, z), 0xffa21f, 14, 9) });
+      }
+      B.animate((dt, t) => {
+        beacons.forEach((b, i) => {
+          b.lens.rotation.y = t * 5 + i * Math.PI;
+          b.e.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5 + i * Math.PI));
+        });
+      });
+      const hz = new THREE.MeshToonMaterial({ map: hazard, gradientMap });
+      hazard.repeat.set(3, 1);
+      for (const z of [-1.25, 1.25]) {
+        const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.3, 2.6, 2.4), toon(0x3e4247));
+        leaf.position.set(GX, 1.3, z);
+        leaf.castShadow = leaf.receiveShadow = true;
+        B.add(leaf);
+        B.solid(leaf);
+        for (const y of [0.6, 2.2]) {
+          const band = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.4), hz);
+          band.position.set(GX - 0.16, y, z);
+          band.rotation.y = -Math.PI / 2;
+          B.add(band);
+        }
+      }
+      B.block(GX, 0, 0.3, 2.5);
+      for (let i = 0; i < 16; i++) {
+        const z = (i % 2 ? -1 : 1) * (4 + (i >> 1) * 0.55);
+        if (Math.abs(z) > 7) continue;
+        B.lump(GX - 1.5, 0.16 + (i % 3) * 0.28, z, 0.38, 0.16, 0.22, 0x7d7158);
+      }
+      function hedgehog(x, z) {
+        const g = new THREE.Group();
+        put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, 0, 0.62);
+        put(g, box(1.8, 0.14, 0.14, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0, Math.PI / 2, 0.62);
+        put(g, box(0.14, 0.14, 1.8, 0x3f4144, { r: 0.02 }), 0, 0.55, 0).rotation.set(0.62, 0.6, 0);
+        g.position.set(x, 0, z);
+        g.rotation.y = rand() * 3;
+        B.add(g);
+        B.solidGroup(g);
+        B.block(x, z, 0.7, 0.7);
+      }
+      for (const [x, z] of [[82, -3.5], [84.5, 1.5], [86, -6], [80.5, 4.2], [86.5, 3.8]]) hedgehog(x, z);
+      const tx = GX - 2.2;
+      const tz = CURB.s + 1.6;
+      for (const [dx, dz] of [[-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4]]) B.piece(0.08, 6, 0.08, 0x45484c, tx + dx, SW + 3, tz + dz);
+      B.piece(1.1, 0.12, 1.1, 0x45484c, tx, SW + 6, tz);
+      put(B.root, box(0.5, 0.5, 0.9, 0x2e3034, { r: 0.05 }), tx - 0.2, SW + 6.35, tz).rotation.z = -0.5;
+      put(B.root, box(0.04, 0.4, 0.8, COLD, { r: 0.01, glow: true }), tx - 0.47, SW + 6.2, tz).rotation.z = -0.5;
+      B.block(tx, tz, 0.5, 0.5);
+      B.emit(new THREE.Vector3(tx - 4, 3.5, tz - 3), COLD, 26, 14);
+      B.pool(tx - 5, tz - 4.5, 4.2, COLD, 0.2, { sx: 1.3, yaw: 0.6 });
+      put(B.root, box(1.6, 2.4, 1.6, 0x6f7a72, { r: 0.08 }), GX + 2, SW + 1.2, CURB.n - 1);
+      put(B.root, box(1.8, 0.1, 1.8, 0xd0d3d8, { r: 0.02 }), GX + 2, SW + 2.46, CURB.n - 1);
+      B.block(GX + 2, CURB.n - 1, 0.8, 0.8);
+      const warn = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.7), sign(1.6, 0.7, { board: '#b08a2a', ink: '#1f2022' }));
+      warn.position.set(GX - 0.17, 1.45, -1.25);
+      warn.rotation.set(0, -Math.PI / 2, 0.06);
+      B.add(warn);
+    }
+
+    B.finish();
+
+    // ------------------------------------------------------------ snowfall
+    const FLAKES = 420;
+    const flakes = new THREE.InstancedMesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0xe6eaf0 }), FLAKES);
+    flakes.frustumCulled = false;
+    B.add(flakes);
+    const flakePos = [];
+    for (let i = 0; i < FLAKES; i++) flakePos.push(new THREE.Vector3((rand() - 0.5) * 40, rand() * 14, (rand() - 0.5) * 40));
+    const m4 = new THREE.Matrix4();
+
+    function update(dt, t, ctx = {}) {
+      B.update(dt, t, ctx);
+      for (const f of flickers) {
+        const n = Math.sin(t * (f.fast ? 31 : 13.7) + f.seed) + Math.sin(t * (f.fast ? 47 : 5.3) + f.seed * 0.7);
+        const on = n > (f.fast ? -0.2 : -1.2) ? 1 : 0.08;
+        f.e.level = on;
+        f.p.material.opacity = f.base * on;
+        f.lens.material = on > 0.5 ? glowMat(f.color) : toon(0x2a2b2e);
+      }
+      const phase = t % 11;
+      for (const s of signals) {
+        const which = s.mode === 'cycle' ? (phase < 5 ? 0 : phase < 6.5 ? 1 : 2) : t % 1.2 < 0.6 ? 1 : -1;
+        s.lamps.forEach((l, i) => setLamp(l, i === which));
+        if (which >= 0) {
+          s.e.color.set(s.lamps[which].c);
+          s.e.level = 1;
+          s.p.material.color.set(s.lamps[which].c);
+          s.p.material.opacity = 0.1;
+        } else {
+          s.e.level = 0;
+          s.p.material.opacity = 0;
+        }
+      }
+      const c = ctx.focus || new THREE.Vector3();
+      for (let i = 0; i < FLAKES; i++) {
+        const p = flakePos[i];
+        p.y -= dt * (0.9 + (i % 5) * 0.12);
+        p.x += dt * (0.5 + Math.sin(t * 0.7 + i) * 0.3);
+        p.z += dt * Math.cos(t * 0.5 + i * 1.3) * 0.25;
+        if (p.y < 0) p.y += 14;
+        const wx = ((((p.x - c.x) % 40) + 60) % 40) - 20 + c.x;
+        const wz = ((((p.z - c.z) % 40) + 60) % 40) - 20 + c.z;
+        m4.makeTranslation(wx, p.y, wz);
+        flakes.setMatrixAt(i, m4);
+      }
+      flakes.instanceMatrix.needsUpdate = true;
+    }
+
+    return {
+      light,
+      colliders: B.colliders,
+      blocks: B.blocks,
+      emitters: B.emitters,
+      heightAt,
+      spawn: { x: -22, z: -0.5, yaw: 0 },
+      bounds: { minX: -36, maxX: 98, minZ: -21, maxZ: 9.9 },
+      update,
+    };
+  },
+};
