@@ -14,7 +14,7 @@
 //  - a heat-pipe arch over the road halfway, and a gated checkpoint at the end
 import * as THREE from 'three';
 import { addDusk, DUSK_SUN } from '../render/setup.js';
-import { box, cyl, put, toon, glowMat, gradientMap } from '../models/kit.js';
+import { box, cyl, put, toon, glowMat, gradientMap, setLowPoly } from '../models/kit.js';
 import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
 import * as P from './props.js';
 
@@ -399,6 +399,17 @@ export const avenue = {
   id: 'avenue',
   name: 'Zone 1 · The avenue (tutorial)',
   build(scene) {
+    setLowPoly(true);
+    try {
+      return buildAvenue(scene);
+    } finally {
+      setLowPoly(false);
+    }
+  },
+};
+
+function buildAvenue(scene) {
+  {
     const B = new LevelBuilder(scene, 20241);
     const rand = B.rand;
     const light = addDusk(scene, { shadowSize: 22, shadowMap: 2048 });
@@ -1461,5 +1472,5 @@ export const avenue = {
       onImpact,
       update,
     };
-  },
-};
+  }
+}

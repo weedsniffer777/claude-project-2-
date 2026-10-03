@@ -14,6 +14,41 @@ if (params.has('shot')) document.body.classList.add('dk-shot');
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;
 const game = createGame({ renderer, pixel, level: params.get('level') });
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
+// Quality tiers. Auto starts phones one tier down and steps down whenever the
+// frame rate stays low; it never steps back up (no flicker between tiers).
+const TIERS = [
+  { name: 'High', pixel: 540, shadow: 2048, lamps: 6 },
+  { name: 'Medium', pixel: 450, shadow: 1024, lamps: 4 },
+  { name: 'Low', pixel: 360, shadow: 1024, lamps: 2 },
+  { name: 'Potato', pixel: 270, shadow: 512, lamps: 0 },
+];
+const mobile = matchMedia('(pointer: coarse)').matches;
+let autoQuality = true;
+let tier = -1;
+function setTier(i) {
+  i = Math.max(0, Math.min(TIERS.length - 1, i));
+  if (i === tier) return;
+  tier = i;
+  const q = TIERS[i];
+  pixel.setHeight(q.pixel);
+  game.setQuality(q);
+}
+setTier(params.has('quality') ? +params.get('quality') : mobile ? 1 : 0);
+const perf = { t: 0, frames: 0, warm: 3 };
+function watchFrameRate(dt) {
+  if (!autoQuality || mode !== game) return;
+  if (perf.warm > 0) return void (perf.warm -= dt); // let shaders compile first
+  perf.t += dt;
+  perf.frames++;
+  if (perf.t < 2.5) return;
+  const fps = perf.frames / perf.t;
+  perf.t = perf.frames = 0;
+  if (fps < 48 && tier < TIERS.length - 1) {
+    setTier(tier + 1);
+    perf.warm = 1.5;
+  }
+}
+
 const devkit = createDevKit({
   tools: [{ id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) }],
   settings: [
@@ -25,6 +60,16 @@ const devkit = createDevKit({
       onChange: (id) => {
         game.loadLevel(id);
         setMode(game);
+      },
+    },
+    {
+      id: 'quality',
+      label: 'Quality',
+      options: [{ value: 'auto', label: 'Auto' }, ...TIERS.map((q, i) => ({ value: String(i), label: q.name }))],
+      value: 'auto',
+      onChange: (v) => {
+        autoQuality = v === 'auto';
+        if (!autoQuality) setTier(+v);
       },
     },
   ],
@@ -60,7 +105,9 @@ const clock = new THREE.Timer();
 clock.connect(document);
 function frame() {
   clock.update();
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const raw = clock.getDelta();
+  const dt = Math.min(raw, 0.05);
+  watchFrameRate(raw);
   mode.frame(dt, clock.getElapsed());
   window.__ready = true;
   requestAnimationFrame(frame);

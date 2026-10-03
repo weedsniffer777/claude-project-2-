@@ -22,7 +22,7 @@ const CAM_OFFSET = new THREE.Vector3(-10, 8.2, 10).multiplyScalar(4);
 const MAX_SPEED = 7.2;
 const ACCEL = 15;
 const TURN_RATE = 4;
-const LAMP_LIGHTS = 6; // point lights shared by the level's emitters nearest the tank
+const LAMP_LIGHTS = 6; // max point lights shared by the level's emitters nearest the tank
 
 const TANK_HP = 100;
 const RELOAD = 1.8; // seconds between cannon shots
@@ -71,11 +71,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     combat.onImpact = onImpact;
     enemies = new Enemies(scene, combat);
     lamps = [];
-    for (let i = 0; i < LAMP_LIGHTS; i++) {
-      const l = new THREE.PointLight(0xffffff, 0, 9, 1.4);
-      scene.add(l);
-      lamps.push(l);
-    }
+    applyQuality();
     // faint line from the barrel to where the shell would land
     aimLine = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, 1)]),
@@ -101,6 +97,26 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
     if (canvas.isConnected && hud.root.isConnected) canvas.style.cursor = 'none';
     return levelDef.id;
+  }
+
+  // Quality: shadow-map size and how many point lights the lamps share.
+  // Changing the light count recompiles shaders once, so it only happens on
+  // a quality change, never per frame.
+  const quality = { shadow: 2048, lamps: LAMP_LIGHTS };
+  function applyQuality() {
+    for (const l of lamps) l.removeFromParent();
+    lamps = [];
+    for (let i = 0; i < quality.lamps; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 9, 1.4);
+      scene.add(l);
+      lamps.push(l);
+    }
+    const sun = level.light.sun;
+    if (sun.shadow.mapSize.x !== quality.shadow) {
+      sun.shadow.mapSize.set(quality.shadow, quality.shadow);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
   }
 
   // What level scripts can do.
@@ -183,8 +199,24 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const ndc = new THREE.Vector2();
   const aimPoint = new THREE.Vector3();
 
+  // A click or tap queues the shot: the turret swings onto the aim point and
+  // the cannon fires the moment it bears (or after a short wait at most), so
+  // shots always go where you pointed, never where the barrel happened to be.
+  let queued = 0; // seconds left on a queued shot
   function fire() {
-    if (run.over || reload < 1) return;
+    if (run.over) return;
+    queued = 0.7;
+  }
+  function tryFire(dt) {
+    if (queued <= 0) return;
+    queued -= dt;
+    if (run.over) return void (queued = 0);
+    const aligned = !hasAim || tank.aimError() < 0.06;
+    if (reload < 1 || (!aligned && queued > 0)) {
+      if (reload < 1 && queued <= 0) queued = 0; // don't keep a stale click through a reload
+      return;
+    }
+    queued = 0;
     reload = 0;
     combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
   }
@@ -402,6 +434,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         combat.fx.burst(e.target, { count: 5, speed: 5, color: 0xfff3c4, life: 0.2, size: 0.06, gravity: 10 });
         if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
       }
+      tryFire(dt);
       combat.handleTankEvents(tank);
       combat.update(dt);
       level.update(dt, t, { combat, focus: camTarget, api });
@@ -442,6 +475,11 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       hud.update(dt, camera, canvas);
     },
     loadLevel,
+    setQuality({ shadow, lamps: n }) {
+      quality.shadow = shadow;
+      quality.lamps = n;
+      applyQuality();
+    },
     get levelId() {
       return levelDef.id;
     },
@@ -465,6 +503,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       },
       api,
       renderer,
+      camera,
       loadLevel,
       fire,
       setAim(v) {

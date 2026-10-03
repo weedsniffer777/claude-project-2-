@@ -97,14 +97,14 @@ const TURRET_X = 0.07; // world
 // Revolved turret profile: skirt from R0 (at the ring) tapering to R1 at h1,
 // then a superellipse dome of height D. sx stretches it front-to-back.
 const TURRET = { R0: 1.0, R1: 0.9, h1: 0.28, D: 0.4, p: 2.4, sx: 1.08, base: 0.06 };
-const TURRET_SPEED = 3.2; // rad/s, gives the cannon some weight
+const TURRET_SPEED = 6.5; // rad/s: still swings visibly, but a half turn takes ~0.5 s
 const MG_SPEED = 9;
 const GUN_Y = 0.36; // turret-local
 const GUN_BASE_X = 0.86;
 const MUZZLE_X = 2.38;
 const GUN_DEPRESSION = -0.32; // about -18 deg: small-ized, so it can point down at nearby ground
 const GUN_ELEVATION = 0.31; // about +18 deg
-const GUN_PITCH_SPEED = 1.2; // rad/s
+const GUN_PITCH_SPEED = 2.4; // rad/s
 const MG_DEPRESSION = -0.3;
 const MG_ELEVATION = 1.1; // the DShK is an anti-aircraft mount
 const MG_PITCH_SPEED = 4;
@@ -806,6 +806,9 @@ export function createTank() {
     return [x + v * dt, v];
   }
 
+  // how far (rad) the turret still has to turn to bear on the aim point
+  let aimError = 0;
+
   // ctx: { aimPoint, mgPoint, speed }
   function update(dt, t, ctx = {}) {
     group.getWorldPosition(tmp);
@@ -813,6 +816,7 @@ export function createTank() {
     if (ctx.aimPoint) {
       const want = wrapAngle(Math.atan2(-(ctx.aimPoint.z - tmp.z), ctx.aimPoint.x - tmp.x) - yaw);
       turret.rotation.y = approachAngle(turret.rotation.y, want, TURRET_SPEED * dt);
+      aimError = Math.abs(wrapAngle(want - turret.rotation.y));
     }
     if (ctx.aimPoint) {
       // elevate or depress toward the target's height
@@ -941,5 +945,5 @@ export function createTank() {
 
   mergeStaticChildren(group, new Set(wobblers.map((w) => w.obj)));
 
-  return { group, slotGroups, setSlotVisible, turret, fire, muzzle, update, events };
+  return { group, slotGroups, setSlotVisible, turret, fire, muzzle, update, events, aimError: () => aimError };
 }

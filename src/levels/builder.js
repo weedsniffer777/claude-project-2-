@@ -76,6 +76,11 @@ function poolTexture() {
   return poolTex;
 }
 
+// Merged geometry is split into slices this wide along the street, so the
+// camera and the sun's shadow camera can skip slices that are off screen.
+const CHUNK = 16;
+const chunkOf = (x) => Math.floor(x / CHUNK);
+
 export class LevelBuilder {
   constructor(scene, seed) {
     this.rand = rng(seed);
@@ -195,9 +200,18 @@ export class LevelBuilder {
 
   // Bake the batched pieces into one instanced mesh.
   finish() {
-    const bake = (list, geometry) => {
-      if (!list.length) return;
-      const inst = new THREE.InstancedMesh(geometry, new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap }), list.length);
+    const material = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap });
+    const bake = (all, geometry) => {
+      const chunks = new Map();
+      for (const p of all) {
+        const k = chunkOf(p.x);
+        if (!chunks.has(k)) chunks.set(k, []);
+        chunks.get(k).push(p);
+      }
+      for (const list of chunks.values()) bakeOne(list, geometry);
+    };
+    const bakeOne = (list, geometry) => {
+      const inst = new THREE.InstancedMesh(geometry, material, list.length);
       const m = new THREE.Matrix4();
       const q = new THREE.Quaternion();
       const e = new THREE.Euler();
@@ -209,6 +223,7 @@ export class LevelBuilder {
         inst.setColorAt(i, c.set(p.color));
       });
       inst.castShadow = inst.receiveShadow = true;
+      inst.computeBoundingSphere();
       this.root.add(inst);
     };
     bake(this.pieces, new THREE.BoxGeometry(1, 1, 1));
@@ -248,14 +263,17 @@ export class LevelBuilder {
         const mat = o.material;
         let b;
         let tint = null;
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        const centre = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld);
+        const ck = chunkOf(centre.x);
         if (mat.isMeshToonMaterial && !mat.map && !mat.emissiveMap) {
-          b = bucket(`toon|${o.castShadow}`, () => ({ material: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }), cast: o.castShadow }));
+          b = bucket(`toon|${o.castShadow}|${ck}`, () => ({ material: (this.vtoon ||= new THREE.MeshToonMaterial({ vertexColors: true, gradientMap })), cast: o.castShadow }));
           tint = mat.color;
         } else if (mat.isMeshBasicMaterial && !mat.map) {
-          b = bucket('basic', () => ({ material: new THREE.MeshBasicMaterial({ vertexColors: true }), cast: false }));
+          b = bucket(`basic|${ck}`, () => ({ material: (this.vbasic ||= new THREE.MeshBasicMaterial({ vertexColors: true })), cast: false }));
           tint = mat.color;
         } else {
-          b = bucket(`${mat.uuid}|${o.castShadow}`, () => ({ material: mat, cast: o.castShadow }));
+          b = bucket(`${mat.uuid}|${o.castShadow}|${ck}`, () => ({ material: mat, cast: o.castShadow }));
         }
         let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
         for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
@@ -277,8 +295,10 @@ export class LevelBuilder {
         } else remove.push(o);
       } else if (o.isLine) {
         const pos = o.geometry.attributes.position;
-        if (!lines.has(o.material)) lines.set(o.material, []);
-        const out = lines.get(o.material);
+        o.geometry.computeBoundingSphere();
+        const lk = `${o.material.uuid}|${chunkOf(o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld).x)}`;
+        if (!lines.has(lk)) lines.set(lk, { material: o.material, pts: [] });
+        const out = lines.get(lk).pts;
         const a = new THREE.Vector3();
         const step = o.isLineSegments ? 2 : 1;
         for (let i = 0; i < pos.count - 1; i += step) {
@@ -295,7 +315,7 @@ export class LevelBuilder {
       m.receiveShadow = true;
       this.root.add(m);
     }
-    for (const [material, pts] of lines) this.root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), material));
+    for (const { material, pts } of lines.values()) this.root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), material));
   }
 
   update(dt, t, ctx) {

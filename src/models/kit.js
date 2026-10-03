@@ -34,11 +34,19 @@ function shadowed(mesh) {
   return mesh;
 }
 
+// Level props are built in low-poly mode: plain boxes (12 triangles) instead
+// of rounded ones (~300). At the game's pixel size the rounding on a bin or a
+// barrier doesn't show; on the tank and the machines it does.
+let lowPoly = false;
+export function setLowPoly(on) {
+  lowPoly = on;
+}
+
 export function box(w, h, d, color, { r = 0.06, glow = false } = {}) {
   const radius = Math.min(r, Math.min(w, h, d) / 2 - 0.002);
-  const key = `${w}|${h}|${d}|${radius}`;
+  const key = `${w}|${h}|${d}|${lowPoly ? 0 : radius}`;
   if (!boxGeoCache.has(key)) {
-    boxGeoCache.set(key, new RoundedBoxGeometry(w, h, d, 2, Math.max(radius, 0.001)));
+    boxGeoCache.set(key, lowPoly ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 2, Math.max(radius, 0.001)));
   }
   const mesh = new THREE.Mesh(boxGeoCache.get(key), glow ? glowMat(color) : toon(color));
   return glow ? mesh : shadowed(mesh);
