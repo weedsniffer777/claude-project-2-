@@ -214,19 +214,34 @@ function trackAt(sIn, out) {
 // ================================================================== model
 export function createTank() {
   const group = new THREE.Group();
-  const chassis = new THREE.Group(); // everything that rocks on recoil
-  group.add(chassis);
+  // The hull rocks (recoil, bumps, cornering) around a pivot at its middle;
+  // the running gear stays on the ground, which reads as suspension travel.
+  const ROCK_Y = 0.7;
+  const rock = new THREE.Group();
+  rock.position.y = ROCK_Y;
+  group.add(rock);
+  const chassis = new THREE.Group();
+  chassis.position.y = -ROCK_Y;
+  rock.add(chassis);
+
+  // Secondary motion: small damped springs on loose parts (antenna, lids,
+  // drums). frame 'turret' parts get their excitation rotated into the turret.
+  const wobblers = [];
+  function wobble(obj, axis, { k = 70, d = 5, gain = 1, max = 0.6, oneSided = false, frame = 'hull' } = {}) {
+    wobblers.push({ obj, axis, k, d, gain, max, oneSided, frame, rest: obj.rotation[axis], a: 0, v: 0 });
+    return obj;
+  }
 
   // compressed + lifted hull (design coordinates inside)
   const body = new THREE.Group();
   body.scale.set(SX, 1, SX);
   body.position.y = LIFT;
   chassis.add(body);
-  // track covers use the same transform but stay on the ground with the running gear
+  // track covers are bolted to the hull, so they rock with it
   const coverFrame = new THREE.Group();
   coverFrame.scale.set(SX, 1, SX);
   coverFrame.position.y = LIFT;
-  group.add(coverFrame);
+  chassis.add(coverFrame);
 
   const turret = new THREE.Group();
   turret.position.set(TURRET_X, WORLD_DECK_Y, 0);
@@ -277,6 +292,7 @@ export function createTank() {
   put(glacis, cyl(0.2, 0.05, C.oliveDark, { seg: 14 }), 0.24, 0.02, -0.42);
   const driverLid = put(glacis, cyl(0.17, 0.035, C.olive, { seg: 14 }), 0.08, 0.13, -0.42);
   driverLid.rotation.z = 0.8; // propped open
+  wobble(driverLid, 'z', { k: 120, d: 6, gain: 0.5, max: 0.25 });
   put(glacis, box(0.08, 0.07, 0.16, C.dark, { r: 0.015 }), 0.46, 0.04, -0.42); // driver's periscope
   put(glacis, cyl(0.05, 0.07, C.dark, { seg: 10 }), 0.52, 0.02, 0.32); // bow MG port
   put(glacis, cyl(0.03, 0.08, C.dark, { seg: 8 }), 0.52, 0.06, 0.32);
@@ -322,6 +338,7 @@ export function createTank() {
     seat(cyl(0.26, 0.04, C.oliveDark, { seg: 16 }), x, z, 0.13);
     const lid = seat(cyl(0.2, 0.035, C.olive, { seg: 14 }), x - 0.16, z, 0.24);
     lid.rotation.z = 0.9;
+    wobble(lid, 'z', { k: 110, d: 6, gain: 0.6, max: 0.25, frame: 'turret' });
     for (let k = 0; k < 5; k++) {
       const a = -0.9 + k * 0.45;
       const vb = seat(box(0.06, 0.06, 0.09, C.dark), x + Math.cos(a) * 0.22, z + Math.sin(a) * 0.22, 0.12);
@@ -333,6 +350,7 @@ export function createTank() {
   seat(cyl(0.22, 0.05, C.oliveDark, { seg: 16 }), LOADER.x, LOADER.z, 0.0);
   const loaderLid = seat(cyl(0.19, 0.035, C.olive, { seg: 14 }), LOADER.x - 0.14, LOADER.z, 0.12);
   loaderLid.rotation.z = 0.7;
+  wobble(loaderLid, 'z', { k: 110, d: 6, gain: 0.6, max: 0.25, frame: 'turret' });
   seat(box(0.1, 0.07, 0.1, C.dark, { r: 0.015 }), 0.2, 0.46, 0.02); // loader's periscope
   seat(ellipsoid(0.11, 0.07, 0.11, C.oliveDark, { wseg: 10, hseg: 6 }), 0.42, 0.24, 0); // ventilator dome
   // the T-55 "face": a tall rounded-rectangle cast frame either side of the
@@ -348,9 +366,16 @@ export function createTank() {
     put(port, box(0.1, 0.28, 0.14, C.olive, { r: 0.065 }));
     if (side > 0) put(port, box(0.04, 0.17, 0.06, C.dark, { r: 0.028 }), 0.04, 0, 0); // coax: empty cutout
   }
-  // whip antenna on the left rear of the roof
-  seat(cyl(0.045, 0.08, C.dark, { seg: 8 }), -0.55, -0.6, 0.03);
-  seat(cyl(0.012, 1.0, C.dark, { seg: 5 }), -0.55, -0.6, 0.55);
+  // whip antenna on the left rear of the roof; the whip sways on its base
+  {
+    const base = seat(new THREE.Group(), -0.55, -0.6, 0.03);
+    put(base, cyl(0.045, 0.08, C.dark, { seg: 8 }));
+    const whip = put(base, new THREE.Group(), 0, 0.04, 0);
+    put(whip, cyl(0.012, 1.0, C.dark, { seg: 5 }), 0, 0.5, 0);
+    put(whip, cyl(0.022, 0.03, C.dark, { seg: 6 }), 0, 1.0, 0); // tip
+    wobble(whip, 'z', { k: 38, d: 2.2, gain: 1.8, max: 0.45, frame: 'turret' });
+    wobble(whip, 'x', { k: 38, d: 2.2, gain: 1.8, max: 0.45, frame: 'turret' });
+  }
   // snorkel tube stowed across the turret rear, on brackets
   put(turret, cyl(0.085, 1.1, C.oliveDark, { axis: 'z', seg: 10 }), -1.12, 0.22, 0);
   for (const z of [-0.35, 0.35]) put(turret, box(0.16, 0.06, 0.06, C.steel), -1.04, 0.2, z);
@@ -550,6 +575,10 @@ export function createTank() {
     for (const x of [-1.82, -1.26]) {
       put(e, box(0.56, 0.28, 0.46, C.olive, { r: 0.05 }), x, top + 0.14, 1.07);
       for (const dx of [-0.16, 0.16]) put(e, box(0.035, 0.29, 0.475, C.dark, { r: 0.008 }), x + dx, top + 0.14, 1.07);
+      // filler hatch, hinged at its back edge; it bumps open and slaps shut
+      const hinge = put(e, new THREE.Group(), x - 0.1, top + 0.285, 1.07);
+      put(hinge, box(0.18, 0.025, 0.18, C.oliveDark, { r: 0.008 }), 0.09, 0.012, 0);
+      wobble(hinge, 'z', { k: 160, d: 3, gain: 1.6, max: 0.5, oneSided: true });
     }
     put(e, cyl(0.03, 1.15, C.steel, { axis: 'x', seg: 6 }), -1.54, top + 0.3, 1.2); // feed pipe
     put(e, box(0.58, 0.26, 0.44, C.olive, { r: 0.05 }), -1.15, top + 0.13, -1.09); // oil tank
@@ -570,8 +599,13 @@ export function createTank() {
       const drum = new THREE.Group();
       drum.position.set(DX, DY, z);
       engine.add(drum);
+      wobble(drum, 'z', { k: 90, d: 7, gain: 0.5, max: 0.12 });
+      wobble(drum, 'x', { k: 90, d: 7, gain: 0.35, max: 0.08 });
       put(drum, cyl(DR, DL, C.olive, { axis: 'z', seg: 20 }));
-      put(drum, cyl(0.07, 0.02, C.oliveDark, { axis: 'z', seg: 8 }), 0.16, 0.16, z > 0 ? DL / 2 : -DL / 2); // filler cap
+      // filler cap on a little hinge at the drum end; it bumps when the tank moves
+      const capHinge = put(drum, new THREE.Group(), 0.1, 0.22, z > 0 ? DL / 2 + 0.01 : -DL / 2 - 0.01);
+      put(capHinge, cyl(0.075, 0.025, C.oliveDark, { axis: 'z', seg: 10 }), 0.07, 0, 0);
+      wobble(capHinge, 'z', { k: 150, d: 3, gain: 1.4, max: 0.6, oneSided: true });
       for (const off of [-1, 1]) {
         put(drum, cyl(DR + 0.014, 0.05, C.oliveDark, { axis: 'z', seg: 20 }), 0, 0, off * (DL / 2 - 0.03)); // rolled rims
         put(drum, cyl(DR + 0.01, 0.04, C.dark, { axis: 'z', seg: 20 }), 0, 0, off * DL * 0.24); // straps
@@ -633,7 +667,11 @@ export function createTank() {
     put(mgPivot, box(0.16, 0.12, 0.08, C.olive, { r: 0.015 }), 0.02, -0.03, 0.1); // ammo box
     for (const dz of [-0.05, 0.05]) put(mgPivot, box(0.1, 0.03, 0.03, C.dark), -0.25, 0.02, dz); // spade grips
     put(mgPivot, box(0.03, 0.08, 0.03, C.dark), 0.25, 0.08, 0); // sight post
-    mgFlash = put(mgPivot, box(0.14, 0.14, 0.14, 0xffd24a, { glow: true, r: 0.03 }), 0.98, 0.01, 0);
+    mgFlash = put(mgPivot, new THREE.Group(), 1.0, 0.01, 0);
+    put(mgFlash, box(0.12, 0.12, 0.12, 0xfff3c4, { glow: true, r: 0.03 }));
+    put(mgFlash, box(0.36, 0.05, 0.05, 0xffc24a, { glow: true, r: 0.012 }), 0.12, 0, 0); // forward spike
+    put(mgFlash, box(0.05, 0.3, 0.05, 0xffb03a, { glow: true, r: 0.012 }), 0.02, 0, 0); // star arms
+    put(mgFlash, box(0.05, 0.05, 0.3, 0xffb03a, { glow: true, r: 0.012 }), 0.02, 0, 0);
     mgFlash.visible = false;
   }
 
@@ -675,20 +713,67 @@ export function createTank() {
 
   // ------------------------------------------------------------- behaviour
   const tmp = new THREE.Vector3();
+  const prevPos = new THREE.Vector3();
+  const prevVel = new THREE.Vector3();
+  const vel = new THREE.Vector3();
+  let hasPrev = false;
   let recoil = 0;
   let gunFlashTime = 0;
+  let gunLift = 0; // barrel elevation used to clear the fuel drums
+  let gunLiftTarget = 0;
+  let mgTimer = 0;
+  let bumpTimer = 0.5;
+  const events = []; // MG shots this frame, read by the scene for tracers/casings
+
+  // hull springs: pitch (about z), roll (about x), and a small shove in x/z
+  const hullSpring = { pitch: 0, vPitch: 0, roll: 0, vRoll: 0, ox: 0, vOx: 0, oz: 0, vOz: 0 };
+
+  // Push every loose part. pitch: about the hull's z axis (nose up +),
+  // roll: about its x axis (top toward +z).
+  function kickWobblers(pitch, roll) {
+    const psi = turret.rotation.y;
+    for (const w of wobblers) {
+      let p = pitch;
+      let r = roll;
+      if (w.frame === 'turret') {
+        p = pitch * Math.cos(psi) - roll * Math.sin(psi);
+        r = pitch * Math.sin(psi) + roll * Math.cos(psi);
+      }
+      w.v += (w.axis === 'z' ? p : r) * w.gain;
+    }
+  }
+
+  // Blocked while the gun is lifted over (or swinging into) the drum sector.
+  function canFire() {
+    return gunLift < 0.02 && gunLiftTarget === 0;
+  }
 
   function fire() {
+    if (!canFire()) return null;
     recoil = 1;
-    gunFlashTime = 0.08;
+    gunFlashTime = 0.09;
+    // Recoil pushes the hull away from the shot, snapped to the nearest of the
+    // four hull directions: front, left, back, right.
+    const quadrant = ((Math.round(turret.rotation.y / (Math.PI / 2)) % 4) + 4) % 4;
+    const KICK = 1.25;
+    const SHOVE = 1.5;
+    if (quadrant === 0) { hullSpring.vPitch += KICK; hullSpring.vOx -= SHOVE; kickWobblers(4, 0); }
+    if (quadrant === 2) { hullSpring.vPitch -= KICK; hullSpring.vOx += SHOVE; kickWobblers(-4, 0); }
+    if (quadrant === 1) { hullSpring.vRoll += KICK; hullSpring.vOz += SHOVE; kickWobblers(0, 4); }
+    if (quadrant === 3) { hullSpring.vRoll -= KICK; hullSpring.vOz -= SHOVE; kickWobblers(0, -4); }
     group.updateWorldMatrix(true, true);
     const position = gunPivot.localToWorld(new THREE.Vector3(MUZZLE_X + 0.1, 0, 0));
     const direction = new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld);
-    return { position, direction };
+    return { position, direction, quadrant };
   }
 
   function setSlotVisible(name, visible) {
     for (const g of slotGroups[name] || []) g.visible = visible;
+  }
+
+  function stepSpring(x, v, k, d, force, dt) {
+    v += (-k * x - d * v + force) * dt;
+    return [x + v * dt, v];
   }
 
   // ctx: { aimPoint, mgPoint, speed }
@@ -704,23 +789,112 @@ export function createTank() {
       mgPivot.rotation.y = approachAngle(mgPivot.rotation.y, want, MG_SPEED * dt);
     }
 
+    // Gun lifts to clear the fuel drums while the turret faces the rear.
+    const offBack = Math.abs(wrapAngle(turret.rotation.y - Math.PI));
+    const inSector = THREE.MathUtils.clamp((0.95 - offBack) / 0.3, 0, 1);
+    gunLiftTarget = inSector > 0 ? 0.42 * inSector : 0;
+    const liftStep = 1.8 * dt;
+    gunLift += THREE.MathUtils.clamp(gunLiftTarget - gunLift, -liftStep, liftStep);
+
+    // Running gear
     const speed = ctx.speed || 0;
     for (const w of spinners) w.rotation.z -= (speed * dt) / w.userData.radius;
     if (speed) {
       trackOffset += speed * dt;
       updateTracks();
     }
-    chassis.position.y = Math.abs(Math.sin(t * 11)) * 0.012 * Math.min(1, speed);
 
-    recoil = Math.max(0, recoil - dt * 4);
-    gunPivot.position.x = GUN_BASE_X - recoil * 0.3;
-    chassis.rotation.z = recoil * 0.018;
+    // Hull-frame acceleration drives lean and the loose parts.
+    let fwdAcc = 0;
+    let latAcc = 0;
+    if (dt > 0 && hasPrev) {
+      vel.copy(tmp).sub(prevPos).divideScalar(dt);
+      const acc = vel.clone().sub(prevVel).divideScalar(dt);
+      if (acc.length() > 25) acc.setLength(25); // starts and stops are jolts, not explosions
+      fwdAcc = acc.x * Math.cos(yaw) - acc.z * Math.sin(yaw);
+      latAcc = acc.x * Math.sin(yaw) + acc.z * Math.cos(yaw);
+      prevVel.copy(vel);
+    }
+    prevPos.copy(tmp);
+    hasPrev = true;
+
+    // Road bumps while moving
+    if (speed > 0.05) {
+      bumpTimer -= dt;
+      if (bumpTimer <= 0) {
+        bumpTimer = 0.25 + Math.random() * 0.6;
+        const p = (Math.random() - 0.5) * 0.5;
+        const r = (Math.random() - 0.5) * 0.4;
+        hullSpring.vPitch += p;
+        hullSpring.vRoll += r;
+        kickWobblers(p * 6 + (Math.random() - 0.5) * 2, r * 6 + (Math.random() - 0.5) * 2);
+      }
+    }
+
+    // Hull springs (stiff, lightly underdamped so a shot rocks and settles)
+    const h = hullSpring;
+    [h.pitch, h.vPitch] = stepSpring(h.pitch, h.vPitch, 95, 8, fwdAcc * 0.012, dt);
+    [h.roll, h.vRoll] = stepSpring(h.roll, h.vRoll, 95, 8, -latAcc * 0.012, dt);
+    [h.ox, h.vOx] = stepSpring(h.ox, h.vOx, 140, 13, 0, dt);
+    [h.oz, h.vOz] = stepSpring(h.oz, h.vOz, 140, 13, 0, dt);
+    const bob = Math.abs(Math.sin(t * 11)) * 0.012 * Math.min(1, speed);
+    rock.rotation.set(h.roll, 0, h.pitch);
+    rock.position.set(h.ox, ROCK_Y + bob, h.oz);
+
+    // Loose parts: driven by acceleration in their own frame
+    const psi = turret.rotation.y;
+    for (const w of wobblers) {
+      let f = fwdAcc;
+      let l = latAcc;
+      if (w.frame === 'turret') {
+        f = fwdAcc * Math.cos(psi) - latAcc * Math.sin(psi);
+        l = fwdAcc * Math.sin(psi) + latAcc * Math.cos(psi);
+      }
+      const force = (w.axis === 'z' ? f : -l) * 0.06 * w.gain;
+      [w.a, w.v] = stepSpring(w.a, w.v, w.k, w.d, force, dt);
+      if (Math.abs(w.a) > w.max) {
+        w.a = Math.sign(w.a) * w.max;
+        w.v *= -0.3;
+      }
+      if (w.oneSided && w.a < 0) {
+        w.a = 0;
+        w.v = -w.v * 0.35; // slaps shut and bounces
+      }
+      w.obj.rotation[w.axis] = w.rest + w.a;
+    }
+
+    // Main gun: hard, fast recoil with a slower run-out; lift for the drums
+    recoil = Math.max(0, recoil - dt * 3.2);
+    const slide = recoil > 0.8 ? 1 : recoil / 0.8;
+    gunPivot.position.x = GUN_BASE_X - slide * slide * 0.45;
+    gunPivot.rotation.z = gunLift;
     gunFlashTime = Math.max(0, gunFlashTime - dt);
-    gunFlash.visible = gunFlashTime > 0;
+    gunFlash.visible = false; // the scene's glow effects own the cannon flash now
 
-    const mgOn = !!ctx.mgPoint && Math.floor(t * 16) % 2 === 0;
-    mgFlash.visible = mgOn;
+    // Roof MG: bursts while it has a target; each shot is reported as an event
+    events.length = 0;
+    mgFlash.visible = false;
+    if (ctx.mgPoint) {
+      mgTimer -= dt;
+      const burstOn = Math.sin(t * 2.4) > -0.3; // fire in bursts with short pauses
+      if (burstOn && mgTimer <= 0) {
+        mgTimer = 0.07;
+        mgFlash.visible = true;
+        mgFlash.rotation.x = Math.random() * Math.PI;
+        mgFlash.scale.setScalar(0.75 + Math.random() * 0.6);
+        group.updateWorldMatrix(true, true);
+        events.push({
+          type: 'mg',
+          muzzle: mgPivot.localToWorld(new THREE.Vector3(1.0, 0.01, 0)),
+          eject: mgPivot.localToWorld(new THREE.Vector3(0.05, 0.03, 0.08)),
+          ejectDir: new THREE.Vector3(0, 0, 1).transformDirection(mgPivot.matrixWorld),
+          target: ctx.mgPoint.clone(),
+        });
+      } else if (mgTimer > 0.045) {
+        mgFlash.visible = true; // hold the flash for a frame or two
+      }
+    }
   }
 
-  return { group, slotGroups, setSlotVisible, turret, fire, update };
+  return { group, slotGroups, setSlotVisible, turret, fire, canFire, update, events };
 }
