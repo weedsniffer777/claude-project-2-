@@ -281,6 +281,7 @@ export function createTank() {
 
   const spinners = [];
   let gunPivot, gunFlash, mgPivot, mgFlash, drumRig;
+  const drums = []; // the two rear drums; they swing round into rocket engines
 
   // ---------------------------------------------------------------- hull
   const hull = new THREE.Group();
@@ -619,6 +620,22 @@ export function createTank() {
       const drum = new THREE.Group();
       drum.position.set(rx, ry, z);
       drumRig.add(drum);
+      drums.push(drum);
+      // rocket flame out of the drum's rear end (shown while boosting)
+      const flame = new THREE.Group();
+      flame.position.z = -DL / 2 - 0.05;
+      const outer = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.8, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xff8a2a }));
+      outer.rotation.x = -Math.PI / 2;
+      outer.position.z = -0.7;
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(DR * 0.45, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xfff1b8 }));
+      inner.rotation.x = -Math.PI / 2;
+      inner.position.z = -0.45;
+      outer.userData.fx = inner.userData.fx = true;
+      flame.add(outer, inner);
+      flame.visible = false;
+      drum.add(flame);
+      drum.userData.flame = flame;
+      drum.userData.home = drum.position.clone();
       wobble(drum, 'z', { k: 90, d: 7, gain: 0.5, max: 0.12 });
       wobble(drum, 'x', { k: 90, d: 7, gain: 0.35, max: 0.08 });
       put(drum, cyl(DR, DL, C.olive, { axis: 'z', seg: 20 }));
@@ -945,5 +962,43 @@ export function createTank() {
 
   mergeStaticChildren(group, new Set(wobblers.map((w) => w.obj)));
 
-  return { group, slotGroups, setSlotVisible, turret, fire, muzzle, update, events, aimError: () => aimError };
+  // Fuel-can rockets: k 0..1 swings the drums round to point backward (and
+  // back), flame on while lit.
+  let rocketK = 0;
+  function setRocket(k, lit, t = 0) {
+    rocketK = k;
+    const e = k * k * (3 - 2 * k);
+    for (const d of drums) {
+      d.rotation.y = e * (Math.PI / 2);
+      d.position.x = d.userData.home.x - e * 0.25;
+      d.position.y = d.userData.home.y + e * 0.12;
+      const f = d.userData.flame;
+      f.visible = lit && k > 0.9;
+      if (f.visible) f.scale.set(1, 1, 0.8 + Math.sin(t * 60 + d.position.z * 5) * 0.25 + Math.random() * 0.2);
+    }
+  }
+  // world points at the drums' rear ends (where the flame comes out)
+  function rocketNozzles() {
+    group.updateWorldMatrix(true, true);
+    return drums.map((d) => d.localToWorld(new THREE.Vector3(0, 0, -0.62)));
+  }
+
+  return {
+    group,
+    chassis,
+    turret,
+    mgMount: mgSlot,
+    slotGroups,
+    setSlotVisible,
+    fire,
+    muzzle,
+    update,
+    events,
+    aimError: () => aimError,
+    setRocket,
+    rocketNozzles,
+    get rocketK() {
+      return rocketK;
+    },
+  };
 }

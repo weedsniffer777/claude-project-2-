@@ -17,6 +17,7 @@ import { addDusk, DUSK_SUN } from '../render/setup.js';
 import { box, cyl, put, toon, glowMat, gradientMap, setLowPoly } from '../models/kit.js';
 import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
 import * as P from './props.js';
+import { buildDepot } from './depot.js';
 
 const FH = 1.35; // floor height
 const PX = 12; // facade texels per world unit
@@ -640,7 +641,11 @@ function buildAvenue(scene) {
     B.block(41.5, -14, 2.4, 3);
     B.block(-17.5, -14, 2.4, 3);
     B.block(100, -14, 3.2, 4);
-    for (const [x, r] of [[-24, 1.3], [-4, 0.9], [33, 1.7], [52, 1.2], [86, 1.1]]) rubble(x, WALK.n + 0.9, r, 0.8, { solid: true });
+    // rubble heaped against the facades (behind the sidewalk rail, so the
+    // tank slides along a straight edge instead of snagging on heaps)
+    for (const [x, r] of [[-24, 1.1], [-4, 0.8], [33, 1.3], [86, 1.0]]) rubble(x, WALK.n + 0.35, r, 0.8);
+    // the north edge of the drivable street: one straight invisible rail
+    for (const [x0, x1] of [[START_X, CROSS.x0 - 0.6], [CROSS.x1 + 0.6, 48.4], [53.6, RIVER.x0], [RIVER.x1, 107.4], [112.6, 136]]) B.block((x0 + x1) / 2, WALK.n + 0.55, (x1 - x0) / 2, 0.3);
 
     // Containers: stacked into walls where the street is closed off.
     const ribs = (() => {
@@ -722,6 +727,12 @@ function buildAvenue(scene) {
         if (side < 0 && x > CROSS.x0 - 1 && x < CROSS.x1 + 1) continue; // keep the corridor mouth clear
         const z = side < 0 ? CURB.n - 0.45 : CURB.s + 0.45;
         const idx = lampIndex++;
+        B.crushable(() => lampPole(x, z, side, idx), { kind: 'pole', pivot: { x, y: SW, z }, footprint: { x, z, hx: 0.25, hz: 0.25, yaw: 0 } });
+      }
+      if (poleTops.has(`${x},-1`)) B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
+    }
+    function lampPole(x, z, side, idx) {
+      {
         const tilt = rand() < 0.35 ? (rand() - 0.5) * 0.5 : (rand() - 0.5) * 0.06;
         const pole = cyl(0.09, 6.6, 0x8b8984, { seg: 8, radiusEnd: 0.14 });
         pole.position.set(x, SW + 3.3, z);
@@ -764,12 +775,10 @@ function buildAvenue(scene) {
           const groundY = heightAt(head.x, head.z);
           const p = B.pool(head.x + (rand() - 0.5) * 0.6, head.z + (rand() - 0.5) * 0.6, 2.6 + rand() * 1.4, color, (cold ? 0.16 : 0.22) * (0.7 + rand() * 0.5), { sx: 0.8 + rand() * 0.5, sz: 0.8 + rand() * 0.4, yaw: rand() * 3, y: groundY + 0.03 });
           if (idx === 6 || idx === 13 || kind === 'hanging') {
-            B.keep(lens);
-            flickers.push({ e, lens, p, color, base: p.material.opacity, seed: idx });
+            flickers.push({ e, lens: null, p, color, base: p.material.opacity, seed: idx });
           }
         }
       }
-      if (poleTops.has(`${x},-1`)) B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
     }
     for (let i = 0; i < poleXs.length - 1; i++) {
       const xa = poleXs[i];
@@ -874,19 +883,23 @@ function buildAvenue(scene) {
     B.animate((dt, t) => (sheet.rotation.x = Math.sin(t * 1.3) * 0.18));
 
     // ------------------------------------------------------------- wrecks
-    P.car(B, -8, -5.5, 0.12, { kind: 'sedan', paint: BURNT_PAINT[0] });
-    P.car(B, 1.5, 4.8, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1], flipped: true });
-    P.car(B, 11, -5.4, -0.35, { kind: 'sedan', paint: BURNT_PAINT[2] });
-    P.car(B, 24.5, 4.5, 0.55, { kind: 'van', paint: 0x6b7458 });
+    // burnt-out cars: the tank flattens them
+    const wreck = (x, z, yaw, o) => B.crushable(() => P.car(B, x, z, yaw, o), { kind: 'car', scrap: 2 });
+    wreck(-8, -5.5, 0.12, { kind: 'sedan', paint: BURNT_PAINT[0] });
+    wreck(1.5, 4.8, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1], flipped: true });
+    wreck(11, -5.4, -0.35, { kind: 'sedan', paint: BURNT_PAINT[2] });
+    wreck(24.5, 4.5, 0.55, { kind: 'van', paint: 0x6b7458 });
     P.bus(B, 33, -2.4, 0.18);
-    P.car(B, 47, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
-    P.car(B, 56.5, -6.0, 0.05, { kind: 'sedan', paint: BURNT_PAINT[4] });
-    P.car(B, 67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
-    P.car(B, 72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
-    P.car(B, 83, 5.0, 0.2, { kind: 'sedan', paint: BURNT_PAINT[1] });
-    P.car(B, 88, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
-    P.car(B, 96.6, -4.6, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
-    P.car(B, 96.4, 4.8, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
+    wreck(45, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
+    wreck(67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
+    wreck(72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
+    wreck(83, 5.0, 0.2, { kind: 'sedan', paint: BURNT_PAINT[1] });
+    wreck(88, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
+    wreck(96.6, -4.6, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
+    wreck(96.4, 4.8, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
+    wreck(118, -5.5, 0.4, { kind: 'sedan', paint: BURNT_PAINT[4] });
+    wreck(124, 4.6, -0.3, { kind: 'van', paint: 0x6b7458 });
+    wreck(129, -2, 1.3, { kind: 'hatch', paint: BURNT_PAINT[2] });
     {
       // the trolleybus is still smouldering
       const fire = B.emit(new THREE.Vector3(33.4, 1.5, -1.0), 0xff8a35, 16, 8);
@@ -941,27 +954,39 @@ function buildAvenue(scene) {
     barrelFire(91, WALK.n + 1.2);
 
     // ------------------------------------------------------ street clutter
-    P.bench(B, -27, SW, WALK.n + 1.2, 0);
-    P.bench(B, -1, SW, WALK.n + 1.1, 0.2, { tipped: true });
-    P.bench(B, 52.5, SW, WALK.n + 1.3, -0.1);
-    P.bin(B, -25, SW, WALK.n + 1.0);
-    P.bin(B, 2, SW, WALK.n + 1.4, { tipped: true });
-    P.bin(B, 55, SW, WALK.n + 1.1, { tipped: true });
-    P.planter(B, -12, SW, WALK.n + 1.2);
-    P.planter(B, 30, SW, WALK.n + 1.4);
-    P.cabinet(B, 15.5, SW, WALK.n + 0.6, 0);
-    P.cabinet(B, 84, SW, WALK.n + 0.6, 0.3);
-    P.crates(B, 8, SW, WALK.n + 1.2);
+    // street clutter: all of it breaks under the tracks
+    const junk = (fn, scrap = 0) => B.crushable(fn, { kind: 'prop', scrap });
+    junk(() => P.bench(B, -27, SW, WALK.n + 1.2, 0));
+    junk(() => P.bench(B, -1, SW, WALK.n + 1.1, 0.2, { tipped: true }));
+    junk(() => P.bench(B, 52.5, SW, WALK.n + 1.3, -0.1));
+    junk(() => P.bin(B, -25, SW, WALK.n + 1.0), 1);
+    junk(() => P.bin(B, 2, SW, WALK.n + 1.4, { tipped: true }), 1);
+    junk(() => P.bin(B, 55, SW, WALK.n + 1.1, { tipped: true }), 1);
+    junk(() => P.planter(B, -12, SW, WALK.n + 1.2));
+    junk(() => P.planter(B, 30, SW, WALK.n + 1.4));
+    junk(() => P.cabinet(B, 15.5, SW, WALK.n + 0.6, 0), 1);
+    junk(() => P.cabinet(B, 84, SW, WALK.n + 0.6, 0.3), 1);
+    junk(() => P.crates(B, 8, SW, WALK.n + 1.2), 2);
     P.dumpster(B, 42, SW, WALK.n + 1.2, 0.3, 0x4e6355);
     P.dumpster(B, 81.5, SW, WALK.n + 1.1, -0.4, 0x4f5d73);
-    P.tires(B, 94, SW, WALK.n + 1.4, 5);
-    P.fallenPole(B, 58, CURB.s + 0.4, -2.5);
+    junk(() => P.tires(B, 94, SW, WALK.n + 1.4, 5));
+    junk(() => P.fallenPole(B, 48, CURB.s + 0.4, -2.5));
+    junk(() => P.crates(B, -6, SW, CURB.s + 1.3), 2);
+    junk(() => P.crates(B, 20, 0, -3.5), 2);
+    junk(() => P.tires(B, 13, 0, 2.6, 4));
+    junk(() => P.crates(B, 120, SW, WALK.n + 1.3), 2);
+    junk(() => P.crates(B, 127, SW, CURB.s + 1.2), 2);
     for (const [x, z, bend, color] of [[5, CURB.s + 0.6, 0.5, '#3d5f86'], [37, CURB.n - 0.5, -0.4, '#3d5f86'], [-20, CURB.s + 0.6, 0.25, '#8c7a3e'], [77, CURB.n - 0.5, 1.2, '#3d5f86']]) {
-      const top = P.bentPole(B, x, heightAt(x, z), z, 2.7, rand() * 3, bend, 0x5a5d61);
-      const plate = new THREE.Mesh(new THREE.CircleGeometry(0.34, 12), sign(0.7, 0.7, { board: color, ink: '#dfe2e4' }));
-      plate.material.side = THREE.DoubleSide;
-      plate.position.set(0, 1.0, 0.08);
-      top.add(plate);
+      B.crushable(
+        () => {
+          const top = P.bentPole(B, x, heightAt(x, z), z, 2.7, rand() * 3, bend, 0x5a5d61);
+          const plate = new THREE.Mesh(new THREE.CircleGeometry(0.34, 12), sign(0.7, 0.7, { board: color, ink: '#dfe2e4' }));
+          plate.material.side = THREE.DoubleSide;
+          plate.position.set(0, 1.0, 0.08);
+          top.add(plate);
+        },
+        { kind: 'pole', pivot: { x, y: heightAt(x, z), z }, footprint: { x, z, hx: 0.3, hz: 0.3, yaw: 0 } },
+      );
     }
 
     {
@@ -1070,10 +1095,10 @@ function buildAvenue(scene) {
     P.crates(B, 35, SW, WALK.s + 3.6);
     P.tires(B, 44, SW, WALK.s + 3.2, 6);
     P.dumpster(B, 86, SW, WALK.s + 2.6, 0.5, 0x5e5a4c);
-    P.cabinet(B, 12, SW, WALK.s + 0.6, Math.PI);
-    P.bench(B, 28, SW, WALK.s - 0.8, Math.PI + 0.3, { tipped: true });
-    P.bin(B, 26.5, SW, WALK.s - 0.6);
-    P.bin(B, 70, SW, WALK.s - 0.6, { tipped: true });
+    junk(() => P.cabinet(B, 12, SW, WALK.s + 0.6, Math.PI), 1);
+    junk(() => P.bench(B, 28, SW, WALK.s - 0.8, Math.PI + 0.3, { tipped: true }));
+    junk(() => P.bin(B, 26.5, SW, WALK.s - 0.6), 1);
+    junk(() => P.bin(B, 70, SW, WALK.s - 0.6, { tipped: true }), 1);
     for (let i = 0; i < 5; i++) {
       const x = -24 + i * 26 + rand() * 6;
       if (inRiver(x)) continue;
@@ -1328,120 +1353,419 @@ function buildAvenue(scene) {
       return true;
     }
 
+    // ------------------------------------------- depot doors (one per sector)
+    // A roller door in a block's ground floor: closed until the sector is
+    // clear, then it rolls up and the depot's lights show inside.
+    function depotDoor(x) {
+      const d = { x, open: 0, opening: false };
+      const z = WALK.n + 0.05;
+      // dark bay behind the door
+      put(B.root, box(5.2, 3.3, 0.1, 0x0d0c0e), x, SW + 1.65, WALK.n - 0.2);
+      for (const s of [-1, 1]) put(B.root, box(0.35, 3.6, 0.4, 0x45484c, { r: 0.03 }), x + s * 2.75, SW + 1.8, z + 0.1);
+      put(B.root, box(5.9, 0.4, 0.45, 0x45484c, { r: 0.03 }), x, SW + 3.6, z + 0.1);
+      const t = hazard.clone();
+      t.needsUpdate = true;
+      t.repeat.set(4, 0.5);
+      const band = new THREE.Mesh(new THREE.PlaneGeometry(5.9, 0.36), new THREE.MeshToonMaterial({ map: t, gradientMap }));
+      band.position.set(x, SW + 3.6, z + 0.34);
+      B.add(band);
+      const door = new THREE.Group();
+      put(door, box(5.2, 3.3, 0.12, 0x56606a), 0, 1.65, 0);
+      for (let y = 0.25; y < 3.2; y += 0.32) put(door, box(5.1, 0.05, 0.04, 0x434b54), 0, y, 0.08);
+      door.position.set(x, SW, z + 0.12);
+      B.add(door);
+      B.keep(door);
+      // warm light from inside once it's open, and a green go-lamp
+      const inside = B.pool(x, WALK.n + 1.6, 2.6, 0xffa245, 0, { sx: 1.2, sz: 0.7, y: SW + 0.03 });
+      const insideE = B.emit(new THREE.Vector3(x, 1.6, WALK.n + 1.4), 0xffa245, 16, 8, { level: 0 });
+      const lamp = B.keep(put(B.root, box(0.3, 0.22, 0.12, 0x2a2b2e, { r: 0.03 }), x, SW + 4.0, z + 0.4));
+      d.update = (dt, t2) => {
+        if (d.opening && d.open < 1) d.open = Math.min(1, d.open + dt * 0.8);
+        door.position.y = SW + d.open * 3.1;
+        door.scale.y = 1 - d.open * 0.85;
+        inside.material.opacity = 0.22 * d.open;
+        insideE.level = d.open;
+        lamp.material = d.opening && Math.sin(t2 * 6) > 0 ? glowMat(0x6be08a) : toon(0x2a2b2e);
+      };
+      B.animate((dt, t2) => d.update(dt, t2));
+      return d;
+    }
+    const doorA = depotDoor(51);
+    const doorB = depotDoor(110);
+
+    // ---------------------------------- the bridgehead barricade (sector 2)
+    // Wrecks chained across the approach to the bridge: too heavy to drive
+    // through. A rocket ram (or a dozer blade) bursts each section.
+    {
+      const BX = 58.6;
+      for (const [z0, z1] of [[WALK.n, -3.3], [-3.3, 3.3], [3.3, WALK.s + 1]]) {
+        const zc = (z0 + z1) / 2;
+        B.crushable(
+          () => {
+            const y = heightAt(BX, zc);
+            P.car(B, BX, zc, Math.PI / 2 + (rand() - 0.5) * 0.3, { kind: rand() < 0.5 ? 'sedan' : 'hatch', paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false, snow: false });
+            const top = P.car(B, BX + 0.2, zc + 0.3, Math.PI / 2 + 0.4, { kind: 'hatch', paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false, flipped: true, snow: false });
+            top.position.y = 1.0 + y;
+            top.rotation.z = 0.2;
+            for (const s of [-1, 1]) {
+              const j = put(B.root, box(0.7, 0.9, 1.6, 0x9a978f), BX + s * 1.1, y + 0.45, zc + s * 1.2);
+              j.rotation.y = s * 0.4;
+            }
+            for (let i = 0; i < 6; i++) B.piece(0.3 + rand() * 0.5, 0.2, 0.3, CONCRETE[i % 5], BX + (rand() - 0.5) * 2.4, y + 0.1, zc + (rand() - 0.5) * (z1 - z0), rand(), rand() * 3, rand());
+            put(B.root, box(0.12, 0.6, z1 - z0 - 0.4, 0xc99a2e), BX - 0.9, y + 1.0, zc).rotation.x = 0.05; // hazard rail
+            B.hitBox(BX, y + 1.1, zc, 1.8, 2.2, z1 - z0);
+            B.block(BX, zc, 1.0, (z1 - z0) / 2);
+          },
+          { kind: 'car', heavy: true, scrap: 3 },
+        );
+      }
+    }
+
+    // ------------------------------------- the end of the zone (east wall)
+    {
+      const X = 136;
+      let i = 0;
+      for (let z = -15; z < 20; z += 6.2, i++) {
+        container(X, 0, z, Math.PI / 2, CONTAINERS[(i + 1) % 5]);
+        if (i % 2 === 0) container(X + 0.1, 2.6, z + 0.3, Math.PI / 2, CONTAINERS[(i + 3) % 5]);
+      }
+      B.block(X, 2, 1.4, 22);
+      rubble(X - 2.2, 4, 1.8, 1.2, { slabs: 2 });
+      rubble(X - 2.0, -7, 1.4, 1.0, { slabs: 2 });
+    }
+
     B.finish();
     B.mergeStatic();
 
-    // ------------------------------------------------------ tutorial script
-    // Drive -> machines (the roof MG handles them) -> main gun -> the bridge
-    // -> blow the gate -> drive through.
-    const S = { step: 0, spawnX: 0, t: 0 };
+    // the depot lives in this scene too, out of sight
+    const depot = buildDepot(scene);
+    const blocks = [...B.blocks, ...depot.blocks];
+    const colliders = [...B.colliders, ...depot.colliders];
+    const emitters = [...B.emitters, ...depot.emitters];
+
+    // ---------------------------------------------------- the zone script
+    // Three sectors with a depot stop between each:
+    //  1 The avenue: learn to drive, shoot, crush, collect scrap
+    //  2 The bridge: rocket-ram the barricade, cross, blow the gate
+    //  3 The checkpoint: hold out, then the heavy machine
+    const SECTORS = ['The avenue', 'The bridge', 'The checkpoint'];
+    const B1 = { minX: START_X + 2, maxX: 57, minZ: -21, maxZ: 9.9 };
+    const B2 = { minX: 44, maxX: GX + 12, minZ: -12, maxZ: 9.9 };
+    const B3 = { minX: GX + 1.5, maxX: 133, minZ: -12, maxZ: 9.9 };
+    const S = { sector: 0, step: 0, t: 0, spawnX: 0, n: 0, shots: 0, hold: 0, boss: null, waveT: 0 };
     const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
     let CLICK = '<kbd>Click</kbd>';
-    function start(api) {
-      CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { step: 0, spawnX: api.tankPos.x, t: 0 });
-      gate.hp = 2;
-      api.objective('Drive up the street and destroy all enemies');
-      if (api.touch) api.prompt('Controls', 'Use the <b>stick</b> in the bottom left to drive');
-      else api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
-      api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
-    }
+    const bounds = { ...B1 };
+    const setBounds = (b) => Object.assign(bounds, b);
     // the arrow that follows the nearest machine
     const onEnemy = (api) => () => {
       const e = api.nearestEnemy();
-      return e ? new THREE.Vector3(e.pos.x, 1.4, e.pos.z) : null;
+      return e ? new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z) : null;
     };
-    function script(api, dt) {
+    const go = (step) => {
+      S.step = step;
+      S.t = 0;
+    };
+
+    function start(api) {
+      CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null });
+      setBounds(B1);
+      api.setBounds(bounds);
+      gate.hp = 2;
+      api.sectors(SECTORS, 0);
+      api.objective('Drive up the street and destroy all enemies');
+      if (api.touch) api.prompt('Controls', 'Use the <b>stick</b> in the bottom left to drive.');
+      else api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys.');
+      api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
+    }
+
+    // ------------------------------------------------- sector 1: the avenue
+    function sector1(api, dt) {
       const x = api.tankPos.x;
-      S.t += dt;
+      const run = api.run;
       switch (S.step) {
         case 0:
-          if (x > S.spawnX + 8) {
-            api.clearPrompt();
-            api.arrow(null);
-            S.step = 1;
+          if (x > S.spawnX + 6) {
+            api.prompt('Crush', 'Tanks <b>crush</b> wrecks and junk. Drive right through it!');
+            api.arrow(new THREE.Vector3(-8, 1.6, -5.5), 'Crush it!');
+            go(1);
           }
           break;
         case 1:
-          if (x > -8) {
+          if (run.crushed > 0 || x > -3 || S.t > 7) {
+            api.arrow(null);
             const out = [[22, -9], [16, -3]];
             api.spawnDog(22, -18.5, { via: out });
             api.spawnDog(20.5, -19.5, { delay: 0.6, via: out });
             api.spawnDog(23.5, -19.5, { delay: 1.2, via: out });
-            api.prompt('Machines', 'Incoming! Your roof MG shoots machines <b>automatically</b>. Just keep them in range.', { danger: true });
-            api.arrow(onEnemy(api), 'Auto MG');
-            S.step = 2;
+            go(2);
           }
           break;
-        case 2:
-          if (api.enemiesAlive === 0) {
-            api.spawnDog(40, -5.5, { delay: 1.2 });
-            api.spawnDog(41, 4.5, { delay: 1.6 });
-            if (api.touch) api.prompt('Main gun', `${CLICK} a machine to fire the main gun at it. The blast shreds machines.`);
-            else api.prompt('Main gun', `${CLICK} or <kbd>Space</kbd> fires the main gun at your reticle. The blast shreds machines.`);
-            api.arrow(onEnemy(api), api.touch ? `${CLICK} it to fire!` : `${CLICK} to fire main gun!`);
-            S.step = 3;
+        case 2: {
+          // first sight of them: slow it all down and point at them
+          const e = api.nearestEnemy();
+          if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
+            S.shots = run.shots;
+            api.prompt('Contact', `Enemies incoming! Destroy them with your <b>cannon</b>! ${api.touch ? `${CLICK} on one to fire.` : `Aim and ${CLICK} (or <kbd>Space</kbd>) to fire.`}`, { danger: true });
+            api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
+            api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
+            go(3);
+          } else if (!e && S.t > 3) {
+            // already dealt with (shot from long range): skip the lesson
+            S.shots = -1;
+            go(3);
           }
           break;
+        }
         case 3:
-          if (api.enemiesAlive === 0 && S.t > 0) {
-            api.clearPrompt();
-            api.arrow(null);
-            S.step = 4;
+          // after the first shot, while the cannon reloads, the MG takes over
+          if (run.shots > S.shots && (api.mgActive || S.t > 4)) {
+            api.prompt('Machine gun', 'Your <b>machine gun</b> automatically attacks enemies while your cannon reloads!');
+            api.arrow(onEnemy(api), 'Auto MG');
+            go(4);
           }
           break;
         case 4:
-          if (x > 46) {
-            api.spawnDog(81, -3);
-            api.spawnDog(82, 1.5, { delay: 0.4 });
-            api.spawnDog(83.5, 4, { delay: 0.8 });
-            api.spawnDog(84, -6, { delay: 1.2 });
-            api.prompt('Machines', 'More coming over the bridge!', { danger: true, seconds: 4 });
-            S.step = 5;
+          // the first scrap on the ground
+          if (run.drops > 0 && !api.spotlit) {
+            const d = api.nearestDrop();
+            if (d) {
+              const at = d.clone();
+              api.prompt('Scrap', 'Machines drop <b>scrap</b>. Drive close to collect it.', { go: true });
+              api.spotlight({ targets: [at, () => api.tankPos.clone().setY(1)], r: 90 }, () => run.scrap > 0, { maxTime: 3.5 });
+              go(5);
+            }
           }
+          if (api.enemiesAlive === 0 && S.t > 2 && run.drops === 0) go(5);
           break;
         case 5:
-          if (x > 80) {
-            api.spawnDog(97.5, -7.5);
-            api.spawnDog(97.5, 7.6, { delay: 0.4 });
-            api.spawnDog(96, 0, { delay: 0.9 });
-            S.step = 6;
+          if (api.enemiesAlive === 0 && S.t > 1.5) {
+            api.arrow(null);
+            api.spawnDog(40, -5.5, { delay: 0.5 });
+            api.spawnDog(41, 4.5, { delay: 1.0 });
+            api.spawnDog(43, 0, { delay: 1.4 });
+            const out = [[22, -9], [18, -3]];
+            api.spawnDog(22, -19, { delay: 2.5, via: out });
+            api.spawnDog(23.5, -19.5, { delay: 3, via: out });
+            api.prompt('Contact', 'More of them! Kill them in quick succession for a <b>chain</b>: more scrap per kill.', { danger: true });
+            go(6);
           }
           break;
         case 6:
-          if (x > 82 && api.enemiesAlive === 0) {
-            api.objective('Blow down the checkpoint gate');
-            api.prompt('Main gun', api.touch ? `${CLICK} the gate to fire at it. Two hits bring it down.` : `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
-            api.arrow(gateMark, `${CLICK} to shoot the gate!`);
-            S.step = 7;
+          if (api.enemiesAlive === 0 && S.t > 3 && x > 22) {
+            api.clearPrompt();
+            api.spawnDog(55, -4, { delay: 0.3 });
+            api.spawnDog(55, 4, { delay: 0.6 });
+            api.spawnDog(54, 0, { delay: 0.9 });
+            api.spawnDog(x - 16, -4, { delay: 2 });
+            api.spawnDog(x - 16, 4, { delay: 2.4 });
+            api.prompt('Contact', 'They are coming from the bridge, and from behind!', { danger: true, seconds: 5 });
+            go(7);
+          } else if (api.enemiesAlive === 0 && S.t > 3 && S.n === 0) {
+            S.n = 1;
+            api.prompt('Orders', 'Push on up the street.');
+            api.arrow(new THREE.Vector3(30, 0.4, 0), 'This way');
+          }
+          break;
+        case 7:
+          if (api.enemiesAlive === 0 && S.t > 3) {
+            doorA.opening = true;
+            api.objective('Enter the depot');
+            api.prompt('Sector clear', 'Nice work. Get into the <b>depot</b> for repairs and parts.', { go: true });
+            api.arrow(new THREE.Vector3(51, 1.6, WALK.n + 1), 'Depot');
+            go(8);
           }
           break;
         case 8:
-          if (x > GX + 8) {
-            api.objective('');
-            api.arrow(null);
-            api.win();
-            S.step = 9;
+          if (doorA.open > 0.6 && Math.hypot(x - 51, api.tankPos.z - (WALK.n + 1)) < 3.6) {
+            go(9);
+            api.depot({ offers: ['dozer', 'autoloader', 'era'], gift: 'rockets', onLeave: () => startSector2(api) });
           }
           break;
       }
+    }
+
+    // ------------------------------------------------- sector 2: the bridge
+    function startSector2(api) {
+      S.sector = 1;
+      go(0);
+      setBounds(B2);
+      api.setBounds(bounds);
+      api.teleport(50, -6.2, 0);
+      api.sectors(SECTORS, 1);
+      api.objective('Break through and cross the bridge');
+      api.prompt('Sector 2', 'Wrecks block the bridge. Too heavy to crush.', { danger: false });
+      api.arrow(new THREE.Vector3(58.6, 1.8, 0), 'Barricade');
+    }
+    function sector2(api) {
+      const x = api.tankPos.x;
+      const run = api.run;
+      switch (S.step) {
+        case 0:
+          if (S.t > 1.6 && !api.spotlit) {
+            S.shots = run.boosts;
+            api.prompt('Rockets', api.touch ? 'Tap the <b>rocket</b> button to boost and <b>ram</b> through the barricade!' : 'Press <kbd>Shift</kbd> (or right-click) to fire your rockets and <b>ram</b> through!', { go: true });
+            api.spotlight({ targets: [new THREE.Vector3(58.6, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots, { maxTime: 15 });
+            go(1);
+          }
+          break;
+        case 1:
+          if (x > 61) {
+            api.arrow(null);
+            api.objective('Cross the bridge and destroy all enemies');
+            api.prompt('Contact', 'Machines on the far bank! Rockets ram machines too.', { danger: true, seconds: 5 });
+            api.spawnDog(82, -3);
+            api.spawnDog(83, 2, { delay: 0.4 });
+            api.spawnDog(84.5, 5, { delay: 0.8 });
+            api.spawnDog(44, -4, { delay: 2.5 });
+            api.spawnDog(44, 4, { delay: 3 });
+            go(2);
+          } else if (S.t > 6 && run.boosts > 0 && S.n !== 2) {
+            S.n = 2;
+            api.prompt('Rockets', 'Missed? The rockets recharge in a few seconds. Try again!', { seconds: 5 });
+          }
+          break;
+        case 2:
+          if (x > 79) {
+            api.spawnDog(97.5, -7.5);
+            api.spawnDog(97.5, 7.6, { delay: 0.4 });
+            api.spawnDog(96, 0, { delay: 0.9 });
+            api.spawnDog(92, -3, { delay: 1.5 });
+            go(3);
+          }
+          break;
+        case 3:
+          if (x > 82 && api.enemiesAlive === 0 && S.t > 1) {
+            api.objective('Blow down the checkpoint gate');
+            api.prompt('Main gun', api.touch ? `${CLICK} the gate to fire at it. Two hits bring it down.` : `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
+            api.arrow(gateMark, `${CLICK} to shoot the gate!`);
+            go(4);
+          }
+          break;
+        // 4: waiting for the gate (onImpact)
+        case 5:
+          if (x > GX + 2) {
+            doorB.opening = true;
+            api.objective('Enter the depot');
+            api.prompt('Sector clear', 'Through! Another <b>depot</b> on the left. Patch up before the checkpoint.', { go: true });
+            api.arrow(new THREE.Vector3(110, 1.6, WALK.n + 1), 'Depot');
+            go(6);
+          }
+          break;
+        case 6:
+          if (doorB.open > 0.6 && Math.hypot(x - 110, api.tankPos.z - (WALK.n + 1)) < 3.6) {
+            go(7);
+            const pool = ['twinmg', 'he', 'plating', 'dozer', 'autoloader', 'era'].filter((id) => !run.parts.includes(id));
+            api.depot({ offers: pool.slice(0, 3), onLeave: () => startSector3(api) });
+          }
+          break;
+      }
+    }
+
+    // --------------------------------------------- sector 3: the checkpoint
+    const HOLD = 40;
+    function startSector3(api) {
+      S.sector = 2;
+      go(0);
+      setBounds(B3);
+      api.setBounds(bounds);
+      api.teleport(110, -6.4, -Math.PI / 2);
+      api.sectors(SECTORS, 2);
+      S.hold = HOLD;
+      S.waveT = 1.5;
+      S.n = 0;
+      api.objective(`Hold the checkpoint: 0:${HOLD}`);
+      api.prompt('Sector 3', 'They know we are here. <b>Hold the checkpoint</b> until the street is ours.', { danger: true, seconds: 6 });
+    }
+    function sector3(api, dt) {
+      switch (S.step) {
+        case 0: {
+          S.hold -= dt;
+          S.waveT -= dt;
+          const sec = Math.max(0, Math.ceil(S.hold));
+          api.objective(`Hold the checkpoint: 0:${String(sec).padStart(2, '0')}`);
+          if (S.waveT <= 0 && S.hold > 4 && api.enemiesAlive < 7) {
+            S.waveT = 5.5;
+            S.n++;
+            const k = S.n % 3;
+            if (k === 1) {
+              api.spawnDog(133, -6);
+              api.spawnDog(133, 0, { delay: 0.3 });
+              api.spawnDog(133, 6, { delay: 0.6 });
+            } else if (k === 2) {
+              api.spawnDog(95, -2, { via: [[GX + 3, 0]] });
+              api.spawnDog(95, 2, { delay: 0.4, via: [[GX + 3, 0]] });
+              api.spawnDog(132, 7, { delay: 1 });
+            } else {
+              api.spawnDog(133, -3);
+              api.spawnDog(133, 3, { delay: 0.3 });
+              api.spawnDog(130, -8, { delay: 0.8 });
+              api.spawnDog(95, 0, { delay: 1.2, via: [[GX + 3, 0]] });
+            }
+          }
+          if (S.hold <= 0) {
+            api.objective('Destroy all enemies');
+            go(1);
+          }
+          break;
+        }
+        case 1:
+          if (api.enemiesAlive === 0) {
+            api.objective('Destroy the heavy machine');
+            S.boss = api.spawnHound(134, 0);
+            api.spawnDog(133, -6, { delay: 1.5 });
+            api.spawnDog(133, 6, { delay: 2 });
+            api.boss(S.boss, 'Hound');
+            api.prompt('Warning', 'A <b>heavy machine</b>! Pound it with the cannon. Ram it when it gets close!', { danger: true, seconds: 7 });
+            api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 1.6, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 120 }, () => S.t > 0.5, { maxTime: 2.5 });
+            go(2);
+          }
+          break;
+        case 2:
+          if (!S.boss.alive) {
+            api.prompt('Zone clear', 'The heavy machine is down. <b>Zone 1 is ours.</b>', { go: true });
+            api.objective('');
+            go(3);
+          }
+          break;
+        case 3:
+          if (S.t > 3.2 && api.enemiesAlive === 0) {
+            api.win('Zone 1 cleared');
+            go(4);
+          } else if (S.t > 3.2 && S.n !== -1) {
+            S.n = -1;
+            api.objective('Destroy all enemies');
+          }
+          break;
+      }
+    }
+
+    function script(api, dt) {
+      S.t += dt;
+      if (api.run.mode !== 'field') return;
+      if (S.sector === 0) sector1(api, dt);
+      else if (S.sector === 1) sector2(api, dt);
+      else sector3(api, dt);
     }
     function onImpact(at, mesh, api) {
       if (!hitGate(at, api) || !gate.down) return;
       api.objective('Drive through the gate');
       api.prompt('Breakthrough', 'The gate is down. Drive through!', { seconds: 5 });
       api.arrow(new THREE.Vector3(GX + 5, 0.4, 0), 'Go!');
-      S.step = 8;
+      if (S.sector === 1) go(5);
     }
 
     function update(dt, t, ctx = {}) {
       B.update(dt, t, ctx);
+      depot.update(dt, t, ctx);
       for (const f of flickers) {
+        if (f.e.dead) continue;
         const n = Math.sin(t * (f.fast ? 31 : 13.7) + f.seed) + Math.sin(t * (f.fast ? 47 : 5.3) + f.seed * 0.7);
         const on = n > (f.fast ? -0.2 : -1.2) ? 1 : 0.08;
         f.e.level = on;
         f.p.material.opacity = f.base * on;
-        f.lens.material = on > 0.5 ? glowMat(f.color) : toon(0x2a2b2e);
+        if (f.lens) f.lens.material = on > 0.5 ? glowMat(f.color) : toon(0x2a2b2e);
       }
       const phase = t % 11;
       for (const s of signals) {
@@ -1462,12 +1786,15 @@ function buildAvenue(scene) {
 
     return {
       light,
-      colliders: B.colliders,
-      blocks: B.blocks,
-      emitters: B.emitters,
-      heightAt,
+      colliders,
+      blocks,
+      emitters,
+      crushables: B.crushables,
+      depot,
+      heightAt: (x, z) => (z > 100 ? 0 : heightAt(x, z)),
       spawn: { x: START_X + 7, z: -0.5, yaw: 0 },
-      bounds: { minX: START_X + 2, maxX: GX + 14, minZ: -21, maxZ: 9.9 },
+      bounds,
+      script: S, // for tests
       start,
       onImpact,
       update,

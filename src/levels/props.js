@@ -252,6 +252,7 @@ export function scorch(B, x, z, r) {
   m.rotation.set(-Math.PI / 2, 0, B.rand() * 3);
   m.scale.set(1, 0.6, 1);
   m.position.set(x, 0.025, z);
+  m.userData.soot = true; // stays when the wreck above it is crushed
   B.add(m);
 }
 

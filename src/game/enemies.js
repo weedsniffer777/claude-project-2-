@@ -18,6 +18,27 @@ const DOG = {
   damage: 1.5,
   accuracy: 0.5,
   box: { hx: 0.55, hz: 0.3 },
+  scale: 1,
+  scrap: 3,
+};
+
+// The zone's heavy machine: a hound twice a dog's size that walks in slowly
+// and hoses the tank with long bursts.
+const HOUND = {
+  ...DOG,
+  hp: 600,
+  runSpeed: 3.2,
+  walkSpeed: 1.5,
+  range: 11,
+  tooClose: 6,
+  burst: 7,
+  burstGap: 0.08,
+  reload: 2.0,
+  damage: 1.6,
+  accuracy: 0.55,
+  box: { hx: 1.2, hz: 0.66 },
+  scale: 2.2,
+  scrap: 30,
 };
 
 export class Enemies {
@@ -32,8 +53,16 @@ export class Enemies {
 
   // a dog appears at (x, z), already running toward the tank
   // via: waypoints [[x, z], ...] it runs through first (out of side streets)
-  spawnDog(x, z, { delay = 0, via = [] } = {}) {
+  spawnDog(x, z, opts) {
+    return this.spawn(DOG, 'dog', x, z, opts);
+  }
+  spawnHound(x, z, opts) {
+    return this.spawn(HOUND, 'hound', x, z, opts);
+  }
+
+  spawn(stats, kind, x, z, { delay = 0, via = [] } = {}) {
     const model = createDog();
+    model.group.scale.setScalar(stats.scale);
     model.group.position.set(x, 0, z);
     model.group.visible = delay <= 0;
     this.scene.add(model.group);
@@ -47,11 +76,13 @@ export class Enemies {
     hit.userData.noDecal = true;
     model.group.add(hit);
     const e = {
-      kind: 'dog',
+      kind,
+      stats,
       model,
       hit,
       pos: model.group.position,
-      hp: DOG.hp,
+      hp: stats.hp,
+      maxHp: stats.hp,
       alive: true,
       delay,
       fireTimer: 0.6 + Math.random() * 0.8,
@@ -93,7 +124,7 @@ export class Enemies {
   }
 
   aimPoint(e) {
-    return new THREE.Vector3(e.pos.x, 0.65, e.pos.z);
+    return new THREE.Vector3(e.pos.x, 0.65 * e.stats.scale, e.pos.z);
   }
 
   // Returns true when this killed it. blastFrom: a heavy hit that blows the
@@ -113,8 +144,40 @@ export class Enemies {
     e.model.kill();
     e.hit.removeFromParent();
     this.killed++;
-    this.combat.machineDeath(new THREE.Vector3(e.pos.x, 0.6, e.pos.z));
+    this.combat.machineDeath(new THREE.Vector3(e.pos.x, 0.6 * e.stats.scale, e.pos.z));
+    if (e.stats.scale > 1.5) {
+      // the big one goes up in a chain of blasts
+      for (let i = 0; i < 3; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 2, 0.8 + Math.random(), e.pos.z + (Math.random() - 0.5) * 1.5));
+    }
     if (blastFrom) this.shatter(e, blastFrom);
+    this.onKill?.(e, !!blastFrom);
+  }
+
+  // Ram: machines the tank's box touches take damage and are thrown aside.
+  // Returns [{ e, amount, killed }].
+  ram(tankBox, amount, tankVel) {
+    const hits = [];
+    const now = performance.now();
+    for (const e of this.list) {
+      if (!e.alive || e.delay > 0 || (e.rammedAt && now - e.rammedAt < 500)) continue;
+      const r = e.stats.box.hx + 0.3;
+      // tank-local position of the machine
+      const dx = e.pos.x - tankBox.x;
+      const dz = e.pos.z - tankBox.z;
+      const c = Math.cos(tankBox.yaw);
+      const sn = Math.sin(tankBox.yaw);
+      const lx = dx * c - dz * sn;
+      const lz = dx * sn + dz * c;
+      if (Math.abs(lx) > tankBox.hx + r || Math.abs(lz) > tankBox.hz + r) continue;
+      e.rammedAt = now;
+      const killed = this.damage(e, amount, e.stats.scale < 1.5 ? new THREE.Vector3(tankBox.x, 0, tankBox.z) : null);
+      if (!killed) {
+        e.pos.x += tankVel.x * 0.12 + Math.sign(lz || 1) * -sn * 1.2;
+        e.pos.z += tankVel.z * 0.12 + Math.sign(lz || 1) * -c * 1.2;
+      }
+      hits.push({ e, amount, killed });
+    }
+    return hits;
   }
 
   // Blow a machine into its parts: every mesh becomes a loose piece thrown
@@ -194,6 +257,7 @@ export class Enemies {
         e.model.update(dt, t);
         continue;
       }
+      const DOG = e.stats;
       const dx = tankPos.x - e.pos.x;
       const dz = tankPos.z - e.pos.z;
       const dist = Math.hypot(dx, dz) || 1;
@@ -250,9 +314,10 @@ export class Enemies {
         const ox = e.pos.x - o.pos.x;
         const oz = e.pos.z - o.pos.z;
         const d = Math.hypot(ox, oz);
-        if (d < 1.1 && d > 0.001) {
-          e.pos.x += (ox / d) * (1.1 - d) * 0.5;
-          e.pos.z += (oz / d) * (1.1 - d) * 0.5;
+        const min = 0.55 * (e.stats.scale + o.stats.scale);
+        if (d < min && d > 0.001) {
+          e.pos.x += (ox / d) * (min - d) * 0.5;
+          e.pos.z += (oz / d) * (min - d) * 0.5;
         }
       }
       const moved = Math.hypot(e.pos.x - before.x, e.pos.z - before.z);
@@ -295,6 +360,7 @@ export class Enemies {
             : new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 5, 0.05, tankPos.z + (Math.random() - 0.5) * 5);
           this.combat.enemyShot(from, to, hit);
           if (hit) ctx.onTankHit?.(DOG.damage, to);
+          if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
         }
       }
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;

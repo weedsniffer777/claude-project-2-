@@ -109,8 +109,12 @@ export class LevelBuilder {
     group.traverse((m) => m.isMesh && this.colliders.push(m));
     return group;
   }
+  // Blocks and emitters are given in the root's frame like everything else
+  // (the root may be offset, as the depot's is), and stored in world space.
   block(x, z, hx, hz, yaw = 0) {
-    this.blocks.push({ x, z, hx, hz, yaw });
+    const b = { x: x + this.root.position.x, z: z + this.root.position.z, hx, hz, yaw };
+    this.blocks.push(b);
+    return b;
   }
   // invisible box that shells burst on (for heaps made of instanced pieces)
   hitBox(x, y, z, w, h, d, yaw = 0) {
@@ -123,7 +127,7 @@ export class LevelBuilder {
     return m;
   }
   emit(pos, color, intensity, distance = 9, extra = {}) {
-    const e = { pos: pos.clone(), color: new THREE.Color(color), intensity, distance, level: 1, ...extra };
+    const e = { pos: pos.clone().add(this.root.position), color: new THREE.Color(color), intensity, distance, level: 1, ...extra };
     this.emitters.push(e);
     return e;
   }
@@ -247,6 +251,9 @@ export class LevelBuilder {
   // its exact shape (and craters still land on it).
   mergeStatic() {
     this.root.updateMatrixWorld(true);
+    // baked into the root's own frame (a root can sit anywhere in the world)
+    const toRoot = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
+    const local = new THREE.Matrix4();
     const solid = new Set(this.colliders);
     const hidden = new THREE.MeshBasicMaterial({ visible: false });
     const buckets = new Map();
@@ -287,7 +294,7 @@ export class LevelBuilder {
           g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
         }
         g.clearGroups();
-        g.applyMatrix4(o.matrixWorld);
+        g.applyMatrix4(local.multiplyMatrices(toRoot, o.matrixWorld));
         b.geos.push(g);
         if (solid.has(o)) {
           o.material = hidden;
@@ -302,7 +309,8 @@ export class LevelBuilder {
         const a = new THREE.Vector3();
         const step = o.isLineSegments ? 2 : 1;
         for (let i = 0; i < pos.count - 1; i += step) {
-          out.push(a.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).clone(), a.fromBufferAttribute(pos, i + 1).applyMatrix4(o.matrixWorld).clone());
+          local.multiplyMatrices(toRoot, o.matrixWorld);
+          out.push(a.fromBufferAttribute(pos, i).applyMatrix4(local).clone(), a.fromBufferAttribute(pos, i + 1).applyMatrix4(local).clone());
         }
         remove.push(o);
       }
@@ -320,5 +328,119 @@ export class LevelBuilder {
 
   update(dt, t, ctx) {
     for (const f of this.animated) f(dt, t, ctx);
+  }
+
+  // Something the tank can drive through: everything `build()` adds (meshes,
+  // batched pieces, blocks, shell colliders, light emitters) is gathered into
+  // one prop that the game breaks, flattens or knocks over on contact.
+  //  kind: 'prop' (bursts into debris and is gone), 'car' (flattens and
+  //  stays), 'pole' (topples over at `pivot`, its light dies)
+  //  heavy: only a rocket ram (or a dozer blade) gets through it
+  //  footprint: { x, z, hx, hz, yaw } for contact when it has no block
+  crushable(build, { kind = 'prop', heavy = false, pivot = null, footprint = null, scrap = 0 } = {}) {
+    const n0 = this.root.children.length;
+    const b0 = this.blocks.length;
+    const c0 = this.colliders.length;
+    const e0 = this.emitters.length;
+    const p0 = this.pieces.length;
+    const l0 = this.lumps.length;
+    build();
+    const g = new THREE.Group();
+    if (pivot) g.position.set(pivot.x, pivot.y ?? 0, pivot.z);
+    this.root.add(g);
+    const fx = []; // transparent bits (light pools, soot): stay put, hidden on crush
+    for (const o of this.root.children.slice(n0)) {
+      if (o === g) continue;
+      if (o.isMesh && o.material.transparent) fx.push(o);
+      else g.attach(o);
+    }
+    // batched pieces made during build() become real meshes of this prop
+    const asMesh = (p, geo) => {
+      const m = new THREE.Mesh(geo, toon(p.color));
+      m.position.set(p.x, p.y, p.z);
+      m.rotation.set(p.rx, p.ry, p.rz);
+      m.scale.set(p.w, p.h, p.d);
+      m.castShadow = m.receiveShadow = true;
+      g.attach(m);
+    };
+    for (const p of this.pieces.splice(p0)) asMesh(p, (this.unitBox ||= new THREE.BoxGeometry(1, 1, 1)));
+    for (const p of this.lumps.splice(l0)) asMesh(p, (this.unitLump ||= new THREE.IcosahedronGeometry(1, 0)));
+    const blocks = this.blocks.slice(b0);
+    const colliders = this.colliders.slice(c0);
+    const emitters = this.emitters.slice(e0);
+    // colours for the debris it bursts into
+    const colors = [];
+    g.traverse((m) => m.isMesh && m.material.color && m.material.visible !== false && colors.push(m.material.color.getHex()));
+    mergeProp(g, new Set(colliders));
+    this.keep(g);
+    let fp = footprint;
+    if (!fp && blocks.length) fp = blocks[0];
+    if (!fp) {
+      const bb = new THREE.Box3().setFromObject(g);
+      fp = { x: (bb.min.x + bb.max.x) / 2, z: (bb.min.z + bb.max.z) / 2, hx: Math.max(0.2, (bb.max.x - bb.min.x) / 2), hz: Math.max(0.2, (bb.max.z - bb.min.z) / 2), yaw: 0 };
+    }
+    const c = { kind, heavy, group: g, blocks, colliders, emitters, fx, colors, footprint: fp, scrap, done: false };
+    (this.crushables ||= []).push(c);
+    return c;
+  }
+}
+
+// Bake a prop's meshes into one vertex-coloured mesh (plus one per textured
+// material, plus one for glowing parts), in the prop's own frame, so a
+// crushable costs a draw call or two instead of dozens. Shell colliders stay
+// as invisible copies for exact hits.
+function mergeProp(g, solid) {
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+  const buckets = new Map();
+  const remove = [];
+  const hidden = new THREE.MeshBasicMaterial({ visible: false });
+  const m4 = new THREE.Matrix4();
+  g.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || o.material.visible === false || o.material.transparent || o.material.alphaTest) return;
+    const mat = o.material;
+    let key;
+    let tint = null;
+    if (mat.isMeshToonMaterial && !mat.map) {
+      key = `toon|${o.castShadow}`;
+      tint = mat.color;
+    } else if (mat.isMeshBasicMaterial && !mat.map) {
+      key = 'glow';
+      tint = mat.color;
+    } else key = mat.uuid;
+    if (!buckets.has(key)) buckets.set(key, { mat, tint: !!tint, cast: o.castShadow, geos: [] });
+    let geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const name of Object.keys(geo.attributes)) if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
+    if (!geo.attributes.uv) geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(geo.attributes.position.count * 2), 2));
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    if (tint) {
+      const n = geo.attributes.position.count;
+      const col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) col.set([tint.r, tint.g, tint.b], i * 3);
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    }
+    geo.clearGroups();
+    geo.applyMatrix4(m4.multiplyMatrices(inv, o.matrixWorld));
+    buckets.get(key).geos.push(geo);
+    if (solid.has(o)) {
+      o.material = hidden;
+      o.castShadow = o.receiveShadow = false;
+    } else remove.push(o);
+  });
+  for (const o of remove) o.removeFromParent();
+  // drop now-empty groups
+  const empty = [];
+  g.traverse((o) => o !== g && !o.isMesh && !o.isLine && o.children.length === 0 && empty.push(o));
+  for (const o of empty) o.removeFromParent();
+  for (const [key, b] of buckets) {
+    if (!b.geos.length) continue;
+    let material = b.mat;
+    if (key === 'glow') material = new THREE.MeshBasicMaterial({ vertexColors: true });
+    else if (b.tint) material = (mergeProp.vtoon ||= new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }));
+    const m = new THREE.Mesh(mergeGeometries(b.geos, false), material);
+    m.castShadow = key === 'glow' ? false : b.cast;
+    m.receiveShadow = key !== 'glow';
+    if (key === 'glow') m.userData.glow = true;
+    g.add(m);
   }
 }

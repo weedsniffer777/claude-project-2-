@@ -18,8 +18,8 @@ export class CombatFx {
     this.scene = scene;
     this.fx = new Fx(scene, 220);
     this.glow = new Glow(scene);
-    this.puffs = new Puffs(scene, 280);
-    this.debris = new Debris(scene);
+    this.puffs = new Puffs(scene, 380);
+    this.debris = new Debris(scene, 160);
     this.craters = new Craters(scene);
     this.shells = [];
     this.purges = [];
