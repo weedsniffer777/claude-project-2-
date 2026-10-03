@@ -621,7 +621,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
     setTouch(false);
     if (e.button === 0) fire();
-    if (e.button === 2) boost();
   };
   const onContext = (e) => e.preventDefault();
   const onUp = (e) => {
@@ -833,7 +832,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     let best = null;
     let bd = stats.mgRange ** 2;
     for (const e of enemies.alive) {
-      if (e === first) continue;
+      if (e === first || !e.los) continue;
       const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
       if (d < bd) {
         bd = d;
@@ -1119,8 +1118,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
 
       // machines
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, heightAt: level.heightAt, onTankHit: tankHit });
-      const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange);
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit });
+      // the roof MG only takes machines it can see (not through trams and walls)
+      const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
       mgActive = !!mgTarget;
 
@@ -1199,6 +1199,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // for tests and dev tools
     debug: (debug = {
       boostPicture: (...a) => boostPicture(...a).toDataURL(),
+      sightHits(a, b) {
+        const A = new THREE.Vector3(...a);
+        const d = new THREE.Vector3(...b).sub(A);
+        const r = new THREE.Raycaster(A, d.clone().normalize(), 0, d.length());
+        return r.intersectObjects(colliders, false).map((h) => ({ d: h.distance.toFixed(2), p: h.point.toArray().map((v) => v.toFixed(2)), geo: h.object.geometry.type, pos: h.object.getWorldPosition(new THREE.Vector3()).toArray().map((v) => v.toFixed(1)), vis: h.object.material.visible }));
+      },
       tank,
       skipRender: false,
       timeScale: 0,

@@ -196,8 +196,9 @@ export function buildDepotRoom(scene) {
   // ---------------------------------------------------------- pallets
   const PAD_X = 19;
   const pads = [-5.6, 0, 5.6].map((z) => {
-    for (let i = 0; i < 3; i++) B.piece(1.7, 0.08, 0.32, 0x7a5f3e, PAD_X, 0.16, z - 0.6 + i * 0.6);
-    for (const dz of [-0.7, 0, 0.7]) B.piece(1.7, 0.12, 0.14, 0x5c472e, PAD_X, 0.06, z + dz);
+    // (slats and runners never share a face: no flicker)
+    for (let i = 0; i < 3; i++) B.piece(1.7, 0.08, 0.32, 0x7a5f3e, PAD_X, 0.165, z - 0.6 + i * 0.6);
+    for (const dz of [-0.62, 0, 0.62]) B.piece(1.56, 0.12, 0.14, 0x5c472e, PAD_X, 0.06, z + dz);
     // hanging lamp over each pallet
     B.line([at(PAD_X, H, z).sub(O), new THREE.Vector3(PAD_X, 3.4, z)]);
     put(B.root, cyl(0.3, 0.18, 0x2e3034, { seg: 8, radiusEnd: 0.12 }), PAD_X, 3.3, z);
@@ -270,7 +271,11 @@ export function buildDepotRoom(scene) {
   B.chunk(2.6, 0.12, 0.9, 0x6b5640, 20.5, 1.0, -8.2);
   for (const x of [19.4, 21.6]) B.piece(0.1, 1.0, 0.8, 0x45484c, x, 0.5, -8.2);
   B.block(20.5, -8.2, 1.3, 0.45);
-  for (let i = 0; i < 6; i++) B.piece(0.3 + rand() * 0.4, 0.2 + rand() * 0.3, 0.3, [0x3c5a7a, 0x6b6f72, 0xc99a2e][i % 3], 19.8 + i * 0.3, 1.2, -8.3);
+  // things on the bench, spaced apart (no two share a face)
+  for (let i = 0; i < 5; i++) {
+    const h = 0.16 + rand() * 0.26;
+    B.piece(0.26 + rand() * 0.08, h, 0.24 + i * 0.013, [0x3c5a7a, 0x6b6f72, 0xc99a2e][i % 3], 19.6 + i * 0.44, 1.06 + h / 2, -8.25 + (i % 2) * 0.07, 0, (rand() - 0.5) * 0.3, 0);
+  }
   for (const x of [23.5, 24.8]) {
     B.chunk(1.1, 2.8, 0.5, 0x4f5a55, x, 1.4, -8.5);
     for (let k = 0; k < 4; k++) B.piece(1.0, 0.05, 0.5, 0x3a3c3f, x, 0.5 + k * 0.7, -8.4);

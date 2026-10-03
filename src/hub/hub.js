@@ -106,12 +106,13 @@ const CSS = `
 .base-fit svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .base-fit .head { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); padding: 10px 16px; display: flex; gap: 14px; align-items: center; pointer-events: auto; }
 .base-fit .head h2 { font-size: 16px; }
+.base-fit .fit-back { position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); pointer-events: auto; }
 .base-fit .part { position: absolute; transform: translate(-50%, -50%); width: 112px; padding: 6px 6px 8px; display: grid; gap: 4px; justify-items: center; pointer-events: auto; cursor: var(--cursor);
   background: rgba(12, 11, 13, 0.9); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font: 400 10px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; text-align: center; border: 0; }
 .base-fit .part:hover, .base-fit .part.on { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .base-fit .part img { width: 84px; height: 56px; image-rendering: pixelated; }
 .base-fit .part.add { color: var(--amber); }
-.base-fit .note { position: absolute; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 13px; color: #b9b0a0; text-align: center; max-width: min(460px, calc(100vw - 32px)); }
+.base-fit .note { position: absolute; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 8px 14px; font-size: 13px; color: #b9b0a0; text-align: center; max-width: min(460px, calc(100vw - 32px)); }
 .base-fit .pop { position: absolute; padding: 8px; display: grid; gap: 6px; pointer-events: auto; z-index: 2; }
 .base-fit .pop button { display: flex; gap: 8px; align-items: center; padding: 4px 8px 4px 4px; border: 0; cursor: var(--cursor); background: #1d1b1e; color: #f1e9d8; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; box-shadow: 0 0 0 2px #000; }
 .base-fit .pop button:hover { background: #2a2628; color: var(--amber); }
@@ -413,13 +414,29 @@ export function createHub({ renderer, pixel, onDeploy }) {
     g.rotation.y = yaw;
     return B.add(g);
   };
-  const shell = (x, z, yaw, up = false) => {
+  // one round: a brass case, a dark green-grey projectile with a pointed
+  // nose and a copper driving band, lying along local +x
+  const round = (parent, x, y, z) => {
+    put(parent, cyl(0.075, 0.46, 0xb08a3e, { axis: 'x', seg: 10 }), x, y, z);
+    put(parent, cyl(0.08, 0.03, 0x8a6a2e, { axis: 'x', seg: 10 }), x - 0.23, y, z); // rim
+    put(parent, cyl(0.068, 0.04, 0xa0603a, { axis: 'x', seg: 10 }), x + 0.25, y, z); // driving band
+    put(parent, cyl(0.066, 0.16, 0x4a5240, { axis: 'x', seg: 10 }), x + 0.35, y, z);
+    put(parent, cyl(0.064, 0.16, 0x4a5240, { axis: 'x', seg: 10, radiusEnd: 0.012 }), x + 0.51, y, z); // the nose (narrow end out along +x)
+  };
+  // a steel rack of rounds, three tiers, noses out
+  const ammoRack = (x, z, yaw) => {
     const g = new THREE.Group();
-    put(g, cyl(0.06, 0.6, 0xb08a3e, { seg: 8 }), 0, 0.3, 0);
-    put(g, cyl(0.055, 0.2, 0x3f4144, { seg: 8, radiusEnd: 0.015 }), 0, 0.7, 0);
-    g.position.set(x, up ? 0 : 0.06, z);
-    if (!up) g.rotation.set(0, yaw, Math.PI / 2);
-    return B.add(g);
+    for (const sx of [-0.45, 0.25]) for (const sz of [-0.42, 0.42]) put(g, box(0.05, 1.1, 0.05, 0x3a3c3f), sx, 0.55, sz);
+    for (let t = 0; t < 3; t++) {
+      const y = 0.22 + t * 0.32;
+      for (const sx of [-0.45, 0.25]) put(g, box(0.06, 0.04, 0.9, 0x45484c), sx, y - 0.09, 0);
+      for (let k = 0; k < 5; k++) if (!(t === 2 && k > 2)) round(g, -0.12, y, -0.32 + k * 0.16);
+    }
+    g.position.set(x, 0, z);
+    g.rotation.y = yaw;
+    B.add(g);
+    B.block(x, z, 0.5, 0.5);
+    return g;
   };
   const roadWheel = (x, y, z, yaw = 0, lean = 0) => {
     const g = new THREE.Group();
@@ -565,8 +582,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     ammoBox(22.6, -4.8, 0.05, false).position.y = 0.36;
     ammoBox(21.2, -5.3, 1.4);
     B.block(22.4, -5.1, 0.9, 0.7);
-    for (let i = 0; i < 6; i++) shell(20.2 + (i % 3) * 0.16, -4.2 - (i >> 1) * 0.12, 0, true);
-    shell(20.9, -3.7, 0.4);
+    ammoRack(20.3, -3.8, -Math.PI / 2);
     for (let i = 0; i < 3; i++) roadWheel(23.6, 0.44, 4.6 + i * 0.5, Math.PI / 2, -0.25);
     roadWheel(22.6, 0.08, 6.4, 0, -Math.PI / 2);
     roadWheel(22.6, 0.24, 6.4, 0.6, -Math.PI / 2);
@@ -854,7 +870,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     ${ROOMS.map((r) => `<div class="base-tag" data-id="${r.id}">${r.name}</div>`).join('')}
     <div class="base-menu panel" hidden></div>
     <div class="base-brief" hidden></div>
-    <div class="base-fit" hidden><svg></svg><div class="head panel"><h2>${TANK.name}</h2><button type="button" class="back">Back</button></div><div class="boxes"></div><div class="note panel" hidden></div></div>
+    <div class="base-fit" hidden><svg></svg><div class="head panel"><h2>${TANK.name}</h2></div><button type="button" class="back fit-back">Back</button><div class="boxes"></div><div class="note panel" hidden></div></div>
     <div class="base-hint panel">Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
@@ -1042,7 +1058,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     const add = fitItems.find((it) => !it.anchor);
     if (add) {
       add.el.style.left = `${Math.round(cx)}px`;
-      add.el.style.top = `${Math.round(Math.min(rect.bottom - 80, cy + 190))}px`;
+      add.el.style.top = `${Math.round(Math.min(rect.bottom - 130, cy + 190))}px`;
     }
     fitSvg.innerHTML = lines;
   }

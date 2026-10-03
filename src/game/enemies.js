@@ -60,6 +60,20 @@ const funnelGeo = (() => {
 // against the machines' own red glow
 const funnelEdgeGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, -0.5), new THREE.Vector3(1, 0, 0.5)]);
 
+// Line of sight through the level's solid shapes (walls, trams, containers,
+// wrecks): is anything in the way between a and b?
+const losRay = new THREE.Raycaster();
+const losDir = new THREE.Vector3();
+export function sightBlocked(a, b, colliders) {
+  if (!colliders?.length) return false;
+  losDir.subVectors(b, a);
+  const len = losDir.length();
+  if (len < 0.5) return false;
+  losRay.set(a, losDir.divideScalar(len));
+  losRay.far = len - 0.4;
+  return losRay.intersectObjects(colliders, false).length > 0;
+}
+
 export class Enemies {
   constructor(scene, combat) {
     this.scene = scene;
@@ -117,6 +131,8 @@ export class Enemies {
       speed: 0,
       via: via.map(([wx, wz]) => ({ x: wx, z: wz })),
       noclip,
+      los: false, // can it see the tank (and the tank it)?
+      losT: Math.random() * 0.25,
     };
     hit.userData.enemy = e;
     // the firing funnel, on the ground in front of it
@@ -144,11 +160,11 @@ export class Enemies {
   }
 
   // Nearest live machine within range of p (for the roof MG).
-  nearest(p, range) {
+  nearest(p, range, needSight = false) {
     let best = null;
     let bestD = range * range;
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0) continue;
+      if (!e.alive || e.delay > 0 || (needSight && !e.los)) continue;
       const d = (e.pos.x - p.x) ** 2 + (e.pos.z - p.z) ** 2;
       if (d < bestD) {
         bestD = d;
@@ -302,6 +318,14 @@ export class Enemies {
       const dist = Math.hypot(dx, dz) || 1;
       const tx = dx / dist;
       const tz = dz / dist;
+      // line of sight to the tank, checked a few times a second
+      e.losT -= dt;
+      if (e.losT <= 0) {
+        e.losT = 0.25;
+        const gy = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
+        const ty = ctx.heightAt ? ctx.heightAt(tankPos.x, tankPos.z) : 0;
+        e.los = !sightBlocked(new THREE.Vector3(e.pos.x, gy + 0.9 * e.stats.scale, e.pos.z), new THREE.Vector3(tankPos.x, ty + 1.0, tankPos.z), ctx.colliders);
+      }
 
       // where to go: close in to rifle range, then circle-strafe; back off
       // if the tank gets too close
@@ -316,9 +340,10 @@ export class Enemies {
         vx = wx;
         vz = wz;
         speed = DOG.runSpeed;
-      } else if (dist > DOG.range) {
-        vx = tx;
-        vz = tz;
+      } else if (dist > DOG.range || !e.los) {
+        // closing in, or something's in the way: keep moving, edging round it
+        vx = tx + (e.los ? 0 : -tz * e.strafe * 0.9);
+        vz = tz + (e.los ? 0 : tx * e.strafe * 0.9);
         speed = DOG.runSpeed;
       } else {
         e.strafeTimer -= dt;
@@ -388,7 +413,11 @@ export class Enemies {
       // they miss.
       e.recoil = Math.max(0, e.recoil - dt * 8);
       e.fireTimer -= dt;
-      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5) {
+      if (e.windup > 0 && !e.los) {
+        e.windup = 0; // lost sight of it: no shot (never fires into a wall)
+        e.fireTimer = 0.3;
+      }
+      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5 && e.los) {
         e.windup = DOG.windup;
         const lead = ctx.tankVel || { x: 0, z: 0 };
         e.lock = new THREE.Vector3(tankPos.x + lead.x * 0.2, 0, tankPos.z + lead.z * 0.2);
@@ -442,8 +471,24 @@ export class Enemies {
     const tb = ctx.tankBox;
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
+      const prev = b.pos.clone();
       b.pos.addScaledVector(b.vel, dt);
       b.life -= dt;
+      // a round stops on anything solid in its way
+      if (ctx.colliders?.length) {
+        losDir.subVectors(b.pos, prev);
+        const step = losDir.length();
+        if (step > 0) {
+          losRay.set(prev, losDir.divideScalar(step));
+          losRay.far = step;
+          const wall = losRay.intersectObjects(ctx.colliders, false)[0];
+          if (wall) {
+            this.combat.fx.burst(wall.point, { count: 4, speed: 3, color: 0xffb08a, life: 0.2, size: 0.06, gravity: 9 });
+            this.bolts.splice(i, 1);
+            continue;
+          }
+        }
+      }
       // a long bright streak with a hot core, so a round in flight is easy to
       // see (and to dodge)
       const tail = b.pos.clone().addScaledVector(b.vel, -0.055);

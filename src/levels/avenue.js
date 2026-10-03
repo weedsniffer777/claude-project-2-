@@ -1963,7 +1963,7 @@ function buildAvenue(scene) {
             api.giveRockets();
             S.shots = run.boosts;
             api.objective('Break through the barricade');
-            api.prompt('Boost', api.touch ? '<b>Boost</b> online! Tap the boost button to ram that barricade down, or shell it.' : '<b>Boost</b> online! Press <kbd>Shift</kbd> (or right-click) to ram that barricade down, or shell it.', { go: true });
+            api.prompt('Boost', api.touch ? 'Tap the <b>boost</b> button to ram the barricade, or shoot to destroy it!' : 'Press <kbd>Shift</kbd> to <b>boost</b> and ram the barricade, or shoot to destroy it!', { go: true });
             api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Break it!');
             S.n = run.shots;
             api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || run.shots > S.n || barricadeParts.some((c) => c.done));
@@ -1980,9 +1980,6 @@ function buildAvenue(scene) {
             api.spawnDog(96.5, 5, { delay: 0.8 });
             api.spawnDog(92, -6, { delay: 1.2 });
             go(2);
-          } else if (S.t > 6 && run.boosts > 0 && S.n !== -2) {
-            S.n = -2;
-            api.prompt('Boost', 'Missed? Boost recharges in a few seconds. Line up and try again!', { seconds: 5 });
           }
           break;
         case 2:

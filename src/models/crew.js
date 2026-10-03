@@ -2,7 +2,7 @@
 // figure ("Stickman Low Poly" by studentsimf, CC-BY-4.0, see CREDITS.md),
 // dressed here: coloured by bone (olive jacket, dark trousers and boots,
 // gloves), with a padded tanker's helmet (ribs, ear pads, goggles pushed up),
-// a fur collar, a belt and a map case added onto its bones. No face.
+// a belt and a map case added onto its bones. No face.
 //
 // Animated in code: a walk/jog cycle locked to the distance covered (no
 // foot sliding), arms swinging opposite the legs with bent elbows, a bob and
@@ -33,7 +33,6 @@ const C = {
   rib: 0x24211d,
   pad: 0x1c1a18,
   goggles: 0x8fa4a8,
-  fur: 0xa48a66,
   belt: 0x4a3a2a,
   brass: 0xb08a3e,
 };
@@ -122,11 +121,7 @@ function dress(bone) {
       at(g, new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 4, 10), toonMat(C.goggles)), 0, 9, 0);
     }
   }
-  // fur collar round the neck, the belt with its buckle, a map case on its
-  // strap, two chest pockets
-  const collar = at(bone.chest, mesh(new THREE.TorusGeometry(52, 18, 6, 14), C.fur), 0, 38, 2);
-  collar.rotation.x = Math.PI / 2;
-  collar.scale.set(1.1, 1, 1);
+  // the belt with its buckle, a map case on its strap, two chest pockets
   const belt = at(bone.hips, mesh(new THREE.TorusGeometry(66, 11, 4, 16), C.belt), 0, 12, 0);
   belt.rotation.x = Math.PI / 2;
   belt.scale.set(1.04, 0.92, 1);
