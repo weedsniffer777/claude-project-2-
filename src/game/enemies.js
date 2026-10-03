@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
 import { pushOut } from './collide.js';
+import { ENEMY_LAYER } from '../render/pixel.js';
 
 const DOG = {
   hp: 24,
@@ -36,6 +37,10 @@ export class Enemies {
     model.group.position.set(x, 0, z);
     model.group.visible = delay <= 0;
     this.scene.add(model.group);
+    // solid parts go into the team mask for the red outline
+    model.group.traverse((o) => {
+      if (o.isMesh && !o.material.transparent && !o.userData.outline) o.layers.enable(ENEMY_LAYER);
+    });
     // invisible box shells and the aim ray can hit
     const hit = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.7), this.hitMat);
     hit.position.y = 0.55;
@@ -104,6 +109,7 @@ export class Enemies {
 
   kill(e, blastFrom = null) {
     e.alive = false;
+    e.model.group.traverse((o) => o.layers.disable(ENEMY_LAYER)); // wrecks lose the outline
     e.model.kill();
     e.hit.removeFromParent();
     this.killed++;

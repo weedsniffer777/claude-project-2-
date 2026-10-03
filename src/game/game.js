@@ -13,8 +13,10 @@ import { LEVELS } from '../levels/index.js';
 import { Enemies } from './enemies.js';
 import { createHud } from './hud.js';
 import { pushOut } from './collide.js';
+import { PLAYER_LAYER } from '../render/pixel.js';
 
 const VIEW_H = 13; // world units visible vertically
+const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
 // ~30 deg down; tank forward runs up-right on screen. The camera sits far
 // back along this line (orthographic, so distance doesn't change the view)
 // so tall foreground props never cross the near plane.
@@ -43,6 +45,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   injectDevKitStyles();
   const canvas = renderer.domElement;
   const tank = createTank();
+  // the tank is drawn into the team mask for its outline (solid parts only)
+  tank.group.traverse((o) => {
+    if ((o.isMesh || o.isInstancedMesh) && !o.material.transparent) o.layers.enable(PLAYER_LAYER);
+  });
   const hud = createHud();
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const camTarget = new THREE.Vector3();
@@ -337,6 +343,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.addEventListener('pointerup', onUp);
       canvas.addEventListener('pointercancel', onUp);
       canvas.style.cursor = run.over ? '' : 'none';
+      pixel.setActorOutlines(true);
+      pixel.setHeight(PIXEL_ROWS); // the model viewer may have changed it
       hud.mount();
     },
     exit() {
@@ -350,6 +358,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       canvas.removeEventListener('pointercancel', onUp);
       onUp({ pointerId: stick.id });
       canvas.style.cursor = '';
+      pixel.setActorOutlines(false);
       keys.clear();
       hud.unmount();
     },

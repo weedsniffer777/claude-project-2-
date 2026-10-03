@@ -14,13 +14,14 @@ if (params.has('shot')) document.body.classList.add('dk-shot');
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;
 const game = createGame({ renderer, pixel, level: params.get('level') });
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
-// Quality tiers. Auto starts phones one tier down and steps down whenever the
+// The pixel grid is part of the art: always 540 rows, whatever the screen.
+// Quality tiers only trade shadow detail and lamp lights. Auto starts phones one tier down and steps down whenever the
 // frame rate stays low; it never steps back up (no flicker between tiers).
 const TIERS = [
-  { name: 'High', pixel: 540, shadow: 2048, lamps: 6 },
-  { name: 'Medium', pixel: 450, shadow: 1024, lamps: 4 },
-  { name: 'Low', pixel: 360, shadow: 1024, lamps: 2 },
-  { name: 'Potato', pixel: 270, shadow: 512, lamps: 0 },
+  { name: 'High', shadow: 2048, lamps: 6 },
+  { name: 'Medium', shadow: 1024, lamps: 4 },
+  { name: 'Low', shadow: 1024, lamps: 2 },
+  { name: 'Potato', shadow: 512, lamps: 0 },
 ];
 const mobile = matchMedia('(pointer: coarse)').matches;
 let autoQuality = true;
@@ -30,7 +31,6 @@ function setTier(i) {
   if (i === tier) return;
   tier = i;
   const q = TIERS[i];
-  pixel.setHeight(q.pixel);
   game.setQuality(q);
 }
 setTier(params.has('quality') ? +params.get('quality') : mobile ? 1 : 0);
