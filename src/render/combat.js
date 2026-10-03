@@ -2,15 +2,25 @@
 // shell, muzzle blast and explosion, the roof MG's tracers and brass, and
 // camera shake. One instance per scene.
 import * as THREE from 'three';
-import { Fx, Glow } from './fx.js';
+import { Fx, Glow, Puffs, Debris, Craters } from './fx.js';
 
 const SHELL_SPEED = 90; // near-instant: a bright streak, not a lobbed ball
+
+// Two unit vectors perpendicular to d (for rings and fans around a direction).
+function basis(d) {
+  const u = new THREE.Vector3().crossVectors(d, Math.abs(d.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+  const v = new THREE.Vector3().crossVectors(u, d).normalize();
+  return { u, v };
+}
 
 export class CombatFx {
   constructor(scene) {
     this.scene = scene;
     this.fx = new Fx(scene, 220);
     this.glow = new Glow(scene);
+    this.puffs = new Puffs(scene);
+    this.debris = new Debris(scene);
+    this.craters = new Craters(scene);
     this.shells = [];
     this.shake = 0;
     this.offset = new THREE.Vector3();
@@ -21,42 +31,101 @@ export class CombatFx {
   fireCannon(tank, aimPoint) {
     const shot = tank.fire();
     if (!shot) return false;
-    const { fx, glow } = this;
-    const { position, direction } = shot;
-    glow.flash(position, 0xfff4cf, 0.15, 0.7, 0.07);
-    glow.flash(position, 0xffa640, 0.3, 1.35, 0.14);
-    glow.flash(position.clone().addScaledVector(direction, 0.7), 0xffc35a, 0.2, 0.75, 0.1);
-    glow.light(position, 0xffa24a, 45, 0.16);
-    fx.burst(position, { count: 10, speed: 5, color: 0xffd060, life: 0.16, size: 0.13 });
-    fx.burst(position, { count: 12, speed: 2.4, color: 0x8b9099, glow: false, life: 1.3, size: 0.28, grow: 0.9, gravity: -0.6 });
-    fx.burst(new THREE.Vector3(position.x, 0.08, position.z), { count: 10, speed: 2.5, color: 0x9a8a6a, glow: false, life: 0.8, size: 0.2, grow: 0.8, gravity: -0.2 });
+    const { glow, puffs, fx } = this;
+    const { position: m, direction: d } = shot;
+    const { u, v } = basis(d);
+
+    // starburst: one long blade forward, shorter blades fanning out
+    glow.flash(m, 0xfff6d6, 0.12, 0.55, 0.05);
+    glow.flash(m, 0xffb347, 0.25, 1.0, 0.1);
+    glow.spike(m, d, 0xfff0b0, 2.2, 0.26, 0.09);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.random() * 0.4;
+      const dir = d.clone().multiplyScalar(0.9).addScaledVector(u, Math.cos(a) * 0.75).addScaledVector(v, Math.sin(a) * 0.75).normalize();
+      glow.spike(m, dir, i % 2 ? 0xffc24a : 0xffe08a, 0.7 + Math.random() * 0.5, 0.13, 0.07 + Math.random() * 0.03);
+    }
+    glow.light(m, 0xffa24a, 45, 0.16);
+
+    // blast cone of cel smoke pushed out the muzzle
+    for (let i = 0; i < 7; i++) {
+      const at = m.clone().addScaledVector(d, 0.2 + i * 0.22);
+      const vel = d.clone().multiplyScalar(6 - i * 0.6).addScaledVector(u, (Math.random() - 0.5) * 1.2).addScaledVector(v, (Math.random() - 0.5) * 1.2);
+      puffs.spawn(at, vel, { color: i < 2 ? 0xf2efe6 : 0xd2d4cc, s0: 0.12, s1: 0.32 + i * 0.05, life: 0.9 + Math.random() * 0.4, drag: 4, lift: 0.4 });
+    }
+    // smoke ring around the muzzle
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+      puffs.spawn(m.clone().addScaledVector(r, 0.15), r.multiplyScalar(2.6).addScaledVector(d, 0.8), { color: 0xc4c7bf, s0: 0.1, s1: 0.26, life: 0.75, drag: 4.5, lift: 0.3 });
+    }
+    // venting from the fume extractor, then lazy wisps rising off the muzzle
+    const vent = m.clone().addScaledVector(d, -0.76);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+      puffs.spawn(vent.clone().addScaledVector(r, 0.18), r.multiplyScalar(1.1), { color: 0xb9bcb3, s0: 0.06, s1: 0.16, life: 0.6, drag: 3, lift: 0.6, delay: 0.12 });
+    }
+    for (let i = 0; i < 4; i++) {
+      puffs.spawn(m.clone().addScaledVector(d, 0.1 + Math.random() * 0.3), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.5, (Math.random() - 0.5) * 0.3), { color: 0xa9ada4, s0: 0.05, s1: 0.18 + Math.random() * 0.08, life: 1.6, drag: 1.5, lift: 0.5, delay: 0.25 + i * 0.12 });
+    }
+    // dust kicked up off the ground under the muzzle
+    const ground = new THREE.Vector3(m.x, 0.08, m.z);
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      puffs.spawn(ground, new THREE.Vector3(Math.cos(a) * 2.2, 0.4, Math.sin(a) * 2.2), { color: 0xb3a27e, s0: 0.08, s1: 0.24, life: 0.8, drag: 4, lift: 0.2 });
+    }
+    fx.burst(m, { count: 6, speed: 5, color: 0xffd060, life: 0.12, size: 0.1 });
     this.shake = Math.max(this.shake, 0.12);
 
     // Land where the gun points, at the aim point's distance (or 9 units out).
-    const flat = new THREE.Vector3(direction.x, 0, direction.z).normalize();
-    const dist = aimPoint ? THREE.MathUtils.clamp(Math.hypot(aimPoint.x - position.x, aimPoint.z - position.z), 2.5, 14) : 9;
-    const target = new THREE.Vector3(position.x, 0.05, position.z).addScaledVector(flat, dist);
+    const flat = new THREE.Vector3(d.x, 0, d.z).normalize();
+    const dist = aimPoint ? THREE.MathUtils.clamp(Math.hypot(aimPoint.x - m.x, aimPoint.z - m.z), 2.5, 14) : 9;
+    const target = new THREE.Vector3(m.x, 0.05, m.z).addScaledVector(flat, dist);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
-    mesh.position.copy(position);
+    mesh.position.copy(m);
     mesh.lookAt(target);
     this.scene.add(mesh);
-    this.shells.push({ mesh, from: position.clone(), target, travelled: 0, total: position.distanceTo(target) });
+    this.shells.push({ mesh, from: m.clone(), target, travelled: 0, total: m.distanceTo(target) });
     return true;
   }
 
   explode(at) {
-    const { fx, glow } = this;
-    const p = new THREE.Vector3(at.x, 0.25, at.z);
-    glow.flash(p, 0xffffff, 0.3, 1.6, 0.1);
-    glow.flash(p, 0xffb347, 0.6, 2.6, 0.32);
-    glow.flash(p, 0xff6a2a, 0.8, 2.1, 0.5);
-    glow.ring(new THREE.Vector3(at.x, 0.06, at.z), 0xffd59a, 0.4, 3.6, 0.4);
+    const { fx, glow, puffs, debris, craters } = this;
+    const p = new THREE.Vector3(at.x, 0.3, at.z);
+    const up = new THREE.Vector3(0, 1, 0);
+    // flash and starburst
+    glow.flash(p, 0xffffff, 0.3, 1.5, 0.08);
+    glow.flash(p, 0xffb347, 0.6, 2.4, 0.26);
+    glow.ring(new THREE.Vector3(at.x, 0.06, at.z), 0xffd59a, 0.4, 3.8, 0.38);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const dir = new THREE.Vector3(Math.cos(a), 0.35 + Math.random() * 0.9, Math.sin(a)).normalize();
+      glow.spike(p, dir, i % 2 ? 0xffd36b : 0xfff3c4, 1.3 + Math.random() * 1.1, 0.24, 0.1 + Math.random() * 0.05);
+    }
+    glow.spike(p, up, 0xfff3c4, 2.6, 0.3, 0.12);
     glow.light(p, 0xff8c3a, 110, 0.35);
-    glow.scorch(at, 1.1);
-    fx.burst(p, { count: 18, speed: 7, color: 0xffd36b, life: 0.35, size: 0.24 });
-    fx.burst(p, { count: 22, speed: 6, color: 0xff7a2e, life: 0.6, size: 0.22, gravity: 7 });
-    fx.burst(p, { count: 16, speed: 2.6, color: 0x4a4e55, glow: false, life: 1.6, size: 0.42, grow: 0.8, gravity: -1.4 });
-    fx.burst(p, { count: 14, speed: 7.5, color: 0x6b5a45, glow: false, life: 1.1, size: 0.12, gravity: 15 });
+    // cel fireballs, then a rising smoke cluster
+    for (let i = 0; i < 10; i++) {
+      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize();
+      puffs.spawn(p, dir.multiplyScalar(3 + Math.random() * 2.5), { color: i % 3 ? 0xff9b3c : 0xffd35a, s0: 0.2, s1: 0.45 + Math.random() * 0.25, life: 0.45 + Math.random() * 0.2, drag: 5, lift: 0.8 });
+    }
+    for (let i = 0; i < 14; i++) {
+      const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.6 + 0.4, Math.random() - 0.5).normalize();
+      puffs.spawn(p, dir.multiplyScalar(1.5 + Math.random() * 2), { color: i % 2 ? 0x55585c : 0x6e7073, s0: 0.15, s1: 0.5 + Math.random() * 0.4, life: 1.7 + Math.random() * 0.8, drag: 2.5, lift: 1.1, delay: 0.05 + Math.random() * 0.12 });
+    }
+    // rocks thrown out, and lighter chunks that hang in the air before falling
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const vel = new THREE.Vector3(Math.cos(a) * (2 + Math.random() * 3), 4 + Math.random() * 4, Math.sin(a) * (2 + Math.random() * 3));
+      debris.spawn(p, vel, { color: Math.random() < 0.5 ? 0x6b5a45 : 0x58524a, size: 0.07 + Math.random() * 0.1, life: 2.5 });
+    }
+    for (let i = 0; i < 7; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const vel = new THREE.Vector3(Math.cos(a) * 1.4, 3 + Math.random() * 2, Math.sin(a) * 1.4);
+      debris.spawn(p, vel, { color: 0x7a6a52, size: 0.12 + Math.random() * 0.08, life: 3, gravity: 2.2, drag: 1.4 });
+    }
+    fx.burst(p, { count: 10, speed: 7, color: 0xffd36b, life: 0.25, size: 0.12, gravity: 8 });
+    craters.add(at, 1.0);
     this.shake = Math.max(this.shake, 0.35);
   }
 
@@ -90,6 +159,9 @@ export class CombatFx {
     }
     this.fx.update(dt);
     this.glow.update(dt);
+    this.puffs.update(dt);
+    this.debris.update(dt);
+    this.craters.update(dt);
     this.shake *= Math.exp(-dt * 9);
   }
 

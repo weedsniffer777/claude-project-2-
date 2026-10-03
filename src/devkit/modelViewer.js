@@ -65,7 +65,9 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       <label><input id="mv-turntable" type="checkbox" /> Turntable</label>
       <h2>Demo</h2>
       <label><input id="mv-drive" type="checkbox" /> Drive in a circle</label>
-      <label data-weapons><input id="mv-mg" type="checkbox" checked /> Roof MG tracks target</label>
+      <label data-weapons for="mv-aimy">Cannon aim height <span class="dk-value" data-aimy></span></label>
+      <input data-weapons id="mv-aimy" type="range" min="0" max="4" step="0.1" value="0.6" />
+      <label data-weapons><input id="mv-mg" type="checkbox" checked /> Roof MG tracks a flying target</label>
       <button id="mv-fire" type="button" data-weapons>Fire cannon</button>
       <h2>Loadout slots</h2>
       <div class="dk-parts"></div>
@@ -88,6 +90,12 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
     showPx();
   });
   q('#mv-outline').addEventListener('change', (e) => pixel.setOutline(e.target.checked));
+  const showAimY = () => (q('[data-aimy]').textContent = Number(q('#mv-aimy').value).toFixed(1) + ' m');
+  q('#mv-aimy').addEventListener('input', () => {
+    aimPlane.constant = -Number(q('#mv-aimy').value);
+    aimPoint.y = Number(q('#mv-aimy').value);
+    showAimY();
+  });
   q('#mv-fire').addEventListener('click', () => fire());
   q('#mv-reset').addEventListener('click', resetCamera);
   if (onExit) q('#mv-back').addEventListener('click', () => onExit());
@@ -118,6 +126,10 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
   const ndc = new THREE.Vector2();
   const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.6);
   const aimPoint = new THREE.Vector3(6, 0.6, -2.5);
+  if (params.get('aimy')) {
+    q('#mv-aimy').value = params.get('aimy');
+    aimPlane.constant = -Number(params.get('aimy'));
+  }
   let hasAim = false;
   let downAt = null;
 
@@ -171,6 +183,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       if (params.get('pixel')) pixel.setHeight(Number(params.get('pixel')));
       q('#mv-px').value = pixel.height;
       showPx();
+      showAimY();
       pixel.setOutline(q('#mv-outline').checked);
       controls = new OrbitControls(camera, canvas);
       controls.target.copy(HOME.target);
@@ -225,14 +238,16 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
 
       const mgOn = !!model.fire && q('#mv-mg').checked;
       const a = t * 0.9;
-      target.position.set(Math.cos(a) * 5.5, 0.4 + Math.sin(t * 3) * 0.08, -Math.sin(a * 1.3) * 5.5);
+      // flies low and high so the roof MG has to elevate and depress
+      target.position.set(Math.cos(a) * 5.5, 0.5 + 2.6 * (0.5 + 0.5 * Math.sin(t * 0.7)), -Math.sin(a * 1.3) * 5.5);
       target.rotation.y = t * 2;
       target.visible = mgOn;
 
       if (!hasAim && params.has('shot')) {
-        if (params.get('aim') === 'front') aimPoint.set(30, 0.6, 0);
-        else if (params.get('aim') === 'back') aimPoint.set(-30, 0.6, 0.5);
-        else aimPoint.set(6, 0.6, -2.5);
+        const y = -aimPlane.constant;
+        if (params.get('aim') === 'front') aimPoint.set(30, y, 0);
+        else if (params.get('aim') === 'back') aimPoint.set(-30, y, 0.5);
+        else aimPoint.set(6, y, -2.5);
       }
       model.update(dt, t, {
         aimPoint: hasAim || params.has('shot') ? aimPoint : null,

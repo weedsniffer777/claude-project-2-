@@ -10,7 +10,7 @@ import { MODELS } from './models/registry.js';
 const params = new URLSearchParams(location.search);
 if (params.has('shot')) document.body.classList.add('dk-shot');
 
-const { renderer, pixel } = createRenderer({ pixelHeight: 270 });
+const { renderer, pixel } = createRenderer({ pixelHeight: 400 });
 const game = createGame({ renderer, pixel });
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
 const devkit = createDevKit({

@@ -102,6 +102,12 @@ const MG_SPEED = 9;
 const GUN_Y = 0.36; // turret-local
 const GUN_BASE_X = 0.86;
 const MUZZLE_X = 2.38;
+const GUN_DEPRESSION = -0.12; // about -7 deg
+const GUN_ELEVATION = 0.31; // about +18 deg
+const GUN_PITCH_SPEED = 1.2; // rad/s
+const MG_DEPRESSION = -0.3;
+const MG_ELEVATION = 1.1; // the DShK is an anti-aircraft mount
+const MG_PITCH_SPEED = 4;
 const LOADER = { x: -0.1, z: 0.42 }; // DShK sits on this hatch ring
 const COMMANDER = { x: -0.15, z: -0.42 };
 
@@ -720,6 +726,9 @@ export function createTank() {
   let recoil = 0;
   let gunFlashTime = 0;
   let gunLift = 0; // barrel elevation used to clear the fuel drums
+  let gunElev = 0; // barrel elevation toward the target's height
+  let mgElev = 0;
+  const mgWorld = new THREE.Vector3();
   let gunLiftTarget = 0;
   let mgTimer = 0;
   let bumpTimer = 0.5;
@@ -784,9 +793,21 @@ export function createTank() {
       const want = wrapAngle(Math.atan2(-(ctx.aimPoint.z - tmp.z), ctx.aimPoint.x - tmp.x) - yaw);
       turret.rotation.y = approachAngle(turret.rotation.y, want, TURRET_SPEED * dt);
     }
+    if (ctx.aimPoint) {
+      // elevate or depress toward the target's height
+      const dist = Math.hypot(ctx.aimPoint.x - tmp.x, ctx.aimPoint.z - tmp.z) - GUN_BASE_X;
+      const dy = ctx.aimPoint.y - (tmp.y + WORLD_DECK_Y + GUN_Y);
+      const want = THREE.MathUtils.clamp(Math.atan2(dy, Math.max(0.4, dist)), GUN_DEPRESSION, GUN_ELEVATION);
+      gunElev += THREE.MathUtils.clamp(want - gunElev, -GUN_PITCH_SPEED * dt, GUN_PITCH_SPEED * dt);
+    }
     if (ctx.mgPoint) {
       const want = wrapAngle(Math.atan2(-(ctx.mgPoint.z - tmp.z), ctx.mgPoint.x - tmp.x) - yaw - turret.rotation.y);
       mgPivot.rotation.y = approachAngle(mgPivot.rotation.y, want, MG_SPEED * dt);
+      mgPivot.getWorldPosition(mgWorld);
+      const dist = Math.hypot(ctx.mgPoint.x - mgWorld.x, ctx.mgPoint.z - mgWorld.z);
+      const wantPitch = THREE.MathUtils.clamp(Math.atan2(ctx.mgPoint.y - mgWorld.y, Math.max(0.3, dist)), MG_DEPRESSION, MG_ELEVATION);
+      mgElev += THREE.MathUtils.clamp(wantPitch - mgElev, -MG_PITCH_SPEED * dt, MG_PITCH_SPEED * dt);
+      mgPivot.rotation.z = mgElev;
     }
 
     // Gun lifts to clear the fuel drums while the turret faces the rear.
@@ -867,7 +888,7 @@ export function createTank() {
     recoil = Math.max(0, recoil - dt * 3.2);
     const slide = recoil > 0.8 ? 1 : recoil / 0.8;
     gunPivot.position.x = GUN_BASE_X - slide * slide * 0.45;
-    gunPivot.rotation.z = gunLift;
+    gunPivot.rotation.z = Math.max(gunLift, gunElev);
     gunFlashTime = Math.max(0, gunFlashTime - dt);
     gunFlash.visible = false; // the scene's glow effects own the cannon flash now
 
