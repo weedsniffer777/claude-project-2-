@@ -50,29 +50,34 @@ export class CombatFx {
     for (let i = 0; i < 7; i++) {
       const at = m.clone().addScaledVector(d, 0.2 + i * 0.22);
       const vel = d.clone().multiplyScalar(6 - i * 0.6).addScaledVector(u, (Math.random() - 0.5) * 1.2).addScaledVector(v, (Math.random() - 0.5) * 1.2);
-      puffs.spawn(at, vel, { color: i < 2 ? 0xf2efe6 : 0xd2d4cc, s0: 0.12, s1: 0.32 + i * 0.05, life: 0.9 + Math.random() * 0.4, drag: 4, lift: 0.4 });
+      puffs.spawn(at, vel, { color: i < 2 ? 0xf2efe6 : 0xd2d4cc, s0: 0.12, s1: 0.32 + i * 0.05, life: 0.5 + Math.random() * 0.2, drag: 4, lift: 1.2, fadeAt: 0.3 });
     }
     // smoke ring around the muzzle
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2;
       const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
-      puffs.spawn(m.clone().addScaledVector(r, 0.15), r.multiplyScalar(2.6).addScaledVector(d, 0.8), { color: 0xc4c7bf, s0: 0.1, s1: 0.26, life: 0.75, drag: 4.5, lift: 0.3 });
+      puffs.spawn(m.clone().addScaledVector(r, 0.15), r.multiplyScalar(3).addScaledVector(d, 0.8), { color: 0xc4c7bf, s0: 0.1, s1: 0.26, life: 0.45, drag: 4, lift: 0.8, fadeAt: 0.3 });
     }
-    // venting from the fume extractor, then lazy wisps rising off the muzzle
+    // the purge: the fume extractor vents in pulses for about a second,
+    // then a few lazy wisps curl off the muzzle
     const vent = m.clone().addScaledVector(d, -0.76);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
-      puffs.spawn(vent.clone().addScaledVector(r, 0.18), r.multiplyScalar(1.1), { color: 0xb9bcb3, s0: 0.06, s1: 0.16, life: 0.6, drag: 3, lift: 0.6, delay: 0.12 });
+    for (let pulse = 0; pulse < 5; pulse++) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + pulse * 0.7;
+        const r = u.clone().multiplyScalar(Math.cos(a)).addScaledVector(v, Math.sin(a));
+        puffs.spawn(vent.clone().addScaledVector(r, 0.17), r.multiplyScalar(0.9 - pulse * 0.1).addScaledVector(d, 0.6), {
+          color: pulse < 2 ? 0xc6c9c0 : 0xadb1a8, s0: 0.05, s1: 0.15 - pulse * 0.015, life: 0.7, drag: 2.5, lift: 0.9, delay: 0.1 + pulse * 0.22, fadeAt: 0.35,
+        });
+      }
     }
     for (let i = 0; i < 4; i++) {
-      puffs.spawn(m.clone().addScaledVector(d, 0.1 + Math.random() * 0.3), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.5, (Math.random() - 0.5) * 0.3), { color: 0xa9ada4, s0: 0.05, s1: 0.18 + Math.random() * 0.08, life: 1.6, drag: 1.5, lift: 0.5, delay: 0.25 + i * 0.12 });
+      puffs.spawn(m.clone().addScaledVector(d, 0.1 + Math.random() * 0.3), new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.7, (Math.random() - 0.5) * 0.4), { color: 0xa9ada4, s0: 0.05, s1: 0.16 + Math.random() * 0.06, life: 0.9, drag: 1.5, lift: 0.9, delay: 0.3 + i * 0.25, fadeAt: 0.35 });
     }
     // dust kicked up off the ground under the muzzle
     const ground = new THREE.Vector3(m.x, 0.08, m.z);
     for (let i = 0; i < 8; i++) {
       const a = Math.random() * Math.PI * 2;
-      puffs.spawn(ground, new THREE.Vector3(Math.cos(a) * 2.2, 0.4, Math.sin(a) * 2.2), { color: 0xb3a27e, s0: 0.08, s1: 0.24, life: 0.8, drag: 4, lift: 0.2 });
+      puffs.spawn(ground, new THREE.Vector3(Math.cos(a) * 2.6, 0.4, Math.sin(a) * 2.6), { color: 0xb3a27e, s0: 0.08, s1: 0.24, life: 0.5, drag: 4, lift: 0.4, fadeAt: 0.3 });
     }
     fx.burst(m, { count: 6, speed: 5, color: 0xffd060, life: 0.12, size: 0.1 });
     this.shake = Math.max(this.shake, 0.12);
@@ -107,16 +112,17 @@ export class CombatFx {
     // cel fireballs, then a rising smoke cluster
     for (let i = 0; i < 10; i++) {
       const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8 + 0.2, Math.random() - 0.5).normalize();
-      puffs.spawn(p, dir.multiplyScalar(3 + Math.random() * 2.5), { color: i % 3 ? 0xff9b3c : 0xffd35a, s0: 0.2, s1: 0.45 + Math.random() * 0.25, life: 0.45 + Math.random() * 0.2, drag: 5, lift: 0.8 });
+      puffs.spawn(p, dir.multiplyScalar(3 + Math.random() * 2.5), { color: i % 3 ? 0xff9b3c : 0xffd35a, s0: 0.2, s1: 0.45 + Math.random() * 0.25, life: 0.35 + Math.random() * 0.15, drag: 5, lift: 1.2, fadeAt: 0.3 });
     }
     for (let i = 0; i < 14; i++) {
       const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.6 + 0.4, Math.random() - 0.5).normalize();
-      puffs.spawn(p, dir.multiplyScalar(1.5 + Math.random() * 2), { color: i % 2 ? 0x55585c : 0x6e7073, s0: 0.15, s1: 0.5 + Math.random() * 0.4, life: 1.7 + Math.random() * 0.8, drag: 2.5, lift: 1.1, delay: 0.05 + Math.random() * 0.12 });
+      puffs.spawn(p, dir.multiplyScalar(2.2 + Math.random() * 2.2), { color: i % 2 ? 0x55585c : 0x6e7073, s0: 0.15, s1: 0.45 + Math.random() * 0.35, life: 0.9 + Math.random() * 0.4, drag: 2, lift: 2.2, delay: 0.04 + Math.random() * 0.1, fadeAt: 0.3 });
     }
     // rocks thrown out, and lighter chunks that hang in the air before falling
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2;
-      const vel = new THREE.Vector3(Math.cos(a) * (2 + Math.random() * 3), 4 + Math.random() * 4, Math.sin(a) * (2 + Math.random() * 3));
+      const out = 3 + Math.random() * 4.5;
+      const vel = new THREE.Vector3(Math.cos(a) * out, 5 + Math.random() * 5, Math.sin(a) * out);
       debris.spawn(p, vel, { color: Math.random() < 0.5 ? 0x6b5a45 : 0x58524a, size: 0.07 + Math.random() * 0.1, life: 2.5 });
     }
     for (let i = 0; i < 7; i++) {
@@ -124,7 +130,14 @@ export class CombatFx {
       const vel = new THREE.Vector3(Math.cos(a) * 1.4, 3 + Math.random() * 2, Math.sin(a) * 1.4);
       debris.spawn(p, vel, { color: 0x7a6a52, size: 0.12 + Math.random() * 0.08, life: 3, gravity: 2.2, drag: 1.4 });
     }
-    fx.burst(p, { count: 10, speed: 7, color: 0xffd36b, life: 0.25, size: 0.12, gravity: 8 });
+    // sparks: a hot spray that arcs out and rains down
+    fx.burst(p, { count: 30, speed: 10, color: 0xffd36b, life: 0.55, size: 0.09, gravity: 12 });
+    fx.burst(p, { count: 14, speed: 6, color: 0xfff3c4, life: 0.3, size: 0.07, gravity: 6 });
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const dir = new THREE.Vector3(Math.cos(a), 0.25 + Math.random() * 0.5, Math.sin(a)).normalize();
+      glow.tracer(p, p.clone().addScaledVector(dir, 1 + Math.random() * 1.2), 0xffc24a, 0.05, 0.12); // spark streaks
+    }
     craters.add(at, 1.0);
     this.shake = Math.max(this.shake, 0.35);
   }

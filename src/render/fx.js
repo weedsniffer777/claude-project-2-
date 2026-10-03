@@ -237,13 +237,15 @@ export class Puffs {
       mesh.visible = false;
       mesh.castShadow = true;
       scene.add(mesh);
-      this.pool.push({ mesh, vel: new THREE.Vector3(), life: 0, max: 1, delay: 0, s0: 0.2, s1: 0.5, drag: 3, lift: 0.5, stretch: 1 });
+      this.pool.push({ mesh, vel: new THREE.Vector3(), life: 0, max: 1, delay: 0, s0: 0.2, s1: 0.5, drag: 3, lift: 0.5, stretch: 1, fadeAt: 0.4 });
     }
     this.cursor = 0;
   }
 
-  // One puff. s0 -> s1 is its swell; it shrinks to nothing over its last third.
-  spawn(pos, vel, { color = 0xd9dcd6, s0 = 0.15, s1 = 0.5, life = 1, drag = 3, lift = 0.5, delay = 0, stretch = 1 } = {}) {
+  // One puff. It swells s0 -> s1 quickly, then from `fadeAt` (fraction of its
+  // life) it keeps spreading but shrinks away, so smoke thins out and drifts
+  // off instead of sitting there.
+  spawn(pos, vel, { color = 0xd9dcd6, s0 = 0.15, s1 = 0.5, life = 1, drag = 3, lift = 0.5, delay = 0, stretch = 1, fadeAt = 0.4 } = {}) {
     const p = this.pool[this.cursor];
     this.cursor = (this.cursor + 1) % this.pool.length;
     p.mesh.material = toon(color);
@@ -252,7 +254,7 @@ export class Puffs {
     p.mesh.visible = delay <= 0;
     p.mesh.scale.setScalar(s0);
     p.vel.copy(vel);
-    Object.assign(p, { life, max: life, delay, s0, s1, drag, lift, stretch });
+    Object.assign(p, { life, max: life, delay, s0, s1, drag, lift, stretch, fadeAt });
   }
 
   update(dt) {
@@ -273,8 +275,8 @@ export class Puffs {
       p.vel.y += p.lift * dt;
       p.mesh.position.addScaledVector(p.vel, dt);
       p.mesh.rotation.y += dt * 0.6;
-      let s = p.s0 + (p.s1 - p.s0) * easeOut(Math.min(1, u / 0.3));
-      if (u > 0.65) s *= 1 - easeOut((u - 0.65) / 0.35);
+      let s = p.s0 + (p.s1 - p.s0) * easeOut(Math.min(1, u / 0.25));
+      if (u > p.fadeAt) s *= 1 - easeOut((u - p.fadeAt) / (1 - p.fadeAt));
       p.mesh.scale.set(s, s * (1 / p.stretch), s);
     }
   }
