@@ -2,39 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Model Viewer</title>
   <link rel="icon" href="data:," />
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #9fb4c8; font: 13px/1.4 system-ui, sans-serif; color: #e8edf5; }
-    canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
-    #panel { position: fixed; top: 12px; left: 12px; width: 230px; padding: 12px 14px; background: rgba(18, 22, 32, 0.86); border-radius: 10px; backdrop-filter: blur(6px); }
-    #panel h1 { font-size: 14px; margin: 0 0 8px; letter-spacing: 0.04em; }
-    #panel h2 { font-size: 11px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.08em; color: #8fa0bd; }
-    #panel label { display: flex; align-items: center; gap: 8px; padding: 2px 0; cursor: pointer; }
-    #panel input[type=range] { width: 100%; }
-    #panel button { width: 100%; margin-top: 6px; padding: 6px; border: 0; border-radius: 6px; background: #39d6e8; color: #08222a; font-weight: 600; cursor: pointer; }
-    #hint { position: fixed; bottom: 12px; left: 12px; padding: 6px 10px; background: rgba(18, 22, 32, 0.7); border-radius: 8px; color: #c9d3e6; }
-    body.shot #panel, body.shot #hint { display: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #a9bdd1; }
+    canvas { display: block; position: fixed; inset: 0; width: 100vw; height: 100vh; image-rendering: pixelated; touch-action: none; }
   </style>
 </head>
 <body>
-  <div id="panel">
-    <h1>SCRAP T-55</h1>
-    <h2>Render</h2>
-    <label>Pixel height <span id="pxv"></span></label>
-    <input id="px" type="range" min="135" max="540" step="1" value="270" />
-    <label><input id="outline" type="checkbox" checked /> Outline</label>
-    <label><input id="turntable" type="checkbox" /> Turntable</label>
-    <h2>Demo</h2>
-    <label><input id="drive" type="checkbox" /> Drive in a circle</label>
-    <label><input id="mg" type="checkbox" checked /> MG tracks target</label>
-    <button id="fire">Fire cannon (Space)</button>
-    <h2>Parts</h2>
-    <div id="parts"></div>
-    <button id="reset">Reset camera</button>
-  </div>
-  <div id="hint">Drag: orbit · Wheel: zoom · Move mouse: aim turret · Click / Space: fire</div>
   <script type="module" src="/src/viewer.js"></script>
 </body>
 </html>
