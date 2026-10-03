@@ -63,6 +63,8 @@ const CSS = `
 .hud-scrap b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
 .hud-scrap i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .hud-scrap.pop { animation: hudpop 0.18s steps(2); }
+.hud-scrap.intro { animation: hudintro 0.5s steps(2) 7; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber), 0 0 18px 4px #ffb34788; }
+@keyframes hudintro { 50% { transform: scale(1.18); } }
 @keyframes hudpop { 50% { transform: scale(1.15); } }
 .hud-chain { font: 400 22px/1 'Silkscreen', monospace; color: var(--amber); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; display: grid; justify-items: end; gap: 4px; }
 .hud-chain small { font-size: 11px; color: var(--ink); }
@@ -75,9 +77,10 @@ const CSS = `
 .hud-fade.on { opacity: 1; }
 .hud-ability { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; display: grid; place-items: center; }
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
+.hud-ability .pic { position: absolute; inset: 0; width: 100%; height: 100%; padding: 12.5%; box-sizing: border-box; background: #141214; image-rendering: pixelated; object-fit: contain; }
+.hud-ability.cooling .pic { filter: brightness(0.5) saturate(0.6); }
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .hud-ability.ready { animation: hudready 1s steps(2) infinite; }
-.hud-ability.cooling canvas { filter: brightness(0.45) saturate(0.6); }
 .hud-ability .cd { position: relative; font: 400 26px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; }
 .hud:not(.touch) .hud-ability .cd { font-size: 20px; }
 @keyframes hudready { 50% { filter: brightness(1.35); } }
@@ -185,40 +188,26 @@ function drawStick(base, knob) {
   }
 }
 
-// Rocket ability icon (16x16 canvas, drawn as pixel art): a drum on its side
-// with a flame out the back; the cooldown fills it from the bottom.
+// Boost button frame (16x16 canvas over the tank picture): a pixel border,
+// and while recharging a dark shade over the part still to fill, which
+// drains from the top as it comes back.
 function drawAbility(c, k, lit) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, 16, 16);
-  // frame
   g.fillStyle = '#000';
-  g.fillRect(0, 0, 16, 16);
-  g.fillStyle = k >= 1 ? '#f1e9d8' : '#6d655a';
-  g.fillRect(1, 1, 14, 14);
-  g.fillStyle = '#141214';
-  g.fillRect(2, 2, 12, 12);
-  // cooldown fill
-  const h = Math.round(12 * Math.min(1, k));
-  g.fillStyle = k >= 1 ? '#2b3a2d' : '#3a3022';
-  g.fillRect(2, 14 - h, 12, h);
-  // the drum
-  g.fillStyle = k >= 1 ? '#7d8f5c' : '#55603f';
-  g.fillRect(6, 5, 7, 6);
-  g.fillStyle = '#3d4a2c';
-  g.fillRect(8, 5, 1, 6);
-  g.fillRect(11, 5, 1, 6);
-  g.fillStyle = '#9fb07a';
-  g.fillRect(6, 5, 7, 1);
-  // flame
-  if (k >= 1 || lit) {
-    g.fillStyle = '#ff8a2a';
-    g.fillRect(3, 6, 3, 4);
-    g.fillStyle = '#fff1b8';
-    g.fillRect(4, 7, 2, 2);
-    if (lit) {
-      g.fillStyle = '#ffb347';
-      g.fillRect(2, 7, 1, 2);
-    }
+  g.fillRect(0, 0, 16, 1);
+  g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16);
+  g.fillRect(15, 0, 1, 16);
+  g.fillStyle = lit ? '#ffb347' : k >= 1 ? '#f1e9d8' : '#6d655a';
+  g.fillRect(1, 1, 14, 1);
+  g.fillRect(1, 14, 14, 1);
+  g.fillRect(1, 1, 1, 14);
+  g.fillRect(14, 1, 1, 14);
+  if (k < 1) {
+    const h = Math.round(12 * (1 - Math.min(1, k)));
+    g.fillStyle = 'rgba(8, 7, 10, 0.6)';
+    g.fillRect(2, 2, 12, h);
   }
 }
 
@@ -293,7 +282,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-ability" hidden><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability" hidden><img class="pic" alt=""><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -457,7 +446,6 @@ export function createHud() {
     },
     setScrap(n) {
       const el = $('.hud-scrap');
-      el.hidden = false;
       if (n !== scrapShown) {
         el.classList.remove('pop');
         void el.offsetWidth;
@@ -508,6 +496,17 @@ export function createHud() {
       ability.querySelector('.key').hidden = touchMode;
     },
     abilityCenter,
+    // the picture on the boost button (a tiny render of the tank boosting)
+    setAbilityImage(url) {
+      ability.querySelector('.pic').src = url;
+    },
+    // the scraps counter appears when the tutorial introduces scraps
+    showScrap(on, highlight = false) {
+      const el = $('.hud-scrap');
+      el.hidden = !on;
+      el.classList.toggle('intro', highlight);
+      if (highlight) setTimeout(() => el.classList.remove('intro'), 3500);
+    },
     // depot parts: [{ id, name, text, icon }], or null to hide
     // onHover(id | null): the card under the pointer
     showPicker(list, onPick, skip, onHover) {

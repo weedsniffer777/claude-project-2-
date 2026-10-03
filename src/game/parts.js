@@ -110,26 +110,39 @@ export const PARTS = {
       s.armor *= 0.7;
     },
     build(t) {
-      // tan bricks with dark gaps: a row across the glacis, and chevrons on
-      // the turret cheeks
+      // T-72 style: a grid of green tiles over the glacis, and on the turret
+      // a sharp clamshell V of tiles fanning back from the gun mantlet
+      const G = 0x56653a;
+      const EDGE = 0x333d22;
       const g = new THREE.Group();
-      for (let i = 0; i < 6; i++) {
-        const z = -0.75 + i * 0.3;
-        const b = put(g, box(0.4, 0.13, 0.26, ERA_TAN, { r: 0.02 }), 1.5, 0.99, z);
-        b.rotation.z = -0.5;
-        put(g, box(0.42, 0.05, 0.03, ERA_EDGE), 1.52, 1.05, z + 0.14).rotation.z = -0.5;
+      for (let r = 0; r < 2; r++) {
+        for (let i = 0; i < 6; i++) {
+          const z = -0.72 + i * 0.29;
+          const tile = put(g, box(0.3, 0.07, 0.26, G, { r: 0.01 }), 1.42 + r * 0.26, 0.93 + r * 0.12, z);
+          tile.rotation.z = -0.42;
+          put(g, box(0.31, 0.02, 0.02, EDGE), 1.42 + r * 0.26, 0.97 + r * 0.12, z + 0.135).rotation.z = -0.42;
+        }
       }
       t.chassis.add(g);
-      // two rows of bricks hugging the turret front, leaving the gun clear
       const tg = new THREE.Group();
-      for (const [y, r, tilt] of [[0.12, 1.02, -0.25], [0.32, 0.9, -0.55]]) {
-        for (const a of [-1.15, -0.85, -0.55, -0.27, 0.27, 0.55, 0.85, 1.15]) {
+      for (const side of [-1, 1]) {
+        // each arm of the V: tiles stepping back and out from the mantlet,
+        // tipped up toward the front like a raised clam shell
+        for (let i = 0; i < 5; i++) {
           const holder = new THREE.Group();
-          holder.rotation.y = a;
-          holder.position.y = y;
-          const b = put(holder, box(0.12, 0.17, 0.24, ERA_TAN, { r: 0.015 }), r, 0, 0);
-          b.rotation.z = tilt;
-          put(holder, box(0.13, 0.02, 0.25, ERA_EDGE), r + 0.005, 0.085, 0).rotation.z = tilt;
+          holder.position.set(0.82 - i * 0.17, 0.33 + i * 0.012, side * (0.24 + i * 0.13));
+          holder.rotation.y = side * -0.62;
+          const tile = put(holder, box(0.32, 0.07, 0.22, G, { r: 0.01 }), 0, 0, 0);
+          tile.rotation.z = 0.32;
+          put(holder, box(0.33, 0.02, 0.02, EDGE), 0, 0.045, 0.11).rotation.z = 0.32;
+          tg.add(holder);
+        }
+        // and a short row down each cheek
+        for (let i = 0; i < 3; i++) {
+          const holder = new THREE.Group();
+          holder.rotation.y = side * (0.55 + i * 0.22);
+          holder.position.y = 0.13;
+          put(holder, box(0.08, 0.17, 0.24, G, { r: 0.01 }), 1.0, 0, 0).rotation.z = -0.2;
           tg.add(holder);
         }
       }
@@ -196,23 +209,8 @@ export const PARTS = {
       const g = new THREE.Group();
       put(g, cyl(0.4, 1.0, OLIVE, { axis: 'x', seg: 16 }), 0, 0.42, 0);
       put(g, cyl(0.42, 0.12, 0x3b3f6a, { axis: 'x', seg: 16 }), -0.55, 0.42, 0); // heat-blued nozzle ring
-      // the flame out the back, built like the one on the tank: a wide warm
-      // cone round a short hot core, and a few cel puffs of exhaust trailing
-      const cone = (r, len, color) => {
-        const m = new THREE.Mesh(new THREE.ConeGeometry(r, len, 8), new THREE.MeshBasicMaterial({ color }));
-        m.rotation.z = Math.PI / 2; // tip pointing back (-x)
-        m.position.set(-0.62 - len / 2, 0.42, 0);
-        g.add(m);
-      };
-      cone(0.33, 1.4, 0xff8a5a);
-      cone(0.18, 0.9, 0xa8e8ff);
-      const puff = new THREE.IcosahedronGeometry(1, 0);
-      for (const [x, y, z, r, c] of [[-1.95, 0.48, 0.1, 0.15, 0xffa040], [-2.2, 0.6, -0.1, 0.19, 0x8f8e94]]) {
-        const m = new THREE.Mesh(puff, c === 0xffa040 ? new THREE.MeshBasicMaterial({ color: c }) : toon(c)); // fire glows, smoke is lit
-        m.position.set(x, y, z);
-        m.scale.setScalar(r);
-        g.add(m);
-      }
+      put(g, cyl(0.3, 0.13, 0x1d1f22, { axis: 'x', seg: 14 }), -0.56, 0.42, 0); // cold, dark throat
+      for (const z of [-0.25, 0.25]) put(g, box(0.5, 0.06, 0.06, STEEL, { r: 0.01 }), -0.2, 0.86, z); // mounting straps
       return g;
     },
   },

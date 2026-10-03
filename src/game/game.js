@@ -156,6 +156,10 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     hud.reset();
     hud.setHull(run.hp, stats.maxHp);
     hud.setScrap(0);
+    // a scripted level (the tutorial) hands out the main gun and the scraps
+    // counter as it introduces them; anywhere else they're there from the start
+    run.gun = !level.start;
+    hud.showScrap(!level.start);
     if (level.start) level.start(api);
     else if (touch) hud.prompt('Controls', 'Stick drives · tap anywhere to aim and fire', { seconds: 8 });
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
@@ -261,6 +265,12 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     },
     giveRockets() {
       run.rockets = true;
+    },
+    enableGun() {
+      run.gun = true;
+    },
+    revealScraps() {
+      hud.showScrap(true, true);
     },
     boss(e, name = 'Large quadruped') {
       run.boss = e ? { e, name } : null;
@@ -456,7 +466,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   // shots always go where you pointed, never where the barrel happened to be.
   let queued = 0; // seconds left on a queued shot
   function fire() {
-    if (run.over || run.mode !== 'field' || run.locked) return;
+    if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
     queued = 0.7;
   }
   function boost() {
@@ -702,9 +712,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       return { ...PARTS[id], image: partShots.get(id) };
     });
   }
-  function snapshot(model) {
-    const W = 72;
-    const H = 48;
+  function snapshot(model, W = 72, H = 48) {
     const rt = new THREE.WebGLRenderTarget(W, H);
     rt.texture.colorSpace = THREE.SRGBColorSpace; // read back display colours, not linear
     const sc = new THREE.Scene();
@@ -791,6 +799,12 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const camWant = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   loadLevel(startLevel);
+  // the boost button's picture: a tiny render of a plain tank, drums round and lit
+  {
+    const t = createTank();
+    t.setRocket(1, true, 0);
+    hud.setAbilityImage(snapshot(t.group, 36, 30));
+  }
 
   let lastSize = null;
   const game = {
@@ -1056,7 +1070,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       assignLamps();
 
       // aim line and landing mark
-      const showAim = hasAim && !run.over && run.mode === 'field';
+      const showAim = hasAim && !run.over && run.mode === 'field' && run.gun;
       aimLine.visible = aimMark.visible = showAim;
       if (showAim) {
         const { position: m, direction: d, breech } = tank.muzzle();
@@ -1082,7 +1096,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       enemies.setHover(outlined);
       hud.showReticle(!!client && !run.over && run.mode === 'field');
       if (client) hud.setReticle(client[0], client[1], reload);
-      hud.setKills(enemies.killed);
+      if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       hud.setAbility(run.rockets && !run.over && run.mode === 'field' ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting } : null);
       if (run.boss) {
