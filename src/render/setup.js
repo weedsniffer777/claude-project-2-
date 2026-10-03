@@ -55,3 +55,64 @@ export function addDaylight(scene, { shadowSize = 7, shadowMap = 1024 } = {}) {
     },
   };
 }
+
+// Night rig for the Neon Ruins: cold moonlight with soft shadows, a deep
+// blue ambient, and fog so the far end of the street falls into the dark.
+export function addNight(scene, { shadowSize = 14, shadowMap = 2048 } = {}) {
+  scene.background = new THREE.Color(0x0e1322);
+  scene.fog = new THREE.Fog(0x0e1322, 26, 58);
+  scene.add(new THREE.HemisphereLight(0x5a6aa0, 0x1c1a22, 1.0));
+  const moon = new THREE.DirectionalLight(0xa9bbff, 1.2);
+  moon.position.set(-6, 12, 5);
+  moon.castShadow = true;
+  moon.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(moon.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: 40 });
+  moon.shadow.bias = -0.0006;
+  scene.add(moon, moon.target);
+  const offset = moon.position.clone();
+  return {
+    sun: moon,
+    follow(p) {
+      moon.target.position.copy(p);
+      moon.position.copy(p).add(offset);
+    },
+  };
+}
+
+// Dusk rig for the first zones: a low golden sun behind the far-side
+// buildings, so their long shadows fill the street and light spills through
+// the gaps between them. A violet-to-amber sky, warm haze, and a cool ambient
+// that keeps the shaded street readable.
+export function addDusk(scene, { shadowSize = 18, shadowMap = 2048 } = {}) {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#2b2d55');
+  grad.addColorStop(0.55, '#7a5a78');
+  grad.addColorStop(1, '#e39a62');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 128);
+  const sky = new THREE.CanvasTexture(c);
+  sky.colorSpace = THREE.SRGBColorSpace;
+  scene.background = sky;
+  scene.fog = new THREE.Fog(0x6b5568, 30, 72);
+  scene.add(new THREE.HemisphereLight(0x8d86b8, 0x3a2e2c, 1.25));
+  const sun = new THREE.DirectionalLight(0xffb36b, 3.0);
+  const offset = new THREE.Vector3(6, 11, -30); // low, from behind the far (north) side of the street
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: 80 });
+  sun.shadow.bias = -0.0008;
+  sun.shadow.normalBias = 0.02;
+  scene.add(sun, sun.target);
+  sun.position.copy(offset);
+  return {
+    sun,
+    follow(p) {
+      sun.target.position.copy(p);
+      sun.position.copy(p).add(offset);
+    },
+  };
+}

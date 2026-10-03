@@ -111,3 +111,8 @@ export function ellipsoid(rx, ry, rz, color, { wseg = 14, hseg = 9 } = {}) {
   mesh.scale.set(rx, ry, rz);
   return shadowed(mesh);
 }
+
+// Toon material with a texture (not cached: each map gets its own).
+export function toonMap(map, color = 0xffffff) {
+  return new THREE.MeshToonMaterial({ map, color, gradientMap });
+}
