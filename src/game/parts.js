@@ -191,6 +191,7 @@ export const PARTS = {
   },
   afterburner: {
     name: 'Improved boost',
+    badge: 'up', // its picture gets an up arrow: an improved ability
     text: 'Boost burns hotter: faster and longer, but a longer recharge.',
     icon: ['................', '......-----.....', '%%%***-###-.....', '.%%%**-###-.....', '%%%***-###-.....', '......-----.....', '................', '................', '................', '................'],
     apply(s) {

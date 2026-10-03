@@ -77,8 +77,7 @@ const CSS = `
 .hud-fade.on { opacity: 1; }
 .hud-ability { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; display: grid; place-items: center; }
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
-.hud-ability .pic { position: absolute; inset: 0; width: 100%; height: 100%; padding: 12.5%; box-sizing: border-box; background: #141214; image-rendering: pixelated; object-fit: contain; }
-.hud-ability.cooling .pic { filter: brightness(0.5) saturate(0.6); }
+.hud-ability.cooling canvas { filter: brightness(0.55) saturate(0.6); }
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .hud-ability.ready { animation: hudready 1s steps(2) infinite; }
 .hud-ability .cd { position: relative; font: 400 26px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; }
@@ -146,6 +145,8 @@ const CSS = `
 .hud-end .stats b { color: var(--ink); font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
 .hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
+.hud-end .btns { display: flex; gap: 14px; justify-content: center; }
+.hud-end button.alt { background: #2a2628; color: var(--ink); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .hud-stick { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px 0 0 -66px; image-rendering: pixelated; }
 .hud-stick canvas { position: absolute; display: block; image-rendering: pixelated; }
@@ -188,26 +189,37 @@ function drawStick(base, knob) {
   }
 }
 
-// Boost button frame (16x16 canvas over the tank picture): a pixel border,
-// and while recharging a dark shade over the part still to fill, which
-// drains from the top as it comes back.
+// Boost ability icon (16x16 canvas, drawn as pixel art): a drum on its side
+// with a flame out the back; the cooldown fills it from the bottom. (Ability
+// icons are their own drawings, separate from the part models.)
 function drawAbility(c, k, lit) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, 16, 16);
   g.fillStyle = '#000';
-  g.fillRect(0, 0, 16, 1);
-  g.fillRect(0, 15, 16, 1);
-  g.fillRect(0, 0, 1, 16);
-  g.fillRect(15, 0, 1, 16);
-  g.fillStyle = lit ? '#ffb347' : k >= 1 ? '#f1e9d8' : '#6d655a';
-  g.fillRect(1, 1, 14, 1);
-  g.fillRect(1, 14, 14, 1);
-  g.fillRect(1, 1, 1, 14);
-  g.fillRect(14, 1, 1, 14);
-  if (k < 1) {
-    const h = Math.round(12 * (1 - Math.min(1, k)));
-    g.fillStyle = 'rgba(8, 7, 10, 0.6)';
-    g.fillRect(2, 2, 12, h);
+  g.fillRect(0, 0, 16, 16);
+  g.fillStyle = k >= 1 ? '#f1e9d8' : '#6d655a';
+  g.fillRect(1, 1, 14, 14);
+  g.fillStyle = '#141214';
+  g.fillRect(2, 2, 12, 12);
+  const h = Math.round(12 * Math.min(1, k));
+  g.fillStyle = k >= 1 ? '#2b3a2d' : '#3a3022';
+  g.fillRect(2, 14 - h, 12, h);
+  g.fillStyle = k >= 1 ? '#7d8f5c' : '#55603f';
+  g.fillRect(6, 5, 7, 6);
+  g.fillStyle = '#3d4a2c';
+  g.fillRect(8, 5, 1, 6);
+  g.fillRect(11, 5, 1, 6);
+  g.fillStyle = '#9fb07a';
+  g.fillRect(6, 5, 7, 1);
+  if (k >= 1 || lit) {
+    g.fillStyle = '#ff8a2a';
+    g.fillRect(3, 6, 3, 4);
+    g.fillStyle = '#fff1b8';
+    g.fillRect(4, 7, 2, 2);
+    if (lit) {
+      g.fillStyle = '#ffb347';
+      g.fillRect(2, 7, 1, 2);
+    }
   }
 }
 
@@ -227,7 +239,7 @@ function drawIcon(c, rows) {
 
 // The pointer outside of combat: a chunky pixel arrow, bone with a black
 // edge, drawn at 2x.
-const CURSOR = (() => {
+export const CURSOR = (() => {
   const rows = ['X.........', 'XX........', 'XoX.......', 'XooX......', 'XoooX.....', 'XooooX....', 'XoooooX...', 'XooooooX..', 'XoooooooX.', 'XooooXXXXX', 'XooXoX....', 'XoX.XoX...', 'XX..XoX...', 'X....XoX..', '.....XXX..'];
   const c = document.createElement('canvas');
   c.width = 20;
@@ -282,7 +294,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-ability" hidden><img class="pic" alt=""><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
+    <div class="hud-ability" hidden><canvas width="16" height="16"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -295,7 +307,7 @@ export function createHud() {
     </div>
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
-    <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts acquired</span><div class="icons"></div></div><div class="bank px"></div><button type="button"></button></div>
+    <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts acquired</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -350,7 +362,9 @@ export function createHud() {
   let hurtT = 0;
   let promptTimer = 0;
   let onEnd = null;
-  end.querySelector('button').addEventListener('click', () => onEnd?.());
+  let onAlt = null;
+  end.querySelector('button.main').addEventListener('click', () => onEnd?.());
+  end.querySelector('button.alt').addEventListener('click', () => onAlt?.());
 
   const v = new THREE.Vector3();
   function toScreen(p, camera, rect) {
@@ -496,10 +510,6 @@ export function createHud() {
       ability.querySelector('.key').hidden = touchMode;
     },
     abilityCenter,
-    // the picture on the boost button (a tiny render of the tank boosting)
-    setAbilityImage(url) {
-      ability.querySelector('.pic').src = url;
-    },
     // the scraps counter appears when the tutorial introduces scraps
     showScrap(on, highlight = false) {
       const el = $('.hud-scrap');
@@ -557,7 +567,14 @@ export function createHud() {
       if (numbers.length > 40) numbers.shift().el.remove();
     },
     // parts: [{ name, text, icon }] shown as icons with a hover summary
-    showEnd(kind, title, stats, button, onClick, bank = '', parts = []) {
+    // alt: an optional second button, [label, onClick]
+    showEnd(kind, title, stats, button, onClick, bank = '', parts = [], alt = null) {
+      const altBtn = end.querySelector('button.alt');
+      altBtn.hidden = !alt;
+      if (alt) {
+        altBtn.textContent = alt[0];
+        onAlt = alt[1];
+      }
       end.hidden = false;
       const box = end.querySelector('.parts');
       box.hidden = !parts.length;
@@ -588,10 +605,10 @@ export function createHud() {
       end.className = `hud-end panel ${kind}`;
       end.querySelector('h2').textContent = title;
       end.querySelector('.stats').innerHTML = stats.map(([k, val]) => `<span>${k}</span><b>${val}</b>`).join('');
-      end.querySelector('button').textContent = button;
+      end.querySelector('button.main').textContent = button;
       onEnd = onClick;
       reticle.hidden = true;
-      end.querySelector('button').focus();
+      end.querySelector('button.main').focus();
     },
     hideEnd() {
       end.hidden = true;

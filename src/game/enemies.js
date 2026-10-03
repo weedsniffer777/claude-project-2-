@@ -61,7 +61,9 @@ export class Enemies {
     return this.spawn(HOUND, 'hound', x, z, opts);
   }
 
-  spawn(stats, kind, x, z, { delay = 0, via = [] } = {}) {
+  // noclip: ignore walls and rubble until the waypoints are done (climbing in
+  // over a rubble heap from off screen)
+  spawn(stats, kind, x, z, { delay = 0, via = [], noclip = false } = {}) {
     const model = createDog();
     model.group.scale.setScalar(stats.scale);
     model.group.position.set(x, 0, z);
@@ -95,6 +97,7 @@ export class Enemies {
       recoil: 0,
       speed: 0,
       via: via.map(([wx, wz]) => ({ x: wx, z: wz })),
+      noclip,
     };
     hit.userData.enemy = e;
     this.list.push(e);
@@ -309,7 +312,7 @@ export class Enemies {
       e.pos.x += (vx / len) * speed * dt;
       e.pos.z += (vz / len) * speed * dt;
       // keep out of walls, wrecks and each other
-      pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
+      if (!(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
       for (const o of this.list) {
         if (o === e || !o.alive || o.delay > 0) continue;
         const ox = e.pos.x - o.pos.x;

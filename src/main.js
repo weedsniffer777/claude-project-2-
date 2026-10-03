@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { createRenderer } from './render/setup.js';
 import { createGame } from './game/game.js';
+import { createHub } from './hub/hub.js';
 import { createModelViewer } from './devkit/modelViewer.js';
 import { createDevKit } from './devkit/devkit.js';
 import { MODELS } from './models/registry.js';
@@ -12,7 +13,17 @@ const params = new URLSearchParams(location.search);
 if (params.has('shot')) document.body.classList.add('dk-shot');
 
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;
-const game = createGame({ renderer, pixel, level: params.get('level') });
+// The game (a run), and the base between runs: Exit at the end of a run goes
+// to the base; deploying from its planning table starts a run.
+const game = createGame({ renderer, pixel, level: params.get('level'), onExit: () => setMode(hub) });
+const hub = createHub({
+  renderer,
+  pixel,
+  onDeploy: (id) => {
+    game.loadLevel(id);
+    setMode(game);
+  },
+});
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
 // The pixel grid is part of the art: always 540 rows, whatever the screen.
 // Quality tiers only trade shadow detail and lamp lights. Auto starts phones one tier down and steps down whenever the
@@ -68,9 +79,10 @@ const devkit = createDevKit({
     {
       id: 'level',
       label: 'Level',
-      options: LEVELS.map((l) => ({ value: l.id, label: l.name })),
-      value: game.levelId,
+      options: [...LEVELS.map((l) => ({ value: l.id, label: l.name })), { value: 'base', label: 'Base (between runs)' }],
+      value: params.has('base') ? 'base' : game.levelId,
       onChange: (id) => {
+        if (id === 'base') return setMode(hub);
         game.loadLevel(id);
         setMode(game);
       },
@@ -111,7 +123,7 @@ window.addEventListener('keydown', (e) => {
   else if (mode === viewer) setMode(game);
 });
 
-setMode(params.get('devkit') === 'viewer' ? viewer : game);
+setMode(params.get('devkit') === 'viewer' ? viewer : params.has('base') ? hub : game);
 window.__game = game.debug; // dev/test hook
 
 const clock = new THREE.Timer();

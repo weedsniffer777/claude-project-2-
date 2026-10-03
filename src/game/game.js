@@ -57,7 +57,7 @@ const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 // Tank footprint for collisions: hull, covers and the rear drums.
 const TANK_BOX = { cx: -0.25, hx: 2.25, hz: 1.15 };
 
-export function createGame({ renderer, pixel, level: startLevel }) {
+export function createGame({ renderer, pixel, level: startLevel, onExit = null }) {
   injectDevKitStyles();
   const canvas = renderer.domElement;
   const tank = createTank();
@@ -240,6 +240,19 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       return !!run.spot;
     },
     sectors: (names, current) => hud.setSectors(names, current),
+    // Walk from `from` along `dir` until the point is just outside what the
+    // camera shows (whatever the view size, optics included): a spawn point
+    // that is out of sight but as close as possible.
+    offscreen(from, dir, margin = 1.5, maxSteps = 80) {
+      const p = from.clone();
+      const v = new THREE.Vector3();
+      for (let i = 0; i < maxSteps; i++) {
+        v.copy(p).setY(1).project(camera);
+        if (Math.abs(v.x) > 1 + margin * 0.06 || Math.abs(v.y) > 1 + margin * 0.1) return p;
+        p.addScaledVector(dir, 0.5);
+      }
+      return p;
+    },
     setBounds(b) {
       level.bounds = b;
     },
@@ -363,8 +376,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
           'win',
           title,
           [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
-          'Play again',
-          () => loadLevel(levelDef.id),
+          onExit ? 'Exit' : 'Play again',
+          () => (onExit ? onExit() : loadLevel(levelDef.id)),
           `+${run.scrap} scraps${total != null ? ` · ${total} total` : ''}`,
           partCards(),
         );
@@ -441,6 +454,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
       () => loadLevel(levelDef.id),
       `Half recovered: +${kept} scraps${total != null ? ` · ${total} total` : ''}`,
       partCards(),
+      onExit ? ['Exit', () => onExit()] : null,
     );
     setCursor();
     combat.explode(pos.clone().setY(1.2));
@@ -708,11 +722,24 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const partShots = new Map();
   function partCards() {
     return run.parts.map((id) => {
-      if (!partShots.has(id)) partShots.set(id, snapshot(partModel(id)));
+      if (!partShots.has(id)) partShots.set(id, snapshot(partModel(id), 72, 48, PARTS[id].badge === 'up' ? upArrow : null));
       return { ...PARTS[id], image: partShots.get(id) };
     });
   }
-  function snapshot(model, W = 72, H = 48) {
+  // a white pixel arrow on the right of a picture: an improved version
+  function upArrow(g, W, H) {
+    const x = W - 11;
+    const y = 8;
+    const rows = ['....X....', '...XXX...', '..XXXXX..', '.XXXXXXX.', 'XXXXXXXXX', '...XXX...', '...XXX...', '...XXX...', '...XXX...'];
+    rows.forEach((r, j) => [...r].forEach((ch, i) => {
+      if (ch !== 'X') return;
+      g.fillStyle = '#000';
+      g.fillRect(x + i - 1, y + j - 1, 3, 3);
+    }));
+    g.fillStyle = '#ffffff';
+    rows.forEach((r, j) => [...r].forEach((ch, i) => ch === 'X' && g.fillRect(x + i, y + j, 1, 1)));
+  }
+  function snapshot(model, W = 72, H = 48, decorate = null) {
     const rt = new THREE.WebGLRenderTarget(W, H);
     rt.texture.colorSpace = THREE.SRGBColorSpace; // read back display colours, not linear
     const sc = new THREE.Scene();
@@ -744,6 +771,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     const img = cv.getContext('2d').createImageData(W, H);
     for (let y = 0; y < H; y++) img.data.set(px.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4); // flip rows
     cv.getContext('2d').putImageData(img, 0, 0);
+    decorate?.(cv.getContext('2d'), W, H);
     return cv.toDataURL();
   }
 
@@ -799,12 +827,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   const camWant = new THREE.Vector3();
   const tmp = new THREE.Vector3();
   loadLevel(startLevel);
-  // the boost button's picture: a tiny render of a plain tank, drums round and lit
-  {
-    const t = createTank();
-    t.setRocket(1, true, 0);
-    hud.setAbilityImage(snapshot(t.group, 36, 30));
-  }
+
 
   let lastSize = null;
   const game = {

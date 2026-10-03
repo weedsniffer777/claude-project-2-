@@ -1637,16 +1637,17 @@ function buildAvenue(scene) {
     // The end of the zone: a two-high wall of shipping containers. Only the
     // airstrike gets through it; it collapses into a heap of torn metal.
     function containerWall(x, sections) {
-      return sections.map(([z0, z1]) => {
+      return sections.map(([z0, z1, high = 1]) => {
         const zc = (z0 + z1) / 2;
         const len = z1 - z0;
         const c = B.crushable(
           () => {
-            for (let k = 0; k < 2; k++) {
+            for (let k = 0; k < high; k++) {
               const m = container(x + (rand() - 0.5) * 0.3, k * 2.6, zc + (rand() - 0.5) * 0.4, Math.PI / 2 + (rand() - 0.5) * 0.06, CONTAINERS[(rand() * 5) | 0], k ? (rand() - 0.5) * 0.05 : 0);
               m.scale.x = Math.min(1.2, len / 6);
             }
-            B.hitBox(x, 2.6, zc, 2.6, 5.2, len);
+            if (high === 1) rubble(x - 1.4, zc + (rand() - 0.5) * 2, 1.0, 0.8); // a heap at its foot
+            B.hitBox(x, 1.3 * high, zc, 2.6, 2.6 * high, len);
             B.block(x, zc, 1.25, len / 2);
           },
           { kind: 'prop', heavy: true, armored: true, pivot: { x, y: 0, z: zc } },
@@ -1738,16 +1739,25 @@ function buildAvenue(scene) {
           B.solid(j);
         }
         B.block((PLAZA.x0 + PLAZA.x1) / 2 + 2.5, back + side * 0.3, (PLAZA.x1 - PLAZA.x0) / 2 - 2.5, 0.45);
-        // the low line across the square, in line with the end wall
-        const z0 = side * (CURB.s + 4.1);
-        const z1 = side * (PLAZA.z - 1.4);
-        let i = 0;
-        for (let z = Math.min(z0, z1); z <= Math.max(z0, z1); z += 1.7, i++) {
-          if (i % 3 === 1) rubble(END_X, z, 0.8, 0.7);
-          else hedgehog(END_X + (rand() - 0.5) * 0.4, z, rand() * 3);
+        // the end wall carries on across the square, out to its back edge:
+        // a dead tram and a container on one side, containers single and
+        // doubled with a heap between on the other, hedgehogs at the foot
+        if (side < 0) {
+          P.bus(B, END_X, -14.6, Math.PI / 2 + 0.06);
+          container(END_X + 0.2, py, -21, Math.PI / 2, CONTAINERS[2]);
+          B.block(END_X + 0.2, -21, 1.25, 3);
+          rubble(END_X - 0.8, -18, 1.3, 1.2, { slabs: 2 });
+        } else {
+          container(END_X, py, 13.9, Math.PI / 2, CONTAINERS[0]);
+          container(END_X + 0.1, py + 2.6, 13.6, Math.PI / 2 + 0.05, CONTAINERS[4]);
+          B.block(END_X, 13.9, 1.25, 3);
+          rubble(END_X, 17.8, 1.6, 1.5, { solid: true, slabs: 3 });
+          B.block(END_X, 17.8, 1.2, 1.1);
+          const m = container(END_X + 0.3, py, 21.6, Math.PI / 2 - 0.12, CONTAINERS[3]);
+          m.scale.x = 0.9;
+          B.block(END_X + 0.3, 21.6, 1.25, 2.8, -0.12);
         }
-        B.hitBox(END_X, 0.6, (z0 + z1) / 2, 1.6, 1.2, Math.abs(z1 - z0) + 1.6);
-        B.block(END_X, (z0 + z1) / 2, 0.75, Math.abs(z1 - z0) / 2 + 0.8);
+        for (const dz of [2.2, 6.8, 11]) hedgehog(END_X - 2.2, side * (CURB.s + 2 + dz), rand() * 3);
         // a few things left about on the squares
         B.crushable(() => P.car(B, PLAZA.x0 + 6.5, side * 15, 0.7, { kind: 'sedan', paint: BURNT_PAINT[side < 0 ? 2 : 4] }), { kind: 'car', scrap: 2 });
         B.crushable(() => P.crates(B, END_X - 2.5, py, side * 19), { kind: 'prop', scrap: 2 });
@@ -1763,11 +1773,13 @@ function buildAvenue(scene) {
       P.car(B, jx - 2.5, -53, 1.2, { kind: 'sedan', paint: BURNT_PAINT[1], solidBlock: false });
       P.car(B, jx + 1.5, -66, 1.6, { kind: 'hatch', paint: BURNT_PAINT[4], solidBlock: false });
     }
-    const endWall = containerWall(END_X, [[WALK.n - 0.5, -3.4], [-3.4, 3.4], [3.4, WALK.s + 1.6]]);
+    // across the street: single and doubled containers, varying (the airstrike's target)
+    const endWall = containerWall(END_X, [[WALK.n - 0.5, -3.4, 1], [-3.4, 3.4, 2], [3.4, WALK.s + 1.6, 1]]);
     // past the wall the street runs on into a last heap of rubble
-    rubble(170, -4, 3, 2, { slabs: 3 });
-    rubble(171, 3, 3.4, 2.4, { slabs: 3 });
-    B.block(171, 0, 2, 11);
+    // past the wall the street runs on (the tank drives off down it at the
+    // end, nothing in the way): heaps only along its edges
+    rubble(170, -8.6, 2.2, 1.6, { slabs: 2 });
+    rubble(172, 8, 2.4, 1.8, { slabs: 2 });
 
     B.finish();
     B.mergeStatic();
@@ -2051,7 +2063,10 @@ function buildAvenue(scene) {
             }
           }
           if (S.hold <= 0) {
-            S.boss = api.spawnHound(JX, -21, { via: [[JX, -8]] });
+            // just out of sight up the north street, so it's on screen quickly;
+            // it clambers in over the rubble
+            const at = api.offscreen(new THREE.Vector3(JX, 0, -9), new THREE.Vector3(0, 0, -1));
+            S.boss = api.spawnHound(at.x, at.z, { via: [[JX, -8]], noclip: true });
             fromSouth(api, -3, 1.5);
             fromSouth(api, 3, 2);
             api.boss(S.boss, 'Large quadruped');
