@@ -37,8 +37,7 @@ const C = {
   rubber: 0x262625,
   trackA: 0x3a3936,
   trackB: 0x2c2b29,
-  glass: 0x4a4a78,
-  glint: 0x8a86c0,
+  glass: 0x1d1f22,
   lamp: 0xe0d49a,
   slats: 0x9a9a8c,
   canvas: 0x5a5238,
@@ -49,7 +48,7 @@ const TAU = Math.PI * 2;
 // ---------------------------------------------------------------- layout
 // (world units: nose at x 1.7, rear plate at -1.6)
 const NOSE = 1.7;
-const REAR = -1.6;
+const REAR = -1.3; // (a little overhang behind the idler, not a lot)
 const DECK_Y = 0.8;
 // upper hull, full width out over the tracks; side profile, counter-clockwise
 const UPPER = [[REAR, 0.5], [1.66, 0.5], [NOSE, 0.56], [NOSE, 0.69], [1.14, DECK_Y], [REAR + 0.02, DECK_Y], [REAR, 0.77]];
@@ -67,7 +66,7 @@ const ROAD_WHEELS = [0.98, 0.59, 0.2, -0.23, -0.66];
 const SPROCKET = { x: 1.41, y: 0.36, r: 0.16 }; // drive, raised at the front
 const IDLER = { x: -1.03, y: 0.34, r: 0.14 };
 // turret: long, set well back; side profile with a faceted front
-const TURRET = { x: -0.55, y: DECK_Y };
+const TURRET = { x: -0.45, y: DECK_Y };
 const TURRET_PROFILE = [[-0.74, 0], [0.62, 0], [0.76, 0.18], [0.6, 0.48], [-0.74, 0.48]];
 const TURRET_HALF = { bottom: 0.48, top: 0.42 };
 const ROOF = 0.48; // turret-local
@@ -263,8 +262,8 @@ export function createLightTank() {
   for (const s of [-1, 1]) {
     const z = s * UPPER_HALF;
     // the ledge running the length of the side, bolts along the top edge
-    put(chassis, box(3.2, 0.03, 0.04, C.greenDark), 0.05, 0.62, z + s * 0.015);
-    for (let x = -1.45; x < 1.4; x += 0.24) put(chassis, box(0.03, 0.03, 0.015, C.black), x, 0.76, z + s * 0.008);
+    put(chassis, box(2.9, 0.03, 0.04, C.greenDark), 0.2, 0.62, z + s * 0.015);
+    for (let x = -1.2; x < 1.4; x += 0.24) put(chassis, box(0.03, 0.03, 0.015, C.black), x, 0.76, z + s * 0.008);
     // the big flat mudguard over the front of the track, a flap at the back
     put(chassis, camoBox(0.05, 0.34, TRACK_W + 0.08, 15 + s), NOSE + 0.03, 0.42, s * TRACK_Z);
     put(chassis, box(0.28, 0.025, TRACK_W + 0.08, C.greenDark, { r: 0.01 }), NOSE - 0.1, 0.6, s * TRACK_Z);
@@ -303,13 +302,13 @@ export function createLightTank() {
   // the long exhaust along the top of the left side in its mesh guard, a
   // bin under it
   const exZ = -(UPPER_HALF + 0.08);
-  put(chassis, cyl(0.1, 1.3, C.mesh, { axis: 'x', seg: 10 }), -0.75, DECK_Y - 0.02, exZ);
-  for (let k = 0; k < 12; k++) put(chassis, cyl(0.105, 0.02, C.dark, { axis: 'x', seg: 10 }), -1.35 + k * 0.11, DECK_Y - 0.02, exZ);
+  put(chassis, cyl(0.1, 1.1, C.mesh, { axis: 'x', seg: 10 }), -0.6, DECK_Y - 0.02, exZ);
+  for (let k = 0; k < 10; k++) put(chassis, cyl(0.105, 0.02, C.dark, { axis: 'x', seg: 10 }), -1.1 + k * 0.11, DECK_Y - 0.02, exZ);
   put(chassis, cyl(0.06, 0.18, C.dark, { axis: 'x', seg: 8 }), -0.02, DECK_Y - 0.02, exZ);
-  put(chassis, camoBox(1.0, 0.18, 0.12, 5), -0.85, 0.62, -(UPPER_HALF + 0.06));
+  put(chassis, camoBox(0.9, 0.18, 0.12, 5), -0.65, 0.62, -(UPPER_HALF + 0.06));
   // the right side: a long stowage bin along the middle of the hull
-  put(chassis, camoBox(1.5, 0.18, 0.1, 6), -0.2, 0.66, UPPER_HALF + 0.05);
-  put(chassis, box(1.52, 0.025, 0.12, C.greenDark, { r: 0.01 }), -0.2, 0.76, UPPER_HALF + 0.05);
+  put(chassis, camoBox(1.3, 0.18, 0.1, 6), -0.05, 0.66, UPPER_HALF + 0.05);
+  put(chassis, box(1.32, 0.025, 0.12, C.greenDark, { r: 0.01 }), -0.05, 0.76, UPPER_HALF + 0.05);
   // the slatted bin on the rear plate, tail lights either side
   put(chassis, box(0.22, 0.3, 0.9, C.greenDark, { r: 0.02 }), REAR - 0.11, 0.68, 0);
   for (let k = 0; k < 5; k++) put(chassis, box(0.02, 0.025, 0.86, C.slats), REAR - 0.225, 0.56 + k * 0.055, 0);
@@ -319,28 +318,29 @@ export function createLightTank() {
   turret.add(prism(TURRET_PROFILE, TURRET_HALF.bottom, TURRET_HALF.top, camo(0.6, 3)));
   put(turret, cyl(0.5, 0.04, C.dark, { seg: 22 }), 0, 0.01, 0); // turret ring
   {
-    // right side: the big slatted box, high up on the front half
-    put(turret, box(0.56, 0.3, 0.14, C.greenDark, { r: 0.015 }), 0.25, 0.33, 0.52);
-    for (let k = 0; k < 5; k++) put(turret, box(0.52, 0.025, 0.02, C.slats), 0.25, 0.22 + k * 0.055, 0.6);
-    // and behind it a round port and a chevron painted on
-    put(turret, cyl(0.07, 0.03, C.greenDark, { axis: 'z', seg: 10 }), -0.28, 0.28, 0.47);
-    for (const r of [0.6, -0.6]) put(turret, box(0.16, 0.025, 0.01, C.slats), -0.48, 0.28 + (r > 0 ? 0.04 : -0.04), 0.476).rotation.z = r;
-    // left side: a big flat-sided bin the length of the turret
-    put(turret, camoBox(1.1, 0.44, 0.18, 12), -0.12, 0.24, -0.57);
-    put(turret, box(1.12, 0.03, 0.2, C.greenDark, { r: 0.01 }), -0.12, 0.47, -0.57);
-    for (const x of [-0.5, 0.0, 0.3]) put(turret, box(0.03, 0.44, 0.01, C.black), x, 0.24, -0.665); // straps
-    // bags hung off the back, overhanging, a bustle box under them
-    put(turret, camoBox(0.24, 0.28, 0.86, 9), -0.86, 0.16, 0);
-    put(turret, box(0.34, 0.3, 0.9, C.canvas, { r: 0.1 }), -0.9, 0.42, -0.05);
-    put(turret, box(0.26, 0.22, 0.4, C.greenDark, { r: 0.08 }), -0.86, 0.6, 0.22);
-    put(turret, cyl(0.08, 0.8, C.brown, { axis: 'z', seg: 8 }), -0.78, 0.6, -0.18);
+    // the bins either side stand well out from the turret wall, to a bit
+    // past the hull's width: that's the turret's big boxy silhouette.
+    // Right side: the slatted box on the front half, a plain bin behind it
+    put(turret, box(0.62, 0.34, 0.34, C.greenDark, { r: 0.015 }), 0.24, 0.31, 0.65);
+    for (let k = 0; k < 5; k++) put(turret, box(0.58, 0.03, 0.02, C.slats), 0.24, 0.2 + k * 0.058, 0.825);
+    put(turret, camoBox(0.6, 0.38, 0.34, 11), -0.38, 0.27, 0.65);
+    put(turret, box(0.62, 0.03, 0.36, C.greenDark, { r: 0.01 }), -0.38, 0.47, 0.65);
+    // left side: one big flat-sided bin the length of the turret, strapped
+    put(turret, camoBox(1.24, 0.46, 0.36, 12), -0.08, 0.25, -0.66);
+    put(turret, box(1.26, 0.03, 0.38, C.greenDark, { r: 0.01 }), -0.08, 0.49, -0.66);
+    for (const x of [-0.5, -0.05, 0.36]) put(turret, box(0.04, 0.46, 0.01, C.black), x, 0.25, -0.845);
+    // bags hung off the back, as wide as the bins, a bustle box under them
+    put(turret, camoBox(0.24, 0.28, 1.0, 9), -0.86, 0.16, 0);
+    put(turret, box(0.34, 0.3, 1.2, C.canvas, { r: 0.1 }), -0.9, 0.42, -0.08);
+    put(turret, box(0.28, 0.24, 0.44, C.greenDark, { r: 0.08 }), -0.86, 0.62, 0.3);
+    put(turret, cyl(0.08, 0.9, C.brown, { axis: 'z', seg: 8 }), -0.78, 0.62, -0.2);
     // the mantlet housing at the front, rounded, round the gun
     put(turret, box(0.2, 0.3, 0.34, C.greenDark, { r: 0.04 }), 0.74, GUN_Y, GUN_Z);
-    put(turret, cyl(0.15, 0.26, C.green, { axis: 'x', seg: 12 }), 0.86, GUN_Y, GUN_Z);
+    put(turret, cyl(0.17, 0.26, C.green, { axis: 'x', seg: 12 }), 0.86, GUN_Y, GUN_Z);
     // smoke dischargers: four capped tubes on each front corner, up and out
     for (const s of [-1, 1]) {
       const rack = new THREE.Group();
-      rack.position.set(0.5, 0.42, s * 0.46);
+      rack.position.set(0.5, 0.44, s * (s < 0 ? 0.62 : 0.6)); // on the bins' front ends
       rack.rotation.set(0, -s * 0.3, 0.5);
       turret.add(rack);
       put(rack, box(0.08, 0.14, 0.18, C.greenDark, { r: 0.01 }), -0.05, 0, 0);
@@ -351,20 +351,33 @@ export function createLightTank() {
     }
     // roof: the commander's hooded sight (left), the gunner's sight (right),
     // two hatches behind, periscopes round the edge
+    // A sight head: a turning collar, an armoured box with its back top
+    // edge chamfered, and at the front a thick armour frame standing proud
+    // round a deep window opening, the roof plate running forward over it
+    // as a hood; ribs and grab handles on the sides.
     const sight = (x, z, w, h, d) => {
       const sg = new THREE.Group();
       sg.position.set(x, ROOF, z);
       turret.add(sg);
-      put(sg, cyl(d * 0.55, 0.05, C.greenDark, { seg: 12 }), 0, 0.025, 0);
-      put(sg, camoBox(w, h, d, 14 + z * 10), 0, 0.05 + h / 2, 0);
-      put(sg, box(w + 0.08, 0.05, d + 0.04, C.dark, { r: 0.015 }), 0.05, 0.05 + h + 0.02, 0).rotation.z = -0.15; // the hood
-      put(sg, box(0.05, h * 0.6, d * 0.86, C.dark, { r: 0.01 }), w / 2 + 0.02, 0.05 + h * 0.5, 0); // window frame
-      put(sg, box(0.02, h * 0.42, d * 0.64, C.glass, { r: 0.004 }), w / 2 + 0.045, 0.05 + h * 0.5, 0);
-      put(sg, box(0.012, h * 0.1, d * 0.4, C.glint), w / 2 + 0.056, 0.05 + h * 0.6, -d * 0.05);
-      for (const sz of [-1, 1]) put(sg, box(0.14, 0.02, 0.02, C.dark), 0, 0.05 + h * 0.55, sz * (d / 2 + 0.02)); // grab handles
+      put(sg, cyl(d * 0.55, 0.06, C.greenDark, { seg: 12 }), -0.02, 0.03, 0); // collar
+      const body = prism([[-w / 2, 0], [w / 2, 0], [w / 2, h], [-w / 2 + 0.07, h], [-w / 2, h - 0.07]], d / 2, d / 2, camo(0.8, 14 + z * 10));
+      body.position.y = 0.06;
+      sg.add(body);
+      const fx = w / 2 + 0.035; // the frame's centre, out from the front face
+      const y0 = 0.06 + h * 0.18;
+      const y1 = 0.06 + h * 0.82;
+      put(sg, box(0.07, 0.05, d, C.greenDark, { r: 0.01 }), fx, y1 + 0.025, 0); // top bar
+      put(sg, box(0.07, 0.05, d, C.greenDark, { r: 0.01 }), fx, y0 - 0.025, 0); // bottom bar
+      for (const sz of [-1, 1]) put(sg, box(0.07, y1 - y0, 0.05, C.greenDark, { r: 0.01 }), fx, (y0 + y1) / 2, sz * (d / 2 - 0.025)); // side bars
+      put(sg, box(0.02, y1 - y0, d - 0.1, C.dark), w / 2 + 0.01, (y0 + y1) / 2, 0); // the window, set back in the frame
+      put(sg, box(0.14, 0.035, d + 0.04, C.greenDark, { r: 0.01 }), w / 2 + 0.03, 0.06 + h + 0.015, 0); // hood
+      for (const sz of [-1, 1]) {
+        put(sg, box(0.03, h * 0.8, 0.02, C.greenDark), -w * 0.15, 0.06 + h / 2, sz * (d / 2 + 0.01)); // rib
+        put(sg, box(0.16, 0.025, 0.025, C.dark), 0.02, 0.06 + h * 0.62, sz * (d / 2 + 0.035)); // grab handle
+      }
     };
-    sight(0.24, -0.2, 0.26, 0.24, 0.26);
-    sight(0.3, 0.2, 0.22, 0.18, 0.22);
+    sight(0.22, -0.2, 0.32, 0.28, 0.3);
+    sight(0.28, 0.2, 0.28, 0.24, 0.27);
     put(turret, cyl(0.15, 0.04, C.green, { seg: 14 }), COMMANDER.x, ROOF + 0.02, COMMANDER.z);
     put(turret, cyl(0.14, 0.04, C.green, { seg: 14 }), -0.24, ROOF + 0.02, 0.2);
     for (const [x, z] of [[-0.02, -0.38], [-0.45, -0.34], [-0.45, 0.34], [0.5, 0.0]]) put(turret, box(0.07, 0.07, 0.08, C.dark, { r: 0.01 }), x, ROOF + 0.035, z);
@@ -388,10 +401,10 @@ export function createLightTank() {
   turret.add(gunPivot);
   slotGroups.gun.push(gunPivot);
   {
-    put(gunPivot, cyl(0.07, 0.36, C.green, { axis: 'x', seg: 10 }), 0.28, 0, 0); // jacket
-    put(gunPivot, cyl(0.075, 0.04, C.greenDark, { axis: 'x', seg: 10 }), 0.47, 0, 0); // its end ring
-    put(gunPivot, cyl(0.032, 0.72, C.dark, { axis: 'x', seg: 8 }), 0.84, 0, 0); // barrel
-    put(gunPivot, cyl(0.045, 0.1, C.dark, { axis: 'x', seg: 8 }), 1.18, 0, 0); // muzzle
+    put(gunPivot, cyl(0.09, 0.36, C.green, { axis: 'x', seg: 10 }), 0.28, 0, 0); // jacket
+    put(gunPivot, cyl(0.096, 0.04, C.greenDark, { axis: 'x', seg: 10 }), 0.47, 0, 0); // its end ring
+    put(gunPivot, cyl(0.05, 0.72, C.dark, { axis: 'x', seg: 8 }), 0.84, 0, 0); // barrel
+    put(gunPivot, cyl(0.068, 0.1, C.dark, { axis: 'x', seg: 8 }), 1.18, 0, 0); // muzzle
     put(turret, cyl(0.02, 0.24, C.dark, { axis: 'x', seg: 6 }), GUN_BASE_X + 0.02, GUN_Y - 0.08, GUN_Z - 0.18); // coax MG
   }
 
