@@ -19,9 +19,9 @@ const VIEW_H = 13; // world units visible vertically
 // back along this line (orthographic, so distance doesn't change the view)
 // so tall foreground props never cross the near plane.
 const CAM_OFFSET = new THREE.Vector3(-10, 8.2, 10).multiplyScalar(4);
-const MAX_SPEED = 5.5;
-const ACCEL = 12;
-const TURN_RATE = 3.4;
+const MAX_SPEED = 7.2;
+const ACCEL = 15;
+const TURN_RATE = 4;
 const LAMP_LIGHTS = 6; // point lights shared by the level's emitters nearest the tank
 
 const TANK_HP = 100;
@@ -53,6 +53,7 @@ export function createGame({ renderer, pixel, level: startLevel }) {
   let hasAim = false;
   let pointer = null;
   let client = null;
+  let hovered = null;
   const pos = tank.group.position;
 
   // ------------------------------------------------------- level loading
@@ -115,6 +116,8 @@ export function createGame({ renderer, pixel, level: startLevel }) {
     clearPrompt: () => hud.clearPrompt(),
     objective: (text) => hud.setObjective(text),
     marker: (p, label) => hud.setMarker(p, label),
+    arrow: (target, html) => hud.setArrow(target, html),
+    nearestEnemy: () => enemies.nearest(pos, 60),
     removeBlock(b) {
       const i = blocks.indexOf(b);
       if (i >= 0) blocks.splice(i, 1);
@@ -305,9 +308,11 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         ndc.set(pointer[0], pointer[1]);
         raycaster.setFromCamera(ndc, camera);
         const hits = raycaster.intersectObjects(targets, false);
+        hovered = null;
         if (hits.length) {
           aimPoint.copy(hits[0].point);
           hasAim = true;
+          hovered = hits[0].object.userData.enemy || null;
         }
       }
       level.light.follow(pos);
@@ -348,6 +353,15 @@ export function createGame({ renderer, pixel, level: startLevel }) {
         aimMark.material.opacity = reload >= 1 ? 0.65 : 0.25;
         aimLine.material.opacity = reload >= 1 ? 0.35 : 0.15;
       }
+      // outline the machine under the reticle if the gun has a clear shot
+      let outlined = null;
+      if (hovered?.alive && !run.over) {
+        const { position: m, direction: d, breech } = tank.muzzle();
+        const toward = new THREE.Vector3(hovered.pos.x, 0.6, hovered.pos.z);
+        const shot = combat.traceShot(m, toward.clone().sub(m).normalize(), breech, toward, targets);
+        if (shot.hit?.mesh === hovered.hit) outlined = hovered;
+      }
+      enemies.setHover(outlined);
       hud.showReticle(!!client && !run.over);
       if (client) hud.setReticle(client[0], client[1], reload);
       hud.setKills(enemies.killed);

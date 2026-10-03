@@ -14,8 +14,8 @@ const DOG = {
   burst: 3,
   burstGap: 0.13,
   reload: 1.7,
-  damage: 2.5,
-  accuracy: 0.6,
+  damage: 1.5,
+  accuracy: 0.5,
   box: { hx: 0.55, hz: 0.3 },
 };
 
@@ -30,7 +30,8 @@ export class Enemies {
   }
 
   // a dog appears at (x, z), already running toward the tank
-  spawnDog(x, z, { delay = 0 } = {}) {
+  // via: waypoints [[x, z], ...] it runs through first (out of side streets)
+  spawnDog(x, z, { delay = 0, via = [] } = {}) {
     const model = createDog();
     model.group.position.set(x, 0, z);
     model.group.visible = delay <= 0;
@@ -56,6 +57,7 @@ export class Enemies {
       sidestep: 0,
       recoil: 0,
       speed: 0,
+      via: via.map(([wx, wz]) => ({ x: wx, z: wz })),
     };
     hit.userData.enemy = e;
     this.list.push(e);
@@ -197,7 +199,15 @@ export class Enemies {
       let vx = 0;
       let vz = 0;
       let speed = 0;
-      if (dist > DOG.range) {
+      if (e.via.length) {
+        const w = e.via[0];
+        const wx = w.x - e.pos.x;
+        const wz = w.z - e.pos.z;
+        if (Math.hypot(wx, wz) < 1.2) e.via.shift();
+        vx = wx;
+        vz = wz;
+        speed = DOG.runSpeed;
+      } else if (dist > DOG.range) {
         vx = tx;
         vz = tz;
         speed = DOG.runSpeed;
@@ -250,8 +260,9 @@ export class Enemies {
         }
       } else e.stuck = 0;
 
-      // body faces where it runs; head and rifle face the tank
-      const facing = dist > DOG.range && e.sidestep <= 0 ? Math.atan2(-vz, vx) : Math.atan2(-tz, tx) + e.strafe * 0.5;
+      // the body always faces the way it walks (no sliding sideways); the
+      // head and rifle turn to keep the tank in their sights
+      const facing = moved > 0.002 ? Math.atan2(-(e.pos.z - before.z), e.pos.x - before.x) : e.model.group.rotation.y;
       const g = e.model.group;
       let diff = facing - g.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -262,7 +273,7 @@ export class Enemies {
       // shooting: bursts once in range and roughly facing the tank
       e.recoil = Math.max(0, e.recoil - dt * 8);
       e.fireTimer -= dt;
-      if (dist < DOG.range + 1.5 && Math.abs(aimYaw) < 1.2) {
+      if (dist < DOG.range + 1.5) {
         if (e.burstLeft <= 0 && e.fireTimer <= 0) {
           e.burstLeft = DOG.burst;
           e.fireTimer = 0;
@@ -283,6 +294,11 @@ export class Enemies {
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
       e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil });
     }
+  }
+
+  // the machine under the reticle gets a white outline
+  setHover(target) {
+    for (const e of this.list) e.model.setOutline(e === target && e.alive);
   }
 
   dispose() {

@@ -606,7 +606,7 @@ export const avenue = {
     }
 
     // North side, with gaps the sun comes through.
-    building({ x0: -40, x1: -20, floors: 9, panel: PANELS[0], accent: ACCENTS[0], pierce: 3 });
+    building({ x0: -40, x1: -20, floors: 9, panel: PANELS[0], accent: ACCENTS[0], pierce: 0 });
     building({ x0: -15, x1: 4, floors: 5, panel: PANELS[3], accent: null, holes: 3, broken: 0.35, pierce: 3 });
     building({ x0: 4, x1: CROSS.x0, floors: 5, panel: PANELS[1], shop: true, sign: '#b7c9c4', letters: true, holes: 1 });
     building({ x0: CROSS.x1, x1: 39, floors: 9, panel: PANELS[2], accent: ACCENTS[2], mural: true, bite: { w: 4.5, floors: 4 }, holes: 3, pierce: 3 });
@@ -618,7 +618,7 @@ export const avenue = {
     building({ x0: 8, x1: 36, zf: -29, depth: 8, floors: 2, panel: PANELS[2], broken: 0.6, pierce: 0 });
 
     // haze in the gaps: light pouring through between the blocks
-    for (const [gx0, gx1, h] of [[-20, -15, 9], [CROSS.x0, CROSS.x1, 9], [39, 44, 12], [58, 80, 12], [97, 103, 9]]) {
+    for (const [gx0, gx1, h] of [[CROSS.x0, CROSS.x1, 9], [39, 44, 12], [58, 80, 12], [97, 103, 9]]) {
       const y = h * FH;
       sunVolume(B, [new THREE.Vector3(gx0, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n - 13), new THREE.Vector3(gx1, y, WALK.n), new THREE.Vector3(gx0, y, WALK.n)], 0.05);
     }
@@ -681,6 +681,16 @@ export const avenue = {
     }
     B.block(22, -23, 6, 1.5);
 
+    // jersey barriers sealing the side gaps off the street
+    for (const [x0, x1] of [[-20, -15], [39, 44], [57.6, 60]]) {
+      for (let x = x0 + 0.4; x < x1; x += 1.7) {
+        const j = put(B.root, box(1.6, 0.9, 0.7, 0x9a978f, { r: 0.06 }), x + 0.4, SW + 0.45, WALK.n - 0.35);
+        j.rotation.y = (rand() - 0.5) * 0.12;
+        B.solid(j);
+      }
+      B.block((x0 + x1) / 2, WALK.n - 0.35, (x1 - x0) / 2 + 0.3, 0.45);
+    }
+
     // facade slabs that came down whole, leaning on the sidewalk
     for (const [x, ry] of [[-30, 0.2], [12, -0.3], [49, 0.4], [92, -0.2]]) {
       const s = B.chunk(2.4, 1.6, 0.2, CONCRETE[1], x, SW + 0.7, WALK.n + 0.9, -0.55, ry, 0.05);
@@ -698,6 +708,7 @@ export const avenue = {
     const poleTops = new Map();
     for (const x of poleXs) {
       for (const side of [-1, 1]) {
+        if (side < 0 && x > CROSS.x0 - 1 && x < CROSS.x1 + 1) continue; // keep the corridor mouth clear
         const z = side < 0 ? CURB.n - 0.45 : CURB.s + 0.45;
         const idx = lampIndex++;
         const tilt = rand() < 0.35 ? (rand() - 0.5) * 0.5 : (rand() - 0.5) * 0.06;
@@ -747,7 +758,7 @@ export const avenue = {
           }
         }
       }
-      B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
+      if (poleTops.has(`${x},-1`)) B.sagging(poleTops.get(`${x},-1`).clone().setY(spanY), poleTops.get(`${x},1`).clone().setY(spanY), 0.25);
     }
     for (let i = 0; i < poleXs.length - 1; i++) {
       const xa = poleXs[i];
@@ -856,12 +867,12 @@ export const avenue = {
     P.car(B, 1.5, 4.8, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1], flipped: true });
     P.car(B, 11, -5.4, -0.35, { kind: 'sedan', paint: BURNT_PAINT[2] });
     P.car(B, 24.5, 4.5, 0.55, { kind: 'van', paint: 0x6b7458 });
-    P.bus(B, 33, -1.2, 0.32);
+    P.bus(B, 33, -2.4, 0.18);
     P.car(B, 47, 3.8, 2.75, { kind: 'hatch', paint: BURNT_PAINT[3] });
     P.car(B, 56.5, -6.0, 0.05, { kind: 'sedan', paint: BURNT_PAINT[4] });
     P.car(B, 67, 4.6, -0.2, { kind: 'van', paint: 0x7b7f78 });
     P.car(B, 72.5, -5.2, 0.35, { kind: 'sedan', paint: BURNT_PAINT[5] });
-    P.car(B, 83, 1.6, 1.25, { kind: 'sedan', paint: BURNT_PAINT[1] });
+    P.car(B, 83, 5.0, 0.2, { kind: 'sedan', paint: BURNT_PAINT[1] });
     P.car(B, 88, -5.8, -0.5, { kind: 'hatch', paint: BURNT_PAINT[0] });
     P.car(B, 96.6, -4.6, 1.4, { kind: 'sedan', paint: BURNT_PAINT[2] });
     P.car(B, 96.4, 4.8, -1.7, { kind: 'sedan', paint: BURNT_PAINT[3], flipped: true });
@@ -1167,7 +1178,7 @@ export const avenue = {
     // ------------------------------------------------------ the checkpoint
     // A wall of jersey barriers from the buildings to the heat pipes, one
     // heavy gate in the middle. The gate takes three cannon hits.
-    const gate = { hp: 3, down: false, leaves: [], blocks: [], fall: 0, beacons: [] };
+    const gate = { hp: 2, down: false, leaves: [], blocks: [], fall: 0, beacons: [] };
     {
       for (let z = WALK.n + 0.1; z < WALK.s + 0.6; z += 1.7) {
         if (z > -2.6 && z < 2.6) continue;
@@ -1231,7 +1242,7 @@ export const avenue = {
         B.block(x, z, 0.7, 0.7);
       }
       // spaced so there is always a way round, never a pocket to get stuck in
-      for (const [x, z] of [[86, -3.6], [88.5, 2.4], [91.5, -0.6], [93.5, 4.2], [94, -5.8]]) hedgehog(x, z);
+      for (const [x, z] of [[86, -4.4], [89, 3.2], [93.5, 4.4], [94, -5.8]]) hedgehog(x, z);
       // floodlight tower: cold white over the approach
       const tx = GX - 2.4;
       const tz = WALK.s - 0.4;
@@ -1278,14 +1289,14 @@ export const avenue = {
       const c = api.combat;
       const center = new THREE.Vector3(GX - 0.3, 1.3, 0);
       c.fx.burst(center, { count: 24, speed: 7, color: 0xffd36b, life: 0.4, size: 0.08, gravity: 12 });
-      // buckle the leaves a little more with each hit
+      // buckle the leaves with the hit
       gate.leaves.forEach((l, i) => {
-        l.hinge.rotation.z = -0.06 * (3 - gate.hp);
-        l.hinge.rotation.y = (i ? 1 : -1) * 0.05 * (3 - gate.hp);
+        l.hinge.rotation.z = -0.1;
+        l.hinge.rotation.y = (i ? 1 : -1) * 0.08;
       });
       if (gate.hp > 0) {
         api.shake(0.2);
-        api.prompt('Main gun', gate.hp === 2 ? 'Good hit! Two more.' : 'One more!', { seconds: 0 });
+        api.prompt('Main gun', 'Good hit! One more!');
         return true;
       }
       // down it goes
@@ -1312,77 +1323,101 @@ export const avenue = {
     // ------------------------------------------------------ tutorial script
     // Drive -> machines (the roof MG handles them) -> main gun -> the bridge
     // -> blow the gate -> drive through.
-    const S = { step: 0, spawnX: 0 };
+    const S = { step: 0, spawnX: 0, t: 0 };
     const gateMark = new THREE.Vector3(GX - 0.3, 1.6, 0);
+    const CLICK = '<kbd>Click</kbd>';
     function start(api) {
-      S.step = 0;
-      S.spawnX = api.tankPos.x;
-      gate.hp = 3;
-      api.objective('Push down the avenue to the checkpoint');
+      Object.assign(S, { step: 0, spawnX: api.tankPos.x, t: 0 });
+      gate.hp = 2;
+      api.objective('Drive up the street and destroy all enemies');
       api.prompt('Controls', 'Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys');
+      api.arrow(new THREE.Vector3(S.spawnX + 12, 0.4, 0), 'This way');
     }
-    function script(api) {
+    // the arrow that follows the nearest machine
+    const onEnemy = (api) => () => {
+      const e = api.nearestEnemy();
+      return e ? new THREE.Vector3(e.pos.x, 1.4, e.pos.z) : null;
+    };
+    function script(api, dt) {
       const x = api.tankPos.x;
+      S.t += dt;
       switch (S.step) {
         case 0:
-          if (x > S.spawnX + 5) {
+          if (x > S.spawnX + 8) {
             api.clearPrompt();
+            api.arrow(null);
             S.step = 1;
           }
           break;
         case 1:
-          if (x > -6) {
-            api.spawnDog(22, -19);
-            api.spawnDog(21, -21.5, { delay: 0.7 });
-            api.prompt('Machines', 'Incoming! Your roof MG tracks and fires on its own. Keep them in range.', { danger: true });
+          if (x > -8) {
+            const out = [[22, -9], [16, -3]];
+            api.spawnDog(22, -18.5, { via: out });
+            api.spawnDog(20.5, -19.5, { delay: 0.6, via: out });
+            api.spawnDog(23.5, -19.5, { delay: 1.2, via: out });
+            api.prompt('Machines', 'Incoming! Your roof MG shoots machines <b>automatically</b>. Just keep them in range.', { danger: true });
+            api.arrow(onEnemy(api), 'Auto MG');
             S.step = 2;
           }
           break;
         case 2:
           if (api.enemiesAlive === 0) {
-            api.prompt('Main gun', 'The turret follows your pointer. <kbd>Click</kbd> or <kbd>Space</kbd> fires the cannon. Its blast shreds machines.', { seconds: 8 });
+            api.spawnDog(40, -5.5, { delay: 1.2 });
+            api.spawnDog(41, 4.5, { delay: 1.6 });
+            api.prompt('Main gun', `${CLICK} or <kbd>Space</kbd> fires the main gun at your reticle. The blast shreds machines.`);
+            api.arrow(onEnemy(api), `${CLICK} to fire main gun!`);
             S.step = 3;
           }
           break;
         case 3:
-          if (x > 40) {
-            api.spawnDog(82, -3);
-            api.spawnDog(83, 1.5, { delay: 0.5 });
-            api.spawnDog(84.5, 4, { delay: 1.0 });
-            api.prompt('Machines', 'More of them, coming over the bridge.', { danger: true, seconds: 4 });
+          if (api.enemiesAlive === 0 && S.t > 0) {
+            api.clearPrompt();
+            api.arrow(null);
             S.step = 4;
           }
           break;
         case 4:
-          if (x > 80) {
-            api.spawnDog(97.5, -7.5);
-            api.spawnDog(97.5, 7.6, { delay: 0.4 });
+          if (x > 46) {
+            api.spawnDog(81, -3);
+            api.spawnDog(82, 1.5, { delay: 0.4 });
+            api.spawnDog(83.5, 4, { delay: 0.8 });
+            api.spawnDog(84, -6, { delay: 1.2 });
+            api.prompt('Machines', 'More coming over the bridge!', { danger: true, seconds: 4 });
             S.step = 5;
           }
           break;
         case 5:
-          if (x > 84 && api.enemiesAlive === 0) {
-            api.objective('Blow down the checkpoint gate');
-            api.prompt('Main gun', 'Aim at the gate and <kbd>Click</kbd> to fire. Three hits should bring it down.');
-            api.marker(gateMark, 'Gate');
+          if (x > 80) {
+            api.spawnDog(97.5, -7.5);
+            api.spawnDog(97.5, 7.6, { delay: 0.4 });
+            api.spawnDog(96, 0, { delay: 0.9 });
             S.step = 6;
           }
           break;
-        case 7:
+        case 6:
+          if (x > 82 && api.enemiesAlive === 0) {
+            api.objective('Blow down the checkpoint gate');
+            api.prompt('Main gun', `Aim at the gate and ${CLICK} to fire. Two hits bring it down.`);
+            api.arrow(gateMark, `${CLICK} to shoot the gate!`);
+            S.step = 7;
+          }
+          break;
+        case 8:
           if (x > GX + 8) {
             api.objective('');
+            api.arrow(null);
             api.win();
-            S.step = 8;
+            S.step = 9;
           }
           break;
       }
     }
     function onImpact(at, mesh, api) {
       if (!hitGate(at, api) || !gate.down) return;
-      api.marker(null);
       api.objective('Drive through the gate');
       api.prompt('Breakthrough', 'The gate is down. Drive through!', { seconds: 5 });
-      S.step = 7;
+      api.arrow(new THREE.Vector3(GX + 5, 0.4, 0), 'Go!');
+      S.step = 8;
     }
 
     function update(dt, t, ctx = {}) {
@@ -1408,7 +1443,7 @@ export const avenue = {
           s.p.material.opacity = 0;
         }
       }
-      if (ctx.api) script(ctx.api);
+      if (ctx.api) script(ctx.api, dt);
     }
 
     return {

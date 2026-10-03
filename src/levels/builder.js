@@ -212,7 +212,7 @@ export class LevelBuilder {
       this.root.add(inst);
     };
     bake(this.pieces, new THREE.BoxGeometry(1, 1, 1));
-    bake(this.lumps, new THREE.IcosahedronGeometry(1, 1));
+    bake(this.lumps, new THREE.IcosahedronGeometry(1, 0));
     this.pieces = [];
     this.lumps = [];
   }
@@ -224,28 +224,57 @@ export class LevelBuilder {
     return obj;
   }
 
-  // Bake every static, opaque, non-collider mesh into one mesh per material,
-  // and every wire into one line set per material: a few dozen draw calls
-  // instead of many hundreds.
+  // Bake every static, opaque mesh into as few meshes as possible: all
+  // flat-coloured toon parts become one vertex-coloured mesh (two, split by
+  // shadow casting), textured parts one mesh per material, glowing parts one
+  // more, and every wire one line set per material. Colliders are baked too;
+  // the original stays behind invisible so shells and the aim ray still hit
+  // its exact shape (and craters still land on it).
   mergeStatic() {
     this.root.updateMatrixWorld(true);
     const solid = new Set(this.colliders);
-    const meshes = new Map();
+    const hidden = new THREE.MeshBasicMaterial({ visible: false });
+    const buckets = new Map();
     const lines = new Map();
     const remove = [];
+    const color = new THREE.Color();
+    const bucket = (key, make) => {
+      if (!buckets.has(key)) buckets.set(key, { ...make(), geos: [] });
+      return buckets.get(key);
+    };
     this.root.traverse((o) => {
-      if (o.userData.dynamic || solid.has(o) || !o.visible) return;
+      if (o.userData.dynamic || !o.visible) return;
       if (o.isMesh && !o.isInstancedMesh && !Array.isArray(o.material) && !o.material.transparent && o.material.visible !== false) {
-        const key = `${o.material.uuid}|${o.castShadow}`;
-        if (!meshes.has(key)) meshes.set(key, { material: o.material, cast: o.castShadow, geos: [] });
+        const mat = o.material;
+        let b;
+        let tint = null;
+        if (mat.isMeshToonMaterial && !mat.map && !mat.emissiveMap) {
+          b = bucket(`toon|${o.castShadow}`, () => ({ material: new THREE.MeshToonMaterial({ vertexColors: true, gradientMap }), cast: o.castShadow }));
+          tint = mat.color;
+        } else if (mat.isMeshBasicMaterial && !mat.map) {
+          b = bucket('basic', () => ({ material: new THREE.MeshBasicMaterial({ vertexColors: true }), cast: false }));
+          tint = mat.color;
+        } else {
+          b = bucket(`${mat.uuid}|${o.castShadow}`, () => ({ material: mat, cast: o.castShadow }));
+        }
         let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
         for (const name of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
         if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
         if (!g.attributes.normal) g.computeVertexNormals();
+        if (tint) {
+          color.copy(tint);
+          const n = g.attributes.position.count;
+          const c = new Float32Array(n * 3);
+          for (let i = 0; i < n; i++) c.set([color.r, color.g, color.b], i * 3);
+          g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+        }
         g.clearGroups();
         g.applyMatrix4(o.matrixWorld);
-        meshes.get(key).geos.push(g);
-        remove.push(o);
+        b.geos.push(g);
+        if (solid.has(o)) {
+          o.material = hidden;
+          o.castShadow = o.receiveShadow = false;
+        } else remove.push(o);
       } else if (o.isLine) {
         const pos = o.geometry.attributes.position;
         if (!lines.has(o.material)) lines.set(o.material, []);
@@ -259,7 +288,8 @@ export class LevelBuilder {
       }
     });
     for (const o of remove) o.removeFromParent();
-    for (const { material, cast, geos } of meshes.values()) {
+    for (const { material, cast, geos } of buckets.values()) {
+      // vertex-coloured buckets need every geometry to carry colours
       const m = new THREE.Mesh(mergeGeometries(geos, false), material);
       m.castShadow = cast;
       m.receiveShadow = true;

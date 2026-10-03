@@ -15,6 +15,41 @@ const C = {
 };
 
 const HIP_Y = 0.62;
+
+let haloTex = null;
+function haloTexture() {
+  if (haloTex) return haloTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.3, 'rgba(255,255,255,0.5)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  haloTex = new THREE.CanvasTexture(c);
+  return haloTex;
+}
+
+// A cone from the eye forward (+X), bright at the eye, fading to nothing.
+let beamGeo = null;
+function beamGeometry() {
+  if (beamGeo) return beamGeo;
+  const len = 2.4;
+  const g = new THREE.ConeGeometry(0.32, len, 10, 1, true);
+  g.rotateZ(Math.PI / 2); // apex toward -X
+  g.translate(len / 2, 0, 0); // apex at the origin, opening along +X
+  const pos = g.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const k = 1 - pos.getX(i) / len;
+    col.set([k, k, k], i * 3);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  beamGeo = g;
+  return g;
+}
 const THIGH = 0.3;
 const SHIN = 0.32;
 
@@ -47,6 +82,14 @@ export function createDog() {
   put(rifle, cyl(0.022, 0.55, C.gun, { axis: 'x', seg: 6 }), 0.52, 0.01, 0); // barrel
   put(rifle, cyl(0.035, 0.08, C.dark, { axis: 'x', seg: 6 }), 0.8, 0.01, 0); // muzzle brake
   put(rifle, box(0.1, 0.05, 0.05, C.dark, { r: 0.01 }), 0.12, 0.07, 0); // optic
+  const sight = put(rifle, box(0.02, 0.035, 0.035, C.eye, { r: 0.005, glow: true }), 0.175, 0.07, 0); // red targeting sight
+  // a faint laser line from the sight
+  const laser = new THREE.Mesh(
+    new THREE.BoxGeometry(5, 0.012, 0.012).translate(2.5, 0, 0),
+    new THREE.MeshBasicMaterial({ color: C.eye, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }),
+  );
+  laser.position.set(0.18, 0.07, 0);
+  rifle.add(laser);
 
   // neck and the camera head: one big red eye, a small lens beside it
   const neck = new THREE.Group();
@@ -63,6 +106,14 @@ export function createDog() {
   eyeRing.scale.set(1, 1, 1);
   const pupil = put(head, cyl(0.025, 0.04, C.eye, { axis: 'x', seg: 6, glow: true }), 0.235, -0.05, 0.08);
   put(head, box(0.12, 0.04, 0.2, C.panel, { r: 0.01 }), 0.02, 0.13, 0); // visor brow
+  // the eye glows: a soft halo and a faint beam cast forward
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: C.eye, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+  halo.scale.setScalar(0.42);
+  halo.position.set(0.26, 0.01, -0.03);
+  head.add(halo);
+  const beam = new THREE.Mesh(beamGeometry(), new THREE.MeshBasicMaterial({ color: C.eye, vertexColors: true, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.position.set(0.26, 0.01, -0.03);
+  head.add(beam);
 
   // legs: hip -> thigh -> knee -> shin -> foot. Front knees bend back,
   // rear knees bend forward, like a dog.
@@ -88,7 +139,7 @@ export function createDog() {
   }
 
   group.traverse((m) => {
-    if (m.isMesh && m.material !== glowMat(C.eye)) m.castShadow = true;
+    if (m.isMesh && !m.material.transparent && m.material !== glowMat(C.eye)) m.castShadow = true;
   });
 
   let gait = 0;
@@ -128,10 +179,14 @@ export function createDog() {
     // bounce and a slight forward lean while running; a breathing idle
     body.position.y = HIP_Y - 0.05 + Math.abs(Math.sin(gait)) * 0.05 * speed + Math.sin(t * 3) * 0.008;
     body.rotation.z = -0.08 * speed + Math.sin(gait * 2) * 0.03 * speed;
-    // head and rifle track the target
-    const yaw = THREE.MathUtils.clamp(ctx.aimYaw ?? 0, -1.2, 1.2);
-    neck.rotation.y += (yaw - neck.rotation.y) * Math.min(1, dt * 10);
-    mount.rotation.y += (yaw - mount.rotation.y) * Math.min(1, dt * 8);
+    // head and rifle track the target whichever way the body walks: the
+    // rifle mount turns all the way round, the neck nearly as far
+    const yaw = ctx.aimYaw ?? 0;
+    const neckYaw = THREE.MathUtils.clamp(yaw, -1.9, 1.9);
+    neck.rotation.y += (neckYaw - neck.rotation.y) * Math.min(1, dt * 10);
+    let d = yaw - mount.rotation.y;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    mount.rotation.y += d * Math.min(1, dt * 10);
     rifle.rotation.z = THREE.MathUtils.clamp(ctx.aimPitch ?? 0, -0.4, 0.4);
     rifle.position.x = -(ctx.recoil ?? 0) * 0.08;
     antenna.rotation.z = Math.sin(t * 9 + gait) * 0.15 * (0.3 + speed);
@@ -139,6 +194,8 @@ export function createDog() {
     const pulse = 0.85 + Math.sin(t * 6) * 0.15;
     eye.scale.set(1, pulse, pulse);
     pupil.visible = Math.sin(t * 2.3) > -0.6;
+    halo.material.opacity = 0.6 + Math.sin(t * 6) * 0.2;
+    beam.material.opacity = 0.18 + Math.sin(t * 6) * 0.05;
     // white hit flash
     if (flash > 0) {
       flash -= dt;
@@ -146,12 +203,13 @@ export function createDog() {
     }
   }
 
+  // A pale flash over the dog's own parts (not its invisible hit box).
   function hitFlash() {
     if (deadT >= 0) return;
     if (flash <= 0) {
-      const white = glowMat(0xf4f1ea);
+      const white = glowMat(0xb9b3a8);
       group.traverse((m) => {
-        if (!m.isMesh || m === eye || m === pupil) return;
+        if (!m.isMesh || m === eye || m === pupil || m === sight || m === beam || m === laser || m.material.visible === false || m.userData.outline) return;
         flashMats.set(m, m.material);
         m.material = white;
       });
@@ -159,7 +217,27 @@ export function createDog() {
     flash = 0.06;
   }
 
+  // White outline (inverted hull) shown while the player is aiming at it.
+  const outlineMat = new THREE.MeshBasicMaterial({ color: 0xf1e9d8, side: THREE.BackSide });
+  const outlines = [];
+  group.traverse((m) => {
+    if (!m.isMesh || m === eye || m === pupil || m === sight || m === beam || m === laser) return;
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    const size = m.geometry.boundingBox.getSize(new THREE.Vector3());
+    const o = new THREE.Mesh(m.geometry, outlineMat);
+    o.scale.set((size.x + 0.06) / Math.max(size.x, 0.01), (size.y + 0.06) / Math.max(size.y, 0.01), (size.z + 0.06) / Math.max(size.z, 0.01));
+    o.userData.outline = true;
+    o.visible = false;
+    outlines.push({ o, parent: m });
+  });
+  for (const { o, parent } of outlines) parent.add(o);
+  function setOutline(on) {
+    for (const { o } of outlines) o.visible = on && deadT < 0;
+  }
+
   function kill() {
+    setOutline(false);
+    for (const { o } of outlines) o.removeFromParent();
     if (flash > 0) {
       flash = 0;
       group.traverse((m) => m.isMesh && flashMats.has(m) && (m.material = flashMats.get(m)));
@@ -167,6 +245,8 @@ export function createDog() {
     deadT = 0;
     eye.material = toon(C.dead);
     pupil.material = toon(C.dead);
+    sight.material = toon(C.dead);
+    halo.visible = beam.visible = laser.visible = false;
   }
 
   // world position of the rifle muzzle and the eye
@@ -180,5 +260,5 @@ export function createDog() {
     return eye.getWorldPosition(new THREE.Vector3());
   }
 
-  return { group, update, hitFlash, kill, muzzle, eyeWorld, events: [] };
+  return { group, update, hitFlash, kill, setOutline, muzzle, eyeWorld, events: [] };
 }

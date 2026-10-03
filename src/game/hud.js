@@ -30,7 +30,15 @@ const CSS = `
 .hud .hud-prompt[hidden] { display: grid !important; opacity: 0; transform: translate(-50%, 10px); }
 .hud-prompt .tag { font-size: 11px; color: var(--amber); }
 .hud-prompt.danger .tag { color: var(--danger); }
-.hud-prompt .text { font-size: 17px; text-wrap: balance; }
+.hud-prompt .text { font-size: 17px; text-wrap: balance; animation: hudbreathe 1.6s steps(4) infinite; }
+@keyframes hudbreathe { 50% { opacity: 0.72; } }
+.hud-arrow { --go: #6be08a; position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 4px; transform: translate(-50%, -100%); }
+.hud-arrow .lbl { padding: 4px 8px 5px; background: var(--panel); color: var(--go); font: 400 13px/1.2 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap;
+  box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go); animation: hudbreathe 1.2s steps(3) infinite; }
+.hud-arrow .lbl kbd { font-size: 11px; }
+.hud-arrow i { width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 18px solid var(--go);
+  filter: drop-shadow(2px 2px 0 #000); animation: hudbob 0.8s steps(4) infinite; }
+@keyframes hudbob { 50% { transform: translateY(6px); } }
 .hud kbd { display: inline-block; min-width: 1.4em; padding: 1px 5px 2px; margin: 0 1px; font: 400 13px/1.2 'Silkscreen', monospace;
   color: #111; background: var(--ink); box-shadow: 0 2px 0 #6d655a; }
 .hud-reticle { position: absolute; left: 0; top: 0; width: 52px; height: 52px; margin: -26px 0 0 -26px; }
@@ -80,10 +88,11 @@ export function createHud() {
   root.innerHTML = `
     <div class="hud-hurt"></div>
     <div class="hud-top">
-      <div class="hud-hull panel"><div class="row"><span class="px">Hull</span><span class="px val">100</span></div><div class="hud-bar"></div></div>
+      <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div></div>
       <div class="hud-obj panel" hidden><span class="px tag">Objective</span><span class="text"></span></div>
     </div>
-    <div class="hud-kills panel px" hidden>Machines <b>0</b></div>
+    <div class="hud-kills panel px" hidden>Destroyed <b>0</b></div>
+    <div class="hud-arrow" hidden><span class="lbl"></span><i></i></div>
     <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
@@ -111,6 +120,8 @@ export function createHud() {
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
+  const arrow = $('.hud-arrow');
+  let arrowAt = null;
   let hurtT = 0;
   let promptTimer = 0;
   let onEnd = null;
@@ -166,6 +177,13 @@ export function createHud() {
       marker.hidden = !markerAt;
       marker.querySelector('span').textContent = label;
     },
+    // A bobbing green arrow over a spot in the world, with a pulsing label.
+    // target: a Vector3, or a function returning one (to follow something).
+    setArrow(target, html = '') {
+      arrowAt = target;
+      arrow.hidden = !target;
+      arrow.querySelector('.lbl').innerHTML = html;
+    },
     showReticle(on) {
       reticle.hidden = !on;
     },
@@ -206,6 +224,17 @@ export function createHud() {
       }
       hurtT = Math.max(0, hurtT - dt);
       hurt.style.opacity = String(Math.min(1, hurtT * 4));
+      if (arrowAt) {
+        const p = typeof arrowAt === 'function' ? arrowAt() : arrowAt;
+        if (!p) arrow.hidden = true;
+        else {
+          arrow.hidden = false;
+          let [x, y] = toScreen(p, camera, rect);
+          x = Math.min(rect.right - 90, Math.max(rect.left + 90, x));
+          y = Math.min(rect.bottom - 40, Math.max(rect.top + 90, y));
+          arrow.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
+        }
+      }
       if (markerAt) {
         const [x, y] = toScreen(markerAt, camera, rect);
         marker.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
@@ -233,6 +262,8 @@ export function createHud() {
       prompt.hidden = true;
       marker.hidden = true;
       markerAt = null;
+      arrow.hidden = true;
+      arrowAt = null;
       this.setObjective('');
     },
   };

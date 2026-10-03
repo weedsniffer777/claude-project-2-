@@ -3,6 +3,7 @@
 // so the pixel pipeline (src/render/pixel.js) turns it into crisp 3D pixel art.
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const ramp = new Uint8Array([105, 175, 255]);
 export const gradientMap = new THREE.DataTexture(ramp, ramp.length, 1, THREE.RedFormat);
@@ -115,4 +116,46 @@ export function ellipsoid(rx, ry, rz, color, { wseg = 14, hseg = 9 } = {}) {
 // Toon material with a texture (not cached: each map gets its own).
 export function toonMap(map, color = 0xffffff) {
   return new THREE.MeshToonMaterial({ map, color, gradientMap });
+}
+
+// Draw-call saver for code-built models: under every node, bake the direct
+// child meshes that never move on their own (plain toon colour, no children,
+// not in `protect`) into one vertex-coloured mesh per shadow setting. Moving
+// parts stay groups, so whatever sits on them still moves with them.
+let vertexToon = null;
+export function mergeStaticChildren(root, protect = new Set()) {
+  vertexToon ||= new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
+  const nodes = [];
+  root.traverse((o) => nodes.push(o));
+  for (const node of nodes) {
+    const buckets = new Map();
+    for (const c of node.children) {
+      if (!c.isMesh || c.isInstancedMesh || c.children.length || protect.has(c)) continue;
+      const m = c.material;
+      if (Array.isArray(m) || !m.isMeshToonMaterial || m.map || m.transparent || !c.visible) continue;
+      if (!buckets.has(c.castShadow)) buckets.set(c.castShadow, []);
+      buckets.get(c.castShadow).push(c);
+    }
+    for (const [cast, list] of buckets) {
+      if (list.length < 2) continue;
+      const geos = list.map((c) => {
+        c.updateMatrix();
+        const g = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone();
+        for (const name of Object.keys(g.attributes)) if (!['position', 'normal'].includes(name)) g.deleteAttribute(name);
+        g.clearGroups();
+        g.applyMatrix4(c.matrix);
+        const n = g.attributes.position.count;
+        const col = new Float32Array(n * 3);
+        const { r, g: gg, b } = c.material.color;
+        for (let i = 0; i < n; i++) col.set([r, gg, b], i * 3);
+        g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        return g;
+      });
+      const merged = new THREE.Mesh(mergeGeometries(geos, false), vertexToon);
+      merged.castShadow = cast;
+      merged.receiveShadow = true;
+      for (const c of list) node.remove(c);
+      node.add(merged);
+    }
+  }
 }

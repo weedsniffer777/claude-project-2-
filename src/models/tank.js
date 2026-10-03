@@ -28,7 +28,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { box, cyl, ellipsoid, toon, put, wrapAngle, approachAngle } from './kit.js';
+import { box, cyl, ellipsoid, toon, put, wrapAngle, approachAngle, mergeStaticChildren } from './kit.js';
 
 export const PALETTE = {
   olive: 0x5f6f47,
@@ -938,6 +938,8 @@ export function createTank() {
       }
     }
   }
+
+  mergeStaticChildren(group, new Set(wobblers.map((w) => w.obj)));
 
   return { group, slotGroups, setSlotVisible, turret, fire, muzzle, update, events };
 }
