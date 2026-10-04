@@ -58,7 +58,7 @@ const ERA_EDGE = 0x3a3626;
 export const PARTS = {
   dozer: {
     name: 'Dozer blade',
-    text: 'Ram enemies for heavy damage. Plows through wrecks.',
+    text: 'Ram enemies for heavy damage.',
     icon: ['................', '.##############.', '.#++++++++++++#.', '.#++++++++++++#.', '.#++++++++++++#.', '.##############.', '...-........-...', '...--......--...', '....--------....', '................'],
     apply(s) {
       s.ramDamage = 45;
@@ -518,7 +518,6 @@ const STAT_ROWS = [
   ['extraMgs', 'Machine guns', (v) => `${v + 1}`, 1],
   ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
   ['ramDamage', 'Ram damage', (v) => `${Math.round(v)}`, 1],
-  ['crushHeavy', 'Crushes wrecks', (v) => (v ? 'Yes' : 'No'), 1],
   ['view', 'View', pct, 1],
   ['speed', 'Speed', pct, 1],
   ['boostSpeed', 'Boost speed', pct, 1],
@@ -535,8 +534,7 @@ export function partEffects(id, tank = 'battle', tier = tierOf(id), from = null)
     if (Math.abs(x - y) < 1e-6) continue;
     const up = y > x;
     let delta;
-    if (key === 'crushHeavy') delta = 'Yes';
-    else if (fmt === pct) delta = `${up ? '+' : '−'}${Math.round(Math.abs(y - x) * 100)}%`;
+    if (fmt === pct) delta = `${up ? '+' : '−'}${Math.round(Math.abs(y - x) * 100)}%`;
     else if (fmt === secs) delta = `${up ? '+' : '−'}${secs(Math.abs(y - x))}`;
     else delta = `${up ? '+' : '−'}${fmt(Math.abs(y - x) - (key === 'extraMgs' ? 1 : 0)).replace(/^-/, '')}`;
     rows.push({ key, label, from: fmt(x), to: fmt(y), delta, good: (up ? 1 : -1) * dir > 0, a: x, b: y, dir, fmt });

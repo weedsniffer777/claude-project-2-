@@ -172,7 +172,7 @@ export function createWorkshop({ renderer, cursor }) {
       };
       const now = byTier[tier].find((x) => x.key === key);
       const next = tier < 2 ? byTier[tier + 1].find((x) => x.key === key) : null;
-      return { key, label: ref.label, fmt: ref.fmt, now: now ? now.to : ref.from, next: next && (!now || next.to !== now.to) ? next.to : null, kNow: k(tier), kNext: tier < 2 ? k(tier + 1) : k(tier), bool: key === 'crushHeavy' };
+      return { key, label: ref.label, fmt: ref.fmt, now: now ? now.to : ref.from, next: next && (!now || next.to !== now.to) ? next.to : null, kNow: k(tier), kNext: tier < 2 ? k(tier + 1) : k(tier) };
     });
   }
 
@@ -198,7 +198,7 @@ export function createWorkshop({ renderer, cursor }) {
       <div class="stats">${rows
         .map(
           (r) => `<span class="lb">${r.label}</span>${
-            r.bool ? '<span></span>' : `<span class="sbar${max ? ' full' : ''}" data-key="${r.key}"><i class="max" style="width:100%"></i><i class="next" style="width:${(r.next ? r.kNext : r.kNow) * 100}%"></i><i class="now" style="width:${r.kNow * 100}%"></i></span>`
+            `<span class="sbar${max ? ' full' : ''}" data-key="${r.key}"><i class="max" style="width:100%"></i><i class="next" style="width:${(r.next ? r.kNext : r.kNow) * 100}%"></i><i class="now" style="width:${r.kNow * 100}%"></i></span>`
           }<span class="val">${r.now}${r.next ? ` <span class="gain">→ ${r.next}</span>` : ''}</span>`,
         )
         .join('')}</div>
