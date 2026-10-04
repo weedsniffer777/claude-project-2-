@@ -15,6 +15,7 @@ const K = {
   tiers: 'scavenger.tiers',
   partLevels: 'scavenger.partLevels',
   stars: 'scavenger.stars',
+  levelFinds: 'scavenger.levelFinds',
   tankLevels: 'scavenger.tankLevels',
   tokens: 'scavenger.tokens',
   equipment: 'scavenger.equipment.',
@@ -88,6 +89,19 @@ export const save = {
   partLevel: (id) => save.partLevels()[id] || 1,
   setPartLevel(id, n) {
     write(K.partLevels, { ...save.partLevels(), [id]: n });
+  },
+  // parts picked up at a level's checkpoints since it was last cleared:
+  // they don't turn up there again as improvements (no farming a level by
+  // dying after the checkpoint). Cleared when the level's beaten.
+  levelFinds: (level) => read(K.levelFinds, {})[level] || [],
+  addLevelFind(level, id) {
+    const all = read(K.levelFinds, {});
+    if (!(all[level] || []).includes(id)) write(K.levelFinds, { ...all, [level]: [...(all[level] || []), id] });
+  },
+  clearLevelFinds(level) {
+    const all = read(K.levelFinds, {});
+    delete all[level];
+    write(K.levelFinds, all);
   },
   // improvements found for a part (a star each, by its icon)
   stars: (id) => read(K.stars, {})[id] || 0,

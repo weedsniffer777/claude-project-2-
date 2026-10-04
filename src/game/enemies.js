@@ -120,17 +120,19 @@ const ROCKET_MATS = {
   beam: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }),
   core: new THREE.MeshBasicMaterial({ color: 0xffffff }),
   plume: new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
-  halo: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }),
+  halo: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }),
+  glow: new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }),
 };
 const ROCKET_GEO = {
   body: new THREE.CylinderGeometry(0.055, 0.055, 0.36, 8).rotateZ(Math.PI / 2),
   nose: new THREE.ConeGeometry(0.055, 0.1, 8).rotateZ(-Math.PI / 2),
   fin: new THREE.BoxGeometry(0.1, 0.2, 0.015),
   seeker: new THREE.SphereGeometry(0.032, 6, 4),
-  halo: new THREE.SphereGeometry(0.09, 8, 6),
+  halo: new THREE.SphereGeometry(0.13, 8, 6),
+  glow: new THREE.SphereGeometry(0.3, 10, 8),
   beam: new THREE.CylinderGeometry(0.008, 0.008, 1.6, 4).rotateZ(Math.PI / 2),
-  core: new THREE.SphereGeometry(0.05, 6, 4),
-  plume: new THREE.ConeGeometry(0.07, 0.4, 8).rotateZ(Math.PI / 2),
+  core: new THREE.SphereGeometry(0.07, 6, 4),
+  plume: new THREE.ConeGeometry(0.1, 0.7, 8).rotateZ(Math.PI / 2),
 };
 function droneRocket() {
   const g = new THREE.Group();
@@ -148,11 +150,12 @@ function droneRocket() {
   add(ROCKET_GEO.halo, ROCKET_MATS.halo, 0.28);
   add(ROCKET_GEO.beam, ROCKET_MATS.beam, 0.28 + 0.8);
   add(ROCKET_GEO.core, ROCKET_MATS.core, -0.2);
+  add(ROCKET_GEO.glow, ROCKET_MATS.glow, -0.3); // the motor's glow round the tail
   const plume = add(ROCKET_GEO.plume, ROCKET_MATS.plume, -0.38);
   // the flame flickers: scaled about its base at the nozzle
   const flame = new THREE.Group();
   flame.position.x = -0.2;
-  plume.position.x = -0.18;
+  plume.position.x = -0.33;
   flame.add(plume);
   g.add(flame);
   g.userData.flame = flame;
@@ -170,8 +173,8 @@ const DRONE = {
   fly: 3.4, // height it flies at (over the ground, or the tank's, whichever's higher)
   range: 15, // how far it'll fire from
   orbit: [9, 13], // how far from the tank it darts about
-  windup: 0.7, // hanging still, pods glowing, before the salvo
-  salvo: 4,
+  windup: 0.9, // hanging still, pods glowing, a red target ring on you, before the salvo
+  salvo: 3,
   salvoGap: 0.28,
   reload: 3.4,
   damage: 11, // each rocket (and a little splash)
@@ -344,6 +347,8 @@ export class Enemies {
   kill(e, blastFrom = null) {
     e.alive = false;
     e.markMesh?.removeFromParent();
+    e.warn?.removeFromParent();
+    e.warnLine?.removeFromParent();
     e.markMesh = null;
     e.funnel.visible = false;
     e.burstLeft = 0;
@@ -520,6 +525,8 @@ export class Enemies {
   update(dt, t, ctx) {
     const { tankPos, blocks } = ctx;
     this.updateParts(dt, ctx.heightAt);
+    // the run's over (won, or the tank's gone up): nobody fires any more
+    if (ctx.over) for (const e of this.list) Object.assign(e, { windup: 0, burstLeft: 0, charge: 0, fireTimer: Math.max(e.fireTimer || 0, 1) });
     this.updateBolts(dt, ctx);
     for (const e of this.list) {
       if (e.delay > 0) {
@@ -828,6 +835,39 @@ export class Enemies {
       e.funnel.material.opacity = e.funnelK * (0.2 + 0.3 * k);
       e.funnelEdge.material.opacity = e.funnelK * (0.6 + 0.4 * k);
     }
+    // the warning: a red target ring on the ground where the salvo's going,
+    // closing in and blinking faster as it lines up, and a thin red sight
+    // line down to it from the drone
+    if (!e.warn) {
+      e.warn = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+      const cross = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 1.2).rotateX(-Math.PI / 2), ring.material);
+      const cross2 = cross.clone();
+      cross2.rotation.y = Math.PI / 2;
+      e.warn.add(ring, cross, cross2);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]), new THREE.LineBasicMaterial({ color: 0xff3b2f, transparent: true, depthWrite: false }));
+      line.frustumCulled = false;
+      e.warnLine = line;
+      e.warnMat = ring.material;
+      this.scene.add(e.warn, line);
+      e.warnLine.userData.owner = e;
+    }
+    const lining = e.windup > 0 || e.burstLeft > 0;
+    e.warn.visible = e.warnLine.visible = lining && !!e.lock;
+    if (e.warn.visible) {
+      const k = e.windup > 0 ? 1 - e.windup / S.windup : 1;
+      const gy = ctx.heightAt ? ctx.heightAt(e.lock.x, e.lock.z) : 0;
+      e.warn.position.set(e.lock.x, gy + 0.08, e.lock.z);
+      e.warn.scale.setScalar(1.8 - k * 0.9);
+      e.warn.rotation.y = t * 2;
+      const blink = Math.sin(t * (10 + k * 26)) > 0;
+      e.warnMat.opacity = blink ? 0.95 : 0.35;
+      const pts = e.warnLine.geometry.attributes.position;
+      pts.setXYZ(0, e.pos.x, e.pos.y - 0.2, e.pos.z);
+      pts.setXYZ(1, e.lock.x, gy + 0.1, e.lock.z);
+      pts.needsUpdate = true;
+      e.warnLine.material.opacity = blink ? 0.9 : 0.4;
+    }
     // facing: where it's flying, the body turning to the tank
     const g = e.model.group;
     const moving = Math.hypot(e.vel.x, e.vel.z);
@@ -942,6 +982,7 @@ export class Enemies {
   // tank if it's close) and its body goes
   endBolt(i, ctx) {
     const b = this.bolts[i];
+    if (!b) return;
     this.bolts.splice(i, 1);
     if (!b.rocket) return;
     b.rocket.removeFromParent();
@@ -952,10 +993,21 @@ export class Enemies {
     const tb = ctx.tankBox;
     if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
   }
+  // the run's over: every round and rocket still in the air just goes
+  // (a little puff where a rocket was), none left hanging there
+  clearBolts() {
+    for (const b of this.bolts) {
+      if (!b.rocket) continue;
+      b.rocket.removeFromParent();
+      this.combat.puffs.spawn(b.pos.clone(), new THREE.Vector3(0, 0.5, 0), { color: 0x8d8b86, s0: 0.15, s1: 0.4, life: 0.5, drag: 3, lift: 0.4, fadeAt: 0.3 });
+    }
+    this.bolts.length = 0;
+  }
   updateBolts(dt, ctx) {
     const tb = ctx.tankBox;
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
+      if (!b) continue; // (a hit just ended the run and cleared them all)
       const prev = b.pos.clone();
       b.pos.addScaledVector(b.vel, dt);
       b.life -= dt;
@@ -981,10 +1033,19 @@ export class Enemies {
         b.rocket.lookAt(b.pos.clone().add(b.vel));
         b.rocket.rotateY(-Math.PI / 2); // (its length runs along x)
         const fl = b.rocket.userData.flame;
-        fl.scale.set(0.7 + Math.random() * 0.6, 1, 1);
-        const back = b.pos.clone().addScaledVector(b.vel, -0.045);
-        this.combat.puffs.spawn(back, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), { color: 0xb8b2a6, s0: 0.12, s1: 0.45, life: 0.7, drag: 2, lift: 0.2, fadeAt: 0.2 });
-        this.combat.glow.tracer(back, b.pos.clone().addScaledVector(b.vel, -0.02), 0xffb347, 0.12, 0.06);
+        fl.scale.set(0.75 + Math.random() * 0.5, 1, 1);
+        // the trail: a hot streak that fades from the tail back, and a soft
+        // white smoke ribbon (small puffs close together, growing as they go)
+        const tail = b.pos.clone().addScaledVector(b.vel, -0.04);
+        b.last ??= tail.clone();
+        this.combat.glow.tracer(b.last, tail, 0xffc070, 0.14, 0.18);
+        this.combat.glow.tracer(b.last, tail, 0xffffff, 0.05, 0.08);
+        b.smoke = (b.smoke || 0) + dt;
+        if (b.smoke > 0.03) {
+          b.smoke = 0;
+          this.combat.puffs.spawn(tail, new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.15, (Math.random() - 0.5) * 0.15), { color: 0xd8d6d0, s0: 0.07, s1: 0.32, life: 0.9, drag: 1.5, lift: 0.15, fadeAt: 0.1 });
+        }
+        b.last.copy(tail);
       }
       // a long bright streak with a hot core, so a round in flight is easy to
       // see (and to dodge)
@@ -1029,9 +1090,11 @@ export class Enemies {
       e.model.group.removeFromParent();
       e.funnel.removeFromParent();
       e.markMesh?.removeFromParent();
+      e.warn?.removeFromParent();
+      e.warnLine?.removeFromParent();
     }
     this.list = this.list.filter((e) => !e.alive);
-    this.bolts = [];
+    this.clearBolts();
   }
 
   dispose() {
@@ -1039,6 +1102,8 @@ export class Enemies {
       e.model.group.removeFromParent();
       e.funnel.removeFromParent();
       e.markMesh?.removeFromParent();
+      e.warn?.removeFromParent();
+      e.warnLine?.removeFromParent();
     }
     this.bolts = [];
     for (const p of this.parts) p.m.removeFromParent();

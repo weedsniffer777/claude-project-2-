@@ -25,7 +25,7 @@ export const EQUIPMENT = {
     rows: [['Damage', '3 × 90', true], ['Blast', 'Big', true], ['Aim', 'Locks on by itself', true], ['Recharge', '12 s', false], ['Range', 'Needs targets nearby', false]],
     cooldown: 12,
     missiles: 3,
-    lockTime: 0.55, // seconds locking on before the first fires
+    lockTime: 1.2, // seconds locked on (boxes blinking) before the first fires: a beat to savour it
     salvoGap: 0.16,
     range: 14, // a circle round the tank, a bit inside what you can see (wider with Optics)
     damage: 90,

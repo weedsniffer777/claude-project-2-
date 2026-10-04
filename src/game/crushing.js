@@ -50,7 +50,8 @@ export class Crushing {
     const { combat } = this;
     const g = c.group;
     const f = c.footprint;
-    const at = new THREE.Vector3(f.x, 0.3, f.z);
+    const baseY = g.parent ? g.parent.getWorldPosition(new THREE.Vector3()).y : 0; // (up on a highway deck)
+    const at = new THREE.Vector3(f.x, baseY + 0.3, f.z);
     const away = new THREE.Vector3(f.x - from.x, 0, f.z - from.z);
     if (away.lengthSq() < 0.01) away.set(Math.cos(from.yaw), 0, -Math.sin(from.yaw));
     away.normalize();
@@ -65,7 +66,7 @@ export class Crushing {
     const dust = (n, color = 0xa8a49a) => {
       for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI * 2;
-        combat.puffs.spawn(at.clone().setY(0.2), new THREE.Vector3(Math.cos(a) * 2.4, 0.5, Math.sin(a) * 2.4), { color, s0: 0.15, s1: 0.5 + Math.random() * 0.3, life: 0.8, drag: 3, lift: 0.5, fadeAt: 0.3 });
+        combat.puffs.spawn(at.clone().setY(baseY + 0.2), new THREE.Vector3(Math.cos(a) * 2.4, 0.5, Math.sin(a) * 2.4), { color, s0: 0.15, s1: 0.5 + Math.random() * 0.3, life: 0.8, drag: 3, lift: 0.5, fadeAt: 0.3 });
       }
     };
     for (const e of c.emitters) {
@@ -88,7 +89,7 @@ export class Crushing {
         return t < 0.14;
       });
       bits(12, 3, 0.16);
-      combat.fx.burst(at.clone().setY(0.6), { count: 10, speed: 5, color: 0xffd36b, life: 0.3, size: 0.06, gravity: 12 });
+      combat.fx.burst(at.clone().setY(baseY + 0.6), { count: 10, speed: 5, color: 0xffd36b, life: 0.3, size: 0.06, gravity: 12 });
       dust(8);
       combat.shake = Math.max(combat.shake, 0.18);
     } else if (c.kind === 'topple') {
@@ -137,8 +138,25 @@ export class Crushing {
       g.traverse((m) => {
         if (m.userData.glow) m.material = dark; // the lamp dies
       });
-      combat.fx.burst(at.clone().setY(1), { count: 8, speed: 4, color: 0xfff3c4, life: 0.25, size: 0.06, gravity: 10 });
+      combat.fx.burst(at.clone().setY(baseY + 1), { count: 8, speed: 4, color: 0xfff3c4, life: 0.25, size: 0.06, gravity: 10 });
       dust(4);
+    } else if (c.breakable && c.heavy) {
+      // a barricade section: it caves in and slumps into a low heap of
+      // wreckage you can drive over, throwing chunks and a cloud of dust
+      const sy = g.scale.y;
+      let t = 0;
+      this.anims.push((dt) => {
+        t += dt;
+        const k = Math.min(1, t / 0.45);
+        const e = 1 - (1 - k) ** 3;
+        g.scale.y = sy * (1 - e * 0.74) * (k < 1 ? 1 + Math.sin(k * Math.PI) * 0.06 : 1);
+        return k < 1;
+      });
+      bits(26, 4, 0.22);
+      bits(10, 2, 0.34);
+      dust(14, 0x9d988c);
+      combat.fx.burst(at.clone().setY(baseY + 1), { count: 16, speed: 6, color: 0xffd36b, life: 0.35, size: 0.07, gravity: 12 });
+      combat.shake = Math.max(combat.shake, 0.3);
     } else {
       g.visible = false;
       bits(Math.min(14, 6 + Math.round((f.hx + f.hz) * 3)), 2.6, 0.14);

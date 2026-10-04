@@ -19,7 +19,7 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml } from './parts.js';
+import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml, levelOf } from './parts.js';
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
@@ -475,7 +475,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // parts not found yet first; then ones you own, as improvements
       // (free levels), if they can still go up
       const have = save.owned();
-      offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id))].slice(0, count);
+      const already = save.levelFinds(levelDef.id); // found here before, on a run that didn't finish
+      offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id) && !already.includes(id))].slice(0, count);
       hud.banner('Checkpoint reached');
       run.checkpoint = shack; // where an Easy revive puts you back
       run.mode = 'depot';
@@ -541,11 +542,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     win(title = 'Level clear', { path = null } = {}) {
       if (run.over) return;
       run.over = true;
+      enemies.clearBolts();
       run.won = true;
       // first clears pay out: the level's tank, and on Hard its bonus
       const lvl = campaignLevel(levelDef.id);
       const rewards = [];
       for (const id of run.pendingTips) save.seeTip(id);
+      save.clearLevelFinds(levelDef.id); // beaten: its parts can turn up as improvements again
       const diff = run.hard ? 'hard' : 'easy';
       const first = lvl?.first?.[diff];
       if (save.clear(clearKey(levelDef.id, diff)) && first) {
@@ -613,14 +616,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
   function onKill(e, blasted) {
-    // Hot loader: a kill reloads the main gun
-    if (stats.hotLoader) {
-      if (stats.mag) {
-        if (run.magT > 0) {
-          run.magT = 0;
-          run.mag = Math.min(stats.mag, 3);
-        } else run.mag = Math.min(stats.mag, run.mag + 3);
-      } else reload = 1;
+    // Ready rack: a kill reloads the main gun (autocannon: +3 rounds, but
+    // not mid-reload: the reload just carries on)
+    if (stats.hotLoader && !(stats.mag && run.magT > 0)) {
+      if (stats.mag) run.mag = Math.min(stats.mag, run.mag + 3);
+      else reload = 1;
       pulse('autoloader');
     }
     // Afterburn: kills while boosting take time off the recharge
@@ -705,6 +705,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the tank goes up, its turret and parts thrown off; then the results.
   function lose() {
     run.over = true;
+    enemies.clearBolts();
     run.dying = { t: 0, bangs: 0, flung: [] };
     hud.clearPrompt();
     hud.setMarker(null);
@@ -746,7 +747,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (d.t > 2.4 && !d.shown) {
       d.shown = true;
       // Easy, past a checkpoint, the first death: back to that checkpoint
-      // instead (Retry starts the level over)
+      // (the revive takes Retry's place: just Revive or Exit)
       if (!run.hard && run.checkpoint && !run.revived) {
         // (no results yet: the run's not over)
         hud.showEnd(
@@ -757,8 +758,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           () => revive(),
           '',
           [],
-          ['Retry', () => (bank(Math.floor(run.scrap / 2)), loadLevel(levelDef.id))],
           onExit ? ['Exit', () => (bank(Math.floor(run.scrap / 2)), onExit())] : null,
+          null,
         );
         setCursor();
         return;
@@ -1719,18 +1720,34 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!st || st.step !== 'pick') return;
     st.focus = null;
     hud.showPicker(null);
+    let improved = false;
     if (save.owned().includes(id)) {
       // an improvement: free levels and a star
+      const from = levelOf(id);
       const to = improveTo(id);
       if (to) save.setPartLevel(id, to);
       save.addStar(id);
       if (run.parts.includes(id)) fitParts(run.parts);
-    }
-    save.own(id);
+      improved = true;
+      // on its pallet: a burst of light and the levels popping up
+      const pad = st.room.pads.find((p) => p.offer === id);
+      if (pad) {
+        const at = new THREE.Vector3(pad.x, 1.2, pad.z);
+        combat.glow.flash(at, 0xffffff, 0.4, 2.4, 0.15);
+        combat.glow.flash(at, 0xffc24a, 0.6, 3.2, 0.4);
+        combat.glow.ring(new THREE.Vector3(pad.x, 0.08, pad.z), 0xffc24a, 0.3, 2.6, 0.5);
+        combat.fx.burst(at, { count: 30, speed: 6, color: 0xffd36b, life: 0.6, size: 0.08, gravity: 6 });
+        hud.damage(at.clone().setY(2.4), 0, 'chain', `▲ +${(to || from) - from} Lv ★`);
+      }
+    } else save.own(id);
     if (!run.found.includes(id)) run.found.push(id);
+    save.addLevelFind(levelDef.id, id);
     st.found = id;
+    st.improved = improved ? id : null;
     st.room.choose(id); // the other pallets fade away
-    openFit();
+    // (an improvement: a beat to see it land before the editor comes up)
+    if (improved) setTimeout(() => run.depot === st && openFit(), 900);
+    else openFit();
   }
   // The checkpoint's fitting screen. Equipping the part found here brings
   // the crane over with it; anything else goes on (or comes off) at once.
@@ -1744,6 +1761,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       loadout: run.parts,
       owned: save.owned(),
       highlight: st.found,
+      improved: st.improved, // its icon glows and the new star flies on (the first time only)
       buttons: [['Continue', () => leaveDepot(), true]],
       onSet(list, added) {
         const crane = added && !run.parts.includes(added) && st.room.pads.some((p) => p.offer === added);
@@ -1759,6 +1777,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         });
       },
     });
+    st.improved = null;
   }
   // a new loadout on the tank, mid-run
   function applyLoadout(list, added = null) {
@@ -1811,7 +1830,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const add = (id, name, o = {}) => list.push({ id, name, img: partShot(id), pulse: run.pulse?.[id] || 0, ...o });
     if (stats.spotter) add('optics', 'Spotter', { k: 1 - Math.max(0, run.spotT) / 5, left: run.spotT });
     if (stats.reactive) add('era', 'Reactive', { k: 1 - run.reactT / 8, left: run.reactT, ready: !(run.reactT > 0) });
-    if (stats.hotLoader) add('autoloader', 'Hot loader');
+    if (stats.hotLoader) add('autoloader', 'Ready rack');
     if (stats.boostRefund) add('afterburner', 'Afterburn');
     if (stats.dozerStun) add('dozer', 'Plough');
     return list;
@@ -2405,7 +2424,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
 
       // machines
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit });
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over });
       // the roof MG only takes machines it can see (not through trams and walls)
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
@@ -2492,7 +2511,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

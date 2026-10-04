@@ -9,6 +9,10 @@ import { fixPixelifyH } from '../ui/fontFix.js';
 import { tokenIconURL } from '../ui/icons.js';
 
 const CSS = `
+.cancelx { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.cancelx i { width: 60%; height: 60%; background: #ff3b2f; clip-path: polygon(20% 0, 50% 30%, 80% 0, 100% 20%, 70% 50%, 100% 80%, 80% 100%, 50% 70%, 20% 100%, 0 80%, 30% 50%, 0 20%); filter: drop-shadow(0 0 2px #000); animation: cancelPulse 0.6s steps(2) infinite; }
+.cancelx b { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%); padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #a8241c; box-shadow: 0 0 0 2px #000; white-space: nowrap; }
+@keyframes cancelPulse { 50% { opacity: 0.6; } }
 .hud-card.improve .name .up { display: inline-block; margin-right: 6px; padding: 1px 4px; font-style: normal; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .hud button, .hud .hud-card { cursor: var(--cursor); }
 .hud { cursor: inherit; --go: #6be08a; --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
@@ -163,11 +167,12 @@ const CSS = `
 .hud-dmg.chain { color: var(--amber); font-size: 20px; }
 .hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
-.hud-lock { position: absolute; left: 0; top: 0; width: 56px; height: 56px; margin: -28px 0 0 -28px; filter: drop-shadow(0 0 4px #ff3b2f88); }
-.hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid #ff3b2f; clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
+.hud-lock { position: absolute; left: 0; top: 0; width: 56px; height: 56px; margin: -28px 0 0 -28px; filter: drop-shadow(0 0 4px #ffc24a88); --lc: #ffc24a; animation: lockBlink 0.5s steps(1) infinite; }
+@keyframes lockBlink { 50% { --lc: #ffffff; } }
+.hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid var(--lc); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
 .hud-lock.on::before { animation: hudlock 0.35s steps(2) infinite; }
 @keyframes hudlock { 50% { transform: scale(0.88); } }
-.hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: #ff3b2f; white-space: nowrap; text-shadow: 2px 2px #000; }
+.hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--lc); white-space: nowrap; text-shadow: 2px 2px #000; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
 .hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
@@ -384,7 +389,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
-    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>Your progress this level won't be saved!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
+    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>You keep the parts you found, but this run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
     <div class="hud-fade"></div>
@@ -720,6 +725,16 @@ export function createHud() {
       const c = a.center();
       el.style.transform = `translate(${c.x}px, ${c.y}px)`;
       el.querySelector('.key').hidden = touchMode;
+      // aiming something that can be called off (the artillery strike): a
+      // red cancel mark over the button (press it again to cancel)
+      let x = el.querySelector('.cancelx');
+      if (state.cancel && !x) {
+        x = document.createElement('span');
+        x.className = 'cancelx';
+        x.innerHTML = '<i></i><b>Cancel</b>';
+        el.append(x);
+      }
+      if (x) x.hidden = !state.cancel;
     },
     abilityCenter,
     ability2Center,

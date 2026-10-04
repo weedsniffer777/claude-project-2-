@@ -798,7 +798,6 @@ function buildHighway(scene) {
   }
   const droneTip = (api) => {
     if (api.lesson('drone')) api.prompt('Attack drones', 'When a drone <b>stops and its pods glow</b>, rockets are coming: <b>keep moving</b>, or shoot it while it hangs there!', { danger: true, seconds: 8 });
-    else contact(api, 'Drones!');
   };
   // the parts this level can turn up
   const PARTS3 = ['he', 'era', 'afterburner', 'dozer', 'autoloader', 'twinmg', 'optics'];
@@ -837,7 +836,6 @@ function buildHighway(scene) {
           api.spawnWalker(58, -4);
           api.spawnDog(52, 4, { delay: 0.6 });
           api.spawnDog(54, -6, { delay: 1 });
-          contact(api, 'Anti-tank walker!');
           go(2);
         }
         break;
@@ -845,7 +843,6 @@ function buildHighway(scene) {
         if (api.enemiesAlive === 0 && S.t > 1.5) {
           // the first drones, in over the roofs
           sideDrone(api, Math.max(x + 14, 60), -1);
-          sideDrone(api, Math.max(x + 18, 64), 1, 1.2);
           droneTip(api);
           go(3);
         }
@@ -902,7 +899,6 @@ function buildHighway(scene) {
         if (api.enemiesAlive <= 1 && S.t > 3) {
           api.spawnWalker(198, -3.6);
           sideDrone(api, 186, 1);
-          sideDrone(api, 190, -1, 0.8);
           deckDog(api, 206, 4, 1.2);
           go(2);
         }
@@ -913,7 +909,6 @@ function buildHighway(scene) {
           deckDog(api, 220, 4, 0.4);
           api.spawnWalker(221, 0, { delay: 0.8 });
           sideDrone(api, 212, -1, 1.2);
-          sideDrone(api, 214, 1, 1.6);
           contact(api, 'More of them!');
           go(3);
         }
@@ -963,7 +958,6 @@ function buildHighway(scene) {
           api.spawnWalker(296, DZ - 4, { delay: 0.5 });
           api.spawnWalker(296, DZ + 4, { delay: 1.1 });
           sideDrone(api, 282, -1, 0.8);
-          sideDrone(api, 284, 1, 1.4);
           S.wave = 1;
           go(2);
         }
@@ -973,8 +967,6 @@ function buildHighway(scene) {
           for (const [dx, z, d] of [[0, -3, 0], [2, 3, 0.4], [4, 0, 0.8]]) deckDog(api, 292 + dx, DZ + z, d);
           api.spawnWalker(298, DZ, { delay: 0.6 });
           sideDrone(api, 286, -1, 0.4);
-          sideDrone(api, 288, 1, 1);
-          sideDrone(api, 290, -1, 1.6);
           S.wave = 2;
           S.t = 0;
         } else if (S.wave === 2 && api.enemiesAlive <= 3 && S.t > 4) {
@@ -982,7 +974,6 @@ function buildHighway(scene) {
           api.spawnWalker(297, DZ - 5, { delay: 0.4 });
           api.spawnWalker(297, DZ + 5, { delay: 0.9 });
           sideDrone(api, 284, 1, 0.5);
-          sideDrone(api, 286, -1, 1.1);
           contact(api, 'The last of them!', 3);
           S.wave = 3;
           S.t = 0;

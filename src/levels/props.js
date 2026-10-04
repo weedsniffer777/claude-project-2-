@@ -212,9 +212,15 @@ export function car(B, x, z, yaw, { kind = 'sedan', paint = null, burnt = true, 
 export function bus(B, x, z, yaw) {
   const rand = B.rand;
   const g = new THREE.Group();
+  const body = new THREE.Group(); // sits low and leans: the tyres burnt off
+  g.add(body);
   const shell = burntMaterial(0x6f8a7c, rand);
   const L = 6.4;
-  const body = [
+  const W = 2.0;
+  const DARK = 0x151312;
+  const FRAME = 0x2b2522;
+  const RUST = 0x6b3a22;
+  const outline = [
     [-L / 2, 0.42],
     ...arch(-1.9, 0.4, 0.45),
     ...arch(2.0, 0.4, 0.45),
@@ -225,21 +231,63 @@ export function bus(B, x, z, yaw) {
     [-L / 2 + 0.2, 2.42],
     [-L / 2, 2.25],
   ];
-  g.add(extrude(body, 2.0, shell));
-  g.add(extrude([[-L / 2 + 0.25, 1.35], [L / 2 - 0.1, 1.35], [L / 2 - 0.12, 2.15], [-L / 2 + 0.25, 2.15]], 2.04, toon(0x151312)));
-  for (let i = 0; i < 6; i++) for (const s of [-1, 1]) put(g, box(0.1, 0.8, 0.04, 0x2b2522, { r: 0.01 }), -2.6 + i * 0.95, 1.75, s * 1.03);
-  for (const wx of [-1.9, 2.0]) for (const s of [-1, 1]) put(g, cyl(0.26, 0.14, 0x4a3a30, { axis: 'z', seg: 10 }), wx, 0.3, s * 0.92);
-  put(g, box(5.0, 0.24, 1.3, 0x2b2522, { r: 0.04 }), -0.4, 2.55, 0);
+  body.add(extrude(outline, W, shell));
+  // the window band: black where the glass was, the interior's seat backs
+  // and a few hanging grab rails just visible inside
+  body.add(extrude([[-L / 2 + 0.25, 1.35], [L / 2 - 0.1, 1.35], [L / 2 - 0.12, 2.15], [-L / 2 + 0.25, 2.15]], W + 0.04, toon(DARK)));
+  for (let i = 0; i < 7; i++) for (const s of [-1, 1]) put(body, box(0.1, 0.8, 0.04, FRAME, { r: 0.01 }), -2.75 + i * 0.9, 1.75, s * (W / 2 + 0.03));
+  for (let i = 0; i < 6; i++) for (const s of [-1, 1]) put(body, box(0.4, 0.5, 0.06, 0x3a2f28, { r: 0.02 }), -2.4 + i * 0.9, 1.45, s * 0.55); // seat backs
+  for (const s of [-1, 1]) put(body, box(L - 0.6, 0.06, 0.08, FRAME, { r: 0.01 }), -0.1, 1.33, s * (W / 2 + 0.03)); // the sill
+  // a few panes still in, cracked and sooty
+  for (let i = 0; i < 3; i++) put(body, box(0.7, 0.6, 0.02, 0x4a5258, { r: 0.01 }), -2.3 + ((rand() * 6) | 0) * 0.9, 1.78, (rand() < 0.5 ? -1 : 1) * (W / 2 + 0.035));
+  // front: a big windscreen split in two, a dead destination board over it,
+  // bumper, headlights, the doors (one folded open)
+  put(body, box(0.05, 0.75, W - 0.25, DARK, { r: 0.01 }), L / 2 + 0.02, 1.8, 0);
+  put(body, box(0.07, 0.8, 0.06, FRAME, { r: 0.01 }), L / 2 + 0.03, 1.8, 0);
+  put(body, box(0.06, 0.24, W - 0.5, 0x0e0d0c, { r: 0.01 }), L / 2 - 0.02, 2.28, 0);
+  put(body, box(0.18, 0.2, W + 0.06, 0x2f2a26, { r: 0.04 }), L / 2 + 0.05, 0.55, 0);
+  for (const s of [-1, 1]) put(body, box(0.05, 0.12, 0.22, 0x8a8172, { r: 0.02 }), L / 2 + 0.04, 0.85, s * 0.7);
+  for (const dx of [1.6, -0.6]) {
+    put(body, box(1.0, 1.75, 0.03, DARK, { r: 0.01 }), dx, 1.2, W / 2 + 0.03);
+    put(body, box(0.06, 1.75, 0.05, FRAME), dx, 1.2, W / 2 + 0.04);
+  }
+  const door = put(body, box(0.5, 1.6, 0.05, FRAME, { r: 0.01 }), 1.95, 1.2, W / 2 + 0.28);
+  door.rotation.y = -0.9;
+  // rear: an engine grille, a ladder up the back
+  put(body, box(0.05, 0.7, W - 0.5, 0x1d1b1a, { r: 0.01 }), -L / 2 - 0.02, 0.95, 0);
+  for (let k = 0; k < 6; k++) put(body, box(0.06, 0.03, W - 0.6, 0x3a332e), -L / 2 - 0.04, 0.68 + k * 0.1, 0);
+  // the roof: sagging in the middle, a hole burnt through, the trolley
+  // base, rust running down from it
+  put(body, box(5.0, 0.24, 1.3, FRAME, { r: 0.04 }), -0.4, 2.55, 0);
+  const sag = put(body, box(2.2, 0.08, W - 0.3, 0x2a2420, { r: 0.02 }), 0.6, 2.36, 0);
+  sag.rotation.z = 0.05;
+  put(body, box(1.4, 0.1, 0.9, DARK, { r: 0.05 }), 0.8, 2.44, 0.2); // the hole
+  for (let i = 0; i < 8; i++) {
+    const s = rand() < 0.5 ? -1 : 1;
+    put(body, box(0.08 + rand() * 0.1, 0.4 + rand() * 0.8, 0.02, RUST, { r: 0 }), -2.8 + rand() * 5.6, 1.0 + rand() * 0.4, s * (W / 2 + 0.04));
+  }
+  // wheels: bare rims sitting low, a shred of tyre left on one
+  for (const wx of [-1.9, 2.0]) {
+    for (const s of [-1, 1]) {
+      put(body, cyl(0.3, 0.16, 0x3a332e, { axis: 'z', seg: 10 }), wx, 0.3, s * 0.92);
+      put(body, cyl(0.12, 0.18, 0x2b2522, { axis: 'z', seg: 8 }), wx, 0.3, s * 0.92);
+    }
+  }
+  put(body, cyl(0.42, 0.12, 0x1a1918, { axis: 'z', seg: 12 }), 2.0, 0.36, 0.95);
+  body.position.y = -0.12;
+  body.rotation.x = (rand() - 0.5) * 0.08;
   // trolley poles: one still raised, one dangling to the road
-  const p1 = put(g, cyl(0.04, 5.2, 0x2f2f30, { seg: 6 }), -1.0, 4.15, -0.25);
+  const p1 = put(g, cyl(0.04, 5.2, 0x2f2f30, { seg: 6 }), -1.0, 4.05, -0.25);
   p1.rotation.z = 1.05;
-  const p2 = put(g, cyl(0.04, 5.2, 0x2f2f30, { seg: 6 }), -2.4, 1.8, 0.4);
+  const p2 = put(g, cyl(0.04, 5.2, 0x2f2f30, { seg: 6 }), -2.4, 1.7, 0.4);
   p2.rotation.z = -1.25;
   p2.rotation.x = 0.4;
-  g.position.set(x, -0.1, z);
+  // glass and bits of trim round it on the ground
+  for (let i = 0; i < 10; i++) B.piece(0.1 + rand() * 0.25, 0.03, 0.1 + rand() * 0.2, i % 3 ? 0x3a3f44 : 0x2b2522, x + (rand() - 0.5) * L * 1.1, 0.02, z + (rand() - 0.5) * 3.4, 0, rand() * 3, 0);
+  g.position.set(x, 0, z);
   g.rotation.set(0, yaw, 0.02);
   B.add(g);
-  B.hitBox(x, 1.3, z, L, 2.5, 2.0, yaw);
+  B.hitBox(x, 1.3, z, L, 2.5, W, yaw);
   scorch(B, x, z, 4.5);
   B.block(x, z, L / 2, 1.05, yaw);
   return g;

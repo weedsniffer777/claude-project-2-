@@ -16,7 +16,7 @@ import { EQUIPMENT, equipmentIcon, equipmentPlain } from '../game/equipment.js';
 // a part's improvement stars (found again at a checkpoint), by its icon
 const starBadge = (id) => {
   const n = save.stars(id);
-  return n ? `<span class="stb">★${n > 1 ? n : ''}</span>` : '';
+  return n ? `<span class="stb">${'★'.repeat(Math.min(n, 5))}</span>` : '';
 };
 import { save } from '../game/save.js';
 import { snapshotCanvas } from '../render/snapshot.js';
@@ -89,7 +89,14 @@ const CSS = `
 .fit .upbtn.evolve { background: #c77dff; box-shadow: 0 3px 0 #6a2fa0, 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; }
 @keyframes fitbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); box-shadow: 0 8px 0 #6a2fa0, 0 0 0 2px #000, 0 0 16px #c77dffaa; } }
 .fit .upbtn .evtag { padding: 2px 5px; font-size: 9px; color: #fff; background: #6a2fa0; box-shadow: 0 0 0 2px #000; }
-.fit .stb { position: absolute; left: -6px; bottom: -6px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
+.fit .stb { position: absolute; left: -6px; top: -8px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
+/* an improvement just picked: the part glows gold, its new star flies on */
+.fit .improved { animation: impGlow 0.9s ease-out 3; }
+@keyframes impGlow { 0% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 26px 6px #ffc24a; } 100% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 0 0 #ffc24a00; } }
+.fit .improved .stb { animation: starIn 0.8s cubic-bezier(0.2, 1.7, 0.4, 1) 0.35s both; }
+@keyframes starIn { 0% { transform: translate(-60px, -70px) scale(3.5) rotate(-120deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+.fit .improved::after { content: ''; position: absolute; inset: -10px; pointer-events: none; background: radial-gradient(circle, #fff8 0 2px, transparent 3px) 10% 20% / 18px 18px, radial-gradient(circle, #ffc24a 0 2px, transparent 3px) 70% 60% / 22px 22px; animation: sparkle 1.2s steps(6) 0.9s 2 both; }
+@keyframes sparkle { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .fit .hd .stb { position: static; display: inline-block; margin-left: 6px; }
 .fit .item .evb, .fit .slot .evb { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #8a45d0; box-shadow: 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; pointer-events: none; }
 .fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
@@ -138,7 +145,7 @@ const CSS = `
 .fit .btn { padding: 8px 14px 9px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .btn.go { color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000; }
 .fit .btn:hover { filter: brightness(1.15); }
-.fit .pop { position: fixed; z-index: 4; padding: 8px; display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.fit .pop { position: fixed; z-index: 30; background: #121014; padding: 8px; display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
 .fit .pop button { display: flex; gap: 8px; align-items: center; padding: 4px 8px 4px 4px; background: #1d1b1e; font-size: 11px; box-shadow: 0 0 0 2px #000; }
 .fit .pop button:hover { background: #2a2628; color: var(--amber); }
 .fit .pop img { width: 48px; height: 32px; image-rendering: pixelated; }
@@ -412,7 +419,7 @@ export function createFitting({ renderer, cursor }) {
       const id = list[i] || null;
       const el = document.createElement('button');
       el.type = 'button';
-      el.className = `slot${id ? '' : ' empty'}`;
+      el.className = `slot${id ? '' : ' empty'}${id && id === o.improved ? ' improved' : ''}`;
       if (id) {
         const tier = tierOf(id);
         el.dataset.tier = tier;
@@ -460,7 +467,7 @@ export function createFitting({ renderer, cursor }) {
       const el = document.createElement('button');
       el.type = 'button';
       const away = where(id);
-      el.className = `item${id === o.highlight ? ' new' : ''}${id === replacing ? ' on' : ''}${away ? ' isaway' : ''}`;
+      el.className = `item${id === o.highlight ? ' new' : ''}${id === o.improved ? ' improved' : ''}${id === replacing ? ' on' : ''}${away ? ' isaway' : ''}`;
       el.dataset.tier = tierOf(id);
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
       const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
@@ -567,9 +574,11 @@ export function createFitting({ renderer, cursor }) {
         // one of each: fitting it here takes it off any other tank
         const on = TANK_ORDER.find((t) => t !== o.tankId && save.equipment(t) === e);
         b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${on ? `<small class="eqon">On ${TANKS[on].name.replace(' tank', '')}</small>` : ''}`;
-        b.querySelector('span').textContent = on ? `${EQUIPMENT[e].name} · move here` : EQUIPMENT[e].name;
+        b.querySelector('span').textContent = on ? `${EQUIPMENT[e].name} · ${id ? 'swap' : 'move here'}` : EQUIPMENT[e].name;
         b.addEventListener('click', () => {
-          for (const t of TANK_ORDER) if (t !== o.tankId && save.equipment(t) === e) save.setEquipment(null, t);
+          // taken off another tank: that tank gets this one's equipment in
+          // return (a swap), not an empty slot
+          for (const t of TANK_ORDER) if (t !== o.tankId && save.equipment(t) === e) save.setEquipment(id && id !== e ? id : null, t);
           save.setEquipment(e, o.tankId);
           closePop();
           render();
@@ -623,17 +632,21 @@ export function createFitting({ renderer, cursor }) {
     hideTip();
     pop = document.createElement('div');
     pop.className = 'pop pnl';
-    pop.append(infoBox(id));
+    const info = infoBox(id);
+    pop.append(info);
     const fit = document.createElement('button');
     fit.type = 'button';
     fit.className = 'fitb';
-    fit.textContent = where(id) ? `Move here from the ${where(id)}` : 'Fit to this tank';
+    fit.textContent = where(id) ? `Equip (from the ${where(id).replace(' tank', '')})` : 'Equip';
     if (PARTS[id].only && PARTS[id].only !== o.tankId) {
       fit.disabled = true;
       fit.textContent = `${TANKS[PARTS[id].only].name} only`;
     }
     fit.addEventListener('click', () => (closePop(), equip(id)));
-    pop.append(fit);
+    // Equip first, Upgrade under it
+    const up = info.querySelector('.upb');
+    if (up) up.before(fit);
+    else pop.append(fit);
     placePop(el);
   }
   // a part's card for the pops: picture, tier, name, its one line, the numbers

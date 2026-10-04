@@ -42,10 +42,10 @@ export const BASE_STATS = {
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
   spotter: 0, // Legendary Optics: enemies marked every few seconds (how many)
   apRounds: false, // Armor-piercing shells: white tracers, a sharp hit instead of a fireball
-  hotLoader: false, // Legendary Fast reload: a kill reloads the main gun
+  hotLoader: false, // Legendary Autoloader (Ready rack): a kill reloads the main gun
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
   dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
-  boostRefund: 0, // Legendary Improved boost: seconds of recharge back per kill while boosting
+  boostRefund: 0, // Legendary High-power boost: seconds of recharge back per kill while boosting
 };
 
 const RUST = 0x6d5a48;
@@ -121,7 +121,7 @@ export const PARTS = {
   },
   autoloader: {
     type: 'weapons',
-    name: 'Fast reload',
+    name: 'Autoloader',
     text: 'Main gun reloads faster (an autocannon fires faster too).',
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
@@ -139,7 +139,7 @@ export const PARTS = {
           else s.reload *= 0.8;
         },
       },
-      { text: '', perk: 'Hot loader', perkText: 'Every kill reloads the main gun at once (autocannon: +3 rounds).', apply: (s) => (s.hotLoader = true) },
+      { text: '', perk: 'Ready rack', perkText: 'Every kill reloads the main gun at once (autocannon: +3 rounds).', apply: (s) => (s.hotLoader = true) },
     ],
     // an ammo can strapped on the turret's left bin
     light(t) {
@@ -346,7 +346,7 @@ export const PARTS = {
   },
   afterburner: {
     type: 'movement',
-    name: 'Improved boost',
+    name: 'High-power boost',
     badge: 'up', // its picture gets an up arrow: an improved ability
     text: 'Boost burns hotter: faster and longer, but a longer recharge.',
     icon: ['................', '......-----.....', '%%%***-###-.....', '.%%%**-###-.....', '%%%***-###-.....', '......-----.....', '................', '................', '................', '................'],
@@ -402,11 +402,11 @@ export const PARTS = {
     text: 'See further around you. Machine gun reaches further.',
     icon: ['................', '....######......', '...#------#.....', '..#--****--#####', '..#--*##*--#....', '..#--****--#####', '...#------#.....', '....######......', '................', '................'],
     apply(s) {
-      s.view *= 1.14;
+      s.view *= 1.25; // +25% view, growing with the part's level to about +50% at 30
       s.mgRange += 2;
     },
     tiers: [
-      { text: 'See further still; machine guns reach further.', apply: (s) => ((s.view *= 1.08), (s.mgRange += 2)) },
+      { text: 'Machine guns reach further.', apply: (s) => (s.mgRange += 2) },
       { text: '', perk: 'Spotter', perkText: 'Every 5 s the 2 farthest enemies in sight are marked: +30% damage to them for 5 s.', apply: (s) => (s.spotter = 2) },
     ],
     build(t) {
@@ -630,7 +630,7 @@ export function applyTankLevel(s, lvl) {
   s.breakShield = 0.25 + (0.25 * k) / (TANK_MAX - 1); // the ability gets better with the tank
 }
 
-const INT_KEYS = new Set(['mag', 'extraMgs', 'view']); // (view: the camera; it only widens by tier)
+const INT_KEYS = new Set(['mag', 'extraMgs']);
 const PER_LEVEL = 0.8 / 29; // by level 30, the part's own effect most of the way to twice as strong
 // a part at a level, applied to s: its tier's numbers, then every level past
 // the first makes what the part improves a little better again (a share of
