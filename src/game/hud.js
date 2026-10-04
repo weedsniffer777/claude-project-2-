@@ -193,6 +193,11 @@ const CSS = `
 .hud-pause { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: stretch; min-width: 240px; pointer-events: auto; }
 .hud-pause h2 { margin: 0 0 4px; text-align: center; font: 400 26px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
 .hud-pause button { padding: 10px 16px 11px; border: 0; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud-pause .menu, .hud-pause .ask { display: grid; gap: 12px; justify-items: stretch; }
+.hud-pause .menu[hidden], .hud-pause .ask[hidden] { display: none; }
+.hud-pause p { margin: 0 0 4px; text-align: center; font-size: 15px; color: var(--ink); }
+.hud-pause .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hud-pause button[data-ask="yes"] { color: #fff; background: #a8241c; box-shadow: 0 4px 0 #5a1410; }
 .hud-pause button[data-act="resume"] { color: #111; background: var(--go); box-shadow: 0 4px 0 #2f6b40; }
 .hud-pause button:hover, .hud-pause button:focus-visible { filter: brightness(1.2); outline: none; }
 .hud-end .btns { display: flex; gap: 14px; justify-content: center; }
@@ -379,7 +384,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
-    <div class="hud-pause panel" hidden><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div>
+    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>Your progress this level won't be saved!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
     <div class="hud-fade"></div>
@@ -770,9 +775,24 @@ export function createHud() {
       const el = $('.hud-pause');
       el.hidden = !acts;
       if (!acts) return;
+      const menu = el.querySelector('.menu');
+      const ask = el.querySelector('.ask');
+      const back = () => {
+        ask.hidden = true;
+        menu.hidden = false;
+        el.querySelector('[data-act="resume"]').focus();
+      };
       el.querySelector('[data-act="exit"]').hidden = !acts.exit;
-      for (const b of el.querySelectorAll('button')) b.onclick = () => acts[b.dataset.act]?.();
-      el.querySelector('[data-act="resume"]').focus();
+      for (const b of menu.querySelectorAll('button')) b.onclick = () => acts[b.dataset.act]?.();
+      // Exit asks first: the run's progress is lost
+      el.querySelector('[data-act="exit"]').onclick = () => {
+        menu.hidden = true;
+        ask.hidden = false;
+        el.querySelector('[data-ask="no"]').focus();
+      };
+      el.querySelector('[data-ask="yes"]').onclick = () => acts.exit?.();
+      el.querySelector('[data-ask="no"]').onclick = back;
+      back();
     },
     showContinue(fn) {
       cont.hidden = !fn;

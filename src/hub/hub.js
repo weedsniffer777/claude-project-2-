@@ -153,6 +153,7 @@ const CSS = `
 .base-brief .node .hardtag em { margin-top: 3px; padding: 2px 5px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
+.base-news .newtag.warn { background: #ffb347; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
 .base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
@@ -1244,7 +1245,40 @@ export function createHub({ renderer, pixel, onDeploy }) {
     // and the crewman heads over there meanwhile
     if (roomAt(me) !== r) walkTo = r.entry.clone();
   }
+  // Before a level: the tank you're taking has an empty equipment slot
+  // (and you own some, on whatever tank), or empty part slots (and there are
+  // parts it could take lying in storage): ask first.
   function deploy(id) {
+    const t = save.tank();
+    const name = TANKS[t]?.name || 'Your tank';
+    const lines = [];
+    let title = '';
+    if (!save.equipment(t) && save.ownedEquipment().some((e) => EQUIPMENT[e])) {
+      lines.push(`${name} has an empty equipment slot!`);
+      title = 'Start with missing equipment?';
+    }
+    const fitted = new Set(save.tanks().flatMap((k) => save.loadout(k)));
+    const free = save.owned().filter((p) => PARTS[p] && !fitted.has(p) && (!PARTS[p].only || PARTS[p].only === t));
+    if (save.loadout(t).length < tankDef(t).slots && free.length) {
+      lines.push(`${name} has empty part slots!`);
+      title = title ? 'Start with empty slots?' : 'Start with empty part slots?';
+    }
+    if (!lines.length) return go(id);
+    news.hidden = false;
+    news.innerHTML = `
+      <span class="newtag warn">Hold on</span>
+      <h2></h2>
+      ${lines.map(() => '<p></p>').join('')}
+      <div class="row"><button type="button" class="go">Continue</button><button type="button" class="back">Back</button></div>`;
+    news.querySelector('h2').textContent = title;
+    news.querySelectorAll('p').forEach((p, i) => (p.textContent = lines[i]));
+    news.querySelector('.go').addEventListener('click', () => {
+      news.hidden = true;
+      go(id);
+    });
+    news.querySelector('.back').addEventListener('click', () => (news.hidden = true));
+  }
+  function go(id) {
     fade.classList.remove('off');
     setTimeout(() => onDeploy(id), 480);
   }
