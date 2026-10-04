@@ -66,7 +66,7 @@ export class CombatFx {
         this.smallHit(target, hit?.normal, hit?.mesh);
         return true;
       }
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), new THREE.MeshBasicMaterial({ color: 0xff9c7c })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 1.5), new THREE.MeshBasicMaterial({ color: 0xffc4ae })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts
       mesh.position.copy(m);
       mesh.lookAt(target);
       this.scene.add(mesh);
@@ -353,7 +353,8 @@ export class CombatFx {
       const prev = s.mesh.position.clone();
       s.travelled = Math.min(s.total, s.travelled + SHELL_SPEED * dt);
       s.mesh.position.lerpVectors(s.from, s.target, s.travelled / s.total);
-      this.glow.tracer(prev, s.mesh.position, s.small ? 0xff8a6a : 0xffd27a, s.small ? 0.06 : 0.12, s.small ? 0.08 : 0.12); // hot trail
+      this.glow.tracer(prev, s.mesh.position, s.small ? 0xff9a7a : 0xffd27a, s.small ? 0.12 : 0.12, s.small ? 0.22 : 0.12); // hot trail
+      if (s.small) this.glow.tracer(prev, s.mesh.position, 0xff6a4a, 0.26, 0.12); // and a red glow round it
       if (s.travelled >= s.total) {
         if (s.small) this.smallHit(s.target, s.hit?.normal, s.hit?.mesh);
         else this.explode(s.target, s.hit?.normal, s.hit?.mesh);

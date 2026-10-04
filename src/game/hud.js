@@ -77,6 +77,7 @@ const CSS = `
 .hud-chain.pop { animation: hudpop 0.2s steps(2); }
 .hud-spot { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0; transition: opacity 0.25s; }
 .hud-spot.on { opacity: 1; }
+.hud-speed { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .hud-fade { position: absolute; inset: 0; background: #070609; opacity: 0; transition: opacity 0.35s steps(5); }
 .hud-fade.on { opacity: 1; }
 .hud-ability { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; display: grid; place-items: center; }
@@ -281,6 +282,7 @@ export function createHud() {
   root.className = 'hud';
   root.style.setProperty('--cursor', CURSOR);
   root.innerHTML = `
+    <canvas class="hud-speed"></canvas>
     <canvas class="hud-spot"></canvas>
     <div class="hud-hurt"></div>
     <div class="hud-top">
@@ -353,6 +355,39 @@ export function createHud() {
   const spotG = spot.getContext('2d');
   let spotSpec = null;
   const SPOT_PX = 4; // one spotlight pixel = 4 screen pixels
+  // speed lines while boosting: pixel streaks rushing in from the screen's
+  // edges, redrawn every frame so they flicker
+  const speedEl = $('.hud-speed');
+  const speedG = speedEl.getContext('2d');
+  let speedOn = false;
+  function drawSpeed(k) {
+    const PX = 3;
+    const w = Math.ceil(window.innerWidth / PX);
+    const h = Math.ceil(window.innerHeight / PX);
+    if (speedEl.width !== w || speedEl.height !== h) {
+      speedEl.width = w;
+      speedEl.height = h;
+    }
+    speedG.clearRect(0, 0, w, h);
+    if (k <= 0.01) return;
+    const cx = w / 2;
+    const cy = h / 2;
+    const R = Math.hypot(cx, cy);
+    const n = Math.round(10 + 34 * k);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r0 = R * (0.62 + Math.random() * 0.25 - 0.18 * k);
+      const len = R * (0.15 + Math.random() * 0.3) * (0.5 + k);
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      speedG.strokeStyle = `rgba(241, 233, 216, ${(0.4 + Math.random() * 0.4) * k})`;
+      speedG.lineWidth = Math.random() < 0.3 ? 2 : 1;
+      speedG.beginPath();
+      speedG.moveTo(Math.round(cx + c * r0), Math.round(cy + sn * r0));
+      speedG.lineTo(Math.round(cx + c * (r0 + len)), Math.round(cy + sn * (r0 + len)));
+      speedG.stroke();
+    }
+  }
   // ability button / icon
   // two ability buttons: the movement one (Shift) in the corner, the
   // signature one (E) beside it
@@ -538,6 +573,12 @@ export function createHud() {
     },
     abilityCenter,
     ability2Center,
+    // k: 0..1 how hard the speed lines show
+    setSpeed(k) {
+      if (k <= 0.01 && !speedOn) return;
+      speedOn = k > 0.01;
+      drawSpeed(k);
+    },
     scrapCenter() {
       const r = $('.hud-scrap').getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width };

@@ -510,6 +510,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   };
   let mgActive = false;
   let hardCount = 0;
+  let speedK = 0; // eased 0..1 while boosting (camera and speed lines)
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
@@ -624,6 +625,35 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.boosts++;
     combat.shake = Math.max(combat.shake, 0.2);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xffd08a, 0.2, 1.2, 0.12);
+    launch(0.45);
+  }
+  // The kick of a boost or dash starting: a beat of slowed time, the camera
+  // punching out, a ring of dust blown off the ground behind the tank.
+  function launch(power) {
+    run.dilate = 0.12 + 0.08 * power;
+    run.punch = Math.max(run.punch || 0, power);
+    const yaw = tank.group.rotation.y;
+    const back = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
+    const at = pos.clone().addScaledVector(back, TANK_BOX.hx * 0.8).setY(pos.y + 0.1);
+    combat.glow.ring(at, 0xffe2b0, 0.4, 2.2 + power * 1.5, 0.3);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).addScaledVector(back, 1.2);
+      combat.puffs.spawn(at, dir.multiplyScalar(4 + Math.random() * 3).setY(0.6), { color: [0x9a958b, 0x8f8a80, 0xb3ad9f][i % 3], s0: 0.15, s1: 0.5 + Math.random() * 0.3, life: 0.6 + Math.random() * 0.3, drag: 4, lift: 0.4, fadeAt: 0.4 });
+    }
+    combat.glow.light(at, 0xffb060, 30 + power * 30, 0.15);
+  }
+  // and its end: the tank digs in, throwing slush forward, a little jolt
+  function landing() {
+    const yaw = tank.group.rotation.y;
+    const fwd = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const side = new THREE.Vector3(-fwd.z, 0, fwd.x);
+    for (const s of [-1, 1]) {
+      const at = pos.clone().addScaledVector(side, s * TANK_BOX.hz * 0.8).addScaledVector(fwd, TANK_BOX.cx + TANK_BOX.hx * 0.6).setY(pos.y + 0.1);
+      for (let i = 0; i < 5; i++) combat.puffs.spawn(at, fwd.clone().multiplyScalar(3 + Math.random() * 2).addScaledVector(side, s * (1 + Math.random())).setY(0.8 + Math.random()), { color: [0x9a958b, 0x8f8a80, 0x7d786f][i % 3], s0: 0.1, s1: 0.4 + Math.random() * 0.2, life: 0.5 + Math.random() * 0.3, drag: 4, lift: 0.3, stretch: 1.6, fadeAt: 0.3 });
+    }
+    combat.shake = Math.max(combat.shake, 0.18);
+    run.punch = Math.max(run.punch || 0, 0.25);
   }
 
   // E: the tank's signature ability.
@@ -648,6 +678,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.dash = stats.dashTime;
     run.shield = stats.dashTime + 0.4;
     speed = BOOST_SPEED * stats.dashSpeed; // instant
+    launch(1);
     enemies.breakLocks(pos, 10);
     combat.shake = Math.max(combat.shake, 0.3);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.3, 1.6, 0.14);
@@ -1313,6 +1344,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.hitstop -= realDt;
         dt = 0;
       } else if (run.spot) dt = realDt * SLOW_MO;
+      else if (run.dilate > 0) {
+        run.dilate -= realDt;
+        dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
+      }
       if (run.aiming > 0) {
         dt = realDt * AIM_SLOW;
         run.aiming -= realDt;
@@ -1386,6 +1421,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.boost -= dt;
         want = BOOST_SPEED * stats.boostSpeed;
         accel = 60;
+        if (run.boost <= 0) landing();
       }
       if (run.dash > 0) {
         run.dash -= dt;
@@ -1501,6 +1537,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (lean) camWant.lerp(lean.setY(camWant.y), 0.45);
       if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5); // frame the room (or the part hovered)
       if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : 6))); // once the zone's won the camera stays put
+      // boosting: the view pulls back a touch (and punches out as it kicks
+      // in), speed lines rush in from the edges
+      speedK += ((boosting ? 1 : 0) - speedK) * (1 - Math.exp(-realDt * (boosting ? 8 : 4)));
+      run.punch = Math.max(0, (run.punch || 0) - realDt * 3);
+      const zoom = 1 / (1 + 0.06 * speedK + 0.05 * run.punch);
+      if (Math.abs(camera.zoom - zoom) > 1e-4) {
+        camera.zoom = zoom;
+        camera.updateProjectionMatrix();
+      }
+      hud.setSpeed(run.over ? 0 : Math.min(1, speedK * (run.dash > 0 ? 1 : 0.7) + run.punch * 0.5));
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       camera.updateMatrixWorld();
