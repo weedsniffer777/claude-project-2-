@@ -94,7 +94,7 @@ const CSS = `
 .ws .go .cost.tk { color: #d9a8ff; }
 .ws .go .cost.tk i { width: 16px; height: 16px; clip-path: none; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .ws .go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
-.ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: default; animation: none; }
+.ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: var(--cursor); animation: none; }
 .ws .go.maxed { color: #111; background: #ffc24a; box-shadow: 0 5px 0 #8a5a1c, 0 0 0 2px #000; }
 .ws .flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 2; }
 .ws .banner { position: fixed; left: 50%; top: 42%; z-index: 3; transform: translate(-50%, -50%); pointer-events: none; font: 400 64px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em;

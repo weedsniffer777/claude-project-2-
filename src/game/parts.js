@@ -507,7 +507,7 @@ export const PARTS = {
       put(head, cyl(0.15, 0.012, 0x3a4430, { seg: 14 }), 0.06, 0, 0).rotation.z = Math.PI / 2; // its rim
       put(head, cyl(0.012, 0.16, 0x2b2d30, { seg: 5 }), 0.13, 0, 0).rotation.z = Math.PI / 2; // the feed horn's arm
       put(head, box(0.04, 0.04, 0.04, 0x2b2d30, { r: 0.01 }), 0.21, 0, 0);
-      radar.position.set(-0.6, 0.06, -0.24);
+      radar.position.set(-0.6, 0.06, -0.42);
       dish.onBeforeRender = () => (head.rotation.y = Math.sin(performance.now() / 700) * 0.6);
       g.add(radar);
       return g;

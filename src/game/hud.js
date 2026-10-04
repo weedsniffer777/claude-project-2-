@@ -188,7 +188,7 @@ const CSS = `
 .hud-end.win h2 { color: var(--amber); }
 .hud-end .stats { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 14px; color: var(--dim); }
 .hud-end .stats b { color: var(--ink); font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
-.hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: pointer; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
+.hud-end button { margin-top: 6px; padding: 9px 18px 10px; border: 0; cursor: var(--cursor); font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
 .hud-pause { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: stretch; min-width: 240px; pointer-events: auto; }
 .hud-pause h2 { margin: 0 0 4px; text-align: center; font: 400 26px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }

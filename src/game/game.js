@@ -23,6 +23,7 @@ import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improv
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
+import { buildLauncher } from '../models/launchers.js';
 import { EQUIPMENT, equipmentArt } from './equipment.js';
 
 const VIEW_H = 13; // world units visible vertically
@@ -268,6 +269,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.tracerScale = vulcan ? 0.5 : 1;
     if ('kick' in tank) tank.kick = vulcan ? 0.12 : 1;
     if (lastSize) game.resize(...lastSize); // optics widen the view
+    fitLauncher();
+  }
+  // the guided missiles' launcher, if this tank carries them (its own look
+  // on each tank; the missiles come out of it)
+  let launcher = null;
+  function fitLauncher() {
+    launcher?.group.removeFromParent();
+    launcher = equipId() === 'atgm' ? buildLauncher(tank) : null;
   }
 
   // Quality: shadow-map size and how many point lights the lamps share.
@@ -972,10 +981,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   // Equipment (Q). The artillery strike: Q, then click (or tap) a spot; the
   // shells come down there a moment later. Q again (or Esc) calls it off.
-  const equipId = () => {
+  function equipId() {
     const id = save.equipment(tankId);
     return id && EQUIPMENT[id] && save.ownedEquipment().includes(id) ? id : null;
-  };
+  }
   function equipment() {
     letGoFrame();
     const id = equipId();
@@ -1005,15 +1014,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const mslAim = (e) => new THREE.Vector3(e.pos.x, e.pos.y + (e.stats.flying || e.stats.fly ? 0 : 0.8 * (e.stats.scale || 1)), e.pos.z);
   function lockMissiles() {
     const E = EQUIPMENT.atgm;
-    const ndc = new THREE.Vector3();
+    // the toughest machines within range (the most HP left to chew
+    // through, not the most hurt)
     const inView = enemies.alive
-      .filter((e) => {
-        ndc.copy(e.pos).project(camera);
-        return Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && e.pos.distanceTo(pos) < E.range;
-      })
-      .sort((a, b) => a.pos.distanceTo(pos) - b.pos.distanceTo(pos))
+      .filter((e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < E.range * stats.view)
+      .sort((a, b) => b.hp - a.hp)
       .slice(0, E.missiles);
-    if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'No targets');
+    if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'MSL no targets!');
     run.equipCd = E.cooldown;
     const targets = [];
     for (let i = 0; i < E.missiles; i++) targets.push(inView[i % inView.length]);
@@ -1023,7 +1030,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const E = EQUIPMENT.atgm;
     // off the turret roof, left, right, centre
     const side = new THREE.Vector3(-Math.sin(tank.group.rotation.y), 0, -Math.cos(tank.group.rotation.y));
-    const from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
+    let from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
+    let out = null; // the way the tube points
+    if (launcher) {
+      tank.group.updateWorldMatrix(true, true);
+      from = launcher.mouth.getWorldPosition(new THREE.Vector3());
+      out = new THREE.Vector3(1, 0, 0).transformDirection(launcher.mouth.matrixWorld);
+    }
     const m = new THREE.Group();
     const add = (geo, color, z, o = {}) => {
       const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, ...o }));
@@ -1041,7 +1054,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     m.position.copy(from);
     scene.add(m);
     const dir = new THREE.Vector3(e.pos.x - from.x, 0, e.pos.z - from.z).normalize();
-    dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
+    if (out) dir.lerp(out, 0.6).setY(Math.max(0.5, out.y + 0.4)).normalize();
+    else dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
     missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(9), t: 0, last: from.clone(), aim: mslAim(e) });
     // the launch: a hard white flash, a back-blast of smoke, a kick
     combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
@@ -1067,6 +1081,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         }
         if (st.fired >= st.targets.length) run.msl = null;
       }
+    }
+    if (launcher) {
+      if (run.msl) run.mslUp = 1.2; // up while locking and firing, a beat after
+      run.mslUp = Math.max(0, (run.mslUp || 0) - (run.msl ? 0 : dt));
+      launcher.raise(run.mslUp > 0 ? 1 : 0, dt);
     }
     for (let i = missiles.length - 1; i >= 0; i--) {
       const ms = missiles[i];

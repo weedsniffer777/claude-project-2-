@@ -353,16 +353,20 @@ function buildRiver(scene) {
   building({ x0: 14, x1: SHACKS[0].x0 + 4, floors: 8, panel: PANELS[0], accent: ACCENTS[2], holes: 3, mural: true });
   for (let k = 0; k < 2; k++) container(12, k * 2.6, WALK.n - 1.3, 0, CONTAINERS[(k + 3) % 5]);
   B.block(12, WALK.n - 1.3, 2.2, 1.3);
-  // the start: a container wall across the street behind the tank
+  // the start: the street's blocked behind the tank by a collapsed
+  // building, a mountain of rubble right across it: broken slabs, a wall
+  // section still standing in it, rebar, snow
   {
-    const X = START_X - 1.3;
-    let i = 0;
-    for (let z = -15; z < 20; z += 6.2, i++) {
-      container(X, 0, z, Math.PI / 2, CONTAINERS[i % 5]);
-      if (i % 3 !== 1) container(X - 0.1, 2.6, z + (i % 2 ? 0.4 : -0.3), Math.PI / 2 + (rand() - 0.5) * 0.1, CONTAINERS[(i + 2) % 5]);
-    }
-    B.block(X, 2, 1.4, 22);
-    rubble(X + 2.4, 5.5, 2.2, 1.4, { slabs: 3 });
+    const X = START_X - 2.4;
+    for (let z = -14; z < 16; z += 2.6) rubble(X - 1 + (rand() - 0.5) * 1.5, z + (rand() - 0.5), 2.6 + rand() * 1.2, 2.6 + rand() * 1.8, { slabs: 3 });
+    for (let z = -12; z < 14; z += 4) rubble(X - 3.5, z + rand() * 2, 3 + rand(), 3.6 + rand() * 1.5, { slabs: 4 });
+    // a piece of the facade, fallen across the top, and one standing
+    const lean = put(B.root, box(7, 0.35, 3.4, 0x9a978f, { r: 0.03 }), X - 2.2, 3.1, -3);
+    lean.rotation.set(0.25, 1.3, 0.5);
+    const wall = put(B.root, box(0.4, 5.5, 6, 0xa5a095, { r: 0.03 }), X - 4.5, 2.75, 6);
+    wall.rotation.z = -0.12;
+    for (let y = 1.2; y < 5; y += 1.6) put(B.root, box(0.42, 0.7, 1.2, 0x2a2b2e), X - 4.5, y, 5 + (y % 2));
+    B.block(X - 1, 0.5, 2.2, 22);
     for (let k = 0; k < 7; k++) rubble(START_X - 8 - rand() * 30, -8 + rand() * 22, 2 + rand() * 2.5, 1.5 + rand() * 2.5, { slabs: 4 });
   }
   // the near side: garages, then a low block up to the checkpoint

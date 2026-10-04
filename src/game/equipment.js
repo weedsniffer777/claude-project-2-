@@ -21,13 +21,13 @@ export const EQUIPMENT = {
   },
   atgm: {
     name: 'Guided missile',
-    text: 'Press Q: it locks on to up to three enemies in view by itself and fires a missile at each.',
-    rows: [['Damage', '3 × 90', true], ['Blast', 'Big', true], ['Aim', 'Locks on by itself', true], ['Recharge', '12 s', false], ['Range', 'Enemies in view', false]],
+    text: 'Press Q: it locks on to the three toughest enemies in range by itself and fires a missile at each.',
+    rows: [['Damage', '3 × 90', true], ['Blast', 'Big', true], ['Aim', 'Locks on by itself', true], ['Recharge', '12 s', false], ['Range', 'Needs targets nearby', false]],
     cooldown: 12,
     missiles: 3,
     lockTime: 0.55, // seconds locking on before the first fires
     salvoGap: 0.16,
-    range: 26,
+    range: 14, // a circle round the tank, a bit inside what you can see (wider with Optics)
     damage: 90,
     blast: 3.0,
     speed: 30, // top speed, units/s

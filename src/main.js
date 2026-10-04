@@ -9,6 +9,16 @@ import { createModelViewer } from './devkit/modelViewer.js';
 import { createDevKit } from './devkit/devkit.js';
 import { MODELS } from './models/registry.js';
 import { LEVELS } from './levels/index.js';
+import { CURSOR } from './game/hud.js';
+
+// The themed cursor everywhere: over panels, text and empty UI too (not the
+// browser's arrow or text beam). Zero specificity, so anything that sets
+// its own cursor (the canvas hiding it in combat) still wins.
+{
+  const st = document.createElement('style');
+  st.textContent = `:where(html, body, body *) { cursor: ${CURSOR}; }`;
+  document.head.append(st);
+}
 
 const params = new URLSearchParams(location.search);
 if (params.has('shot')) document.body.classList.add('dk-shot');

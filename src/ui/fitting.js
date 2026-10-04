@@ -68,7 +68,7 @@ const CSS = `
 .fit .item .away { z-index: 2; position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
 .fit .item.isaway img { filter: brightness(0.55) saturate(0.6); }
 .fit .item .away.only { color: #fff; background: #c42a20; }
-.fit .item.notfor { cursor: default; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446 !important; }
+.fit .item.notfor { cursor: var(--cursor); box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446 !important; }
 .fit .item.notfor img { filter: grayscale(1) brightness(0.45); }
 .fit .pop .eqon { margin-left: auto; font: 400 8px/1 'Silkscreen', monospace; padding: 2px 3px; color: #111; background: #b9b0a0; }
 .fit .slot .fx { display: flex; flex-wrap: wrap; gap: 2px 8px; font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; }
@@ -237,7 +237,7 @@ export function createFitting({ renderer, cursor }) {
       closePop();
       justClosed = owner && owner.contains(e.target) ? owner : null;
     }
-  });
+  }, true); // (capture: the screen's own panels stop clicks bubbling, and a click on any of them closes it too)
   function showTip(el, id) {
     const r = el.getBoundingClientRect();
     tip.hidden = false;
