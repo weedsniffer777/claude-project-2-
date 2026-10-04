@@ -44,7 +44,7 @@ export const TANKS = {
     ability: 'breakthrough',
     abilityName: 'Breakthrough',
     blurb: 'Fast and fragile. Hold to fire the autocannon; quick boosts on its exhaust rockets; Breakthrough charges through anything in the way, shielded, spoiling enemy aim.',
-    unlockText: 'Beat level 1 to unlock',
+    unlockText: 'Beat level 2 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
     // Shift: a quick, hard dash that recharges fast (boostCooldown)
     stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },

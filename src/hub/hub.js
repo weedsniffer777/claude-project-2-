@@ -49,6 +49,14 @@ const CSS = `
 .base-tag { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); padding: 3px 8px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: var(--amber); background: rgba(12, 11, 13, 0.75); box-shadow: 0 0 0 2px #000; white-space: nowrap; pointer-events: auto; cursor: var(--cursor); }
 .base-tag.hot { color: #111; background: var(--amber); }
+/* over the Levels room: the next tank, waiting at the end of level 2 */
+.base-promo { position: absolute; left: 0; top: 0; display: grid; gap: 6px; justify-items: center; padding: 10px 14px 12px; pointer-events: auto; cursor: var(--cursor);
+  box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 4px 4px 0 4px #000; animation: basePromo 1.4s steps(2) infinite; }
+.base-promo .t { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 3px 6px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.base-promo img { width: 192px; height: 112px; image-rendering: pixelated; }
+.base-promo b { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: #f1e9d8; text-align: center; }
+.base-promo i { position: absolute; left: 50%; top: 100%; margin-left: -10px; width: 20px; height: 12px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+@keyframes basePromo { 0%, 100% { transform: translate(-50%, calc(-100% - 22px)); } 50% { transform: translate(-50%, calc(-100% - 27px)); } }
 .base-tag.alert::after { content: 'Upgrade!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 @keyframes baseAlert { 50% { background: #b6ffc4; } }
 .base-menu { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: min(340px, calc(100vw - 48px)); padding: 16px 18px 18px;
@@ -942,6 +950,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     <div class="base-menu panel" hidden></div>
     <div class="base-brief" hidden></div>
     <div class="base-news panel" hidden></div>
+    <div class="base-promo panel" hidden><span class="t">New tank</span><img alt=""><b>Beat level 2 for a new tank!</b><i></i></div>
     <div class="base-hint panel">Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
@@ -952,6 +961,21 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const fade = root.querySelector('.base-fade');
   const bankEl = root.querySelector('.base-bank b');
   const news = root.querySelector('.base-news');
+  // the next tank on offer: shown once level 1's beaten, until it's unlocked
+  const promo = root.querySelector('.base-promo');
+  promo.addEventListener('click', () => clickRoom(ROOMS.find((r) => r.id === 'briefing')));
+  const promoTank = () => {
+    const lv = CAMPAIGN.find((l) => l.first?.easy?.tank && !save.tanks().includes(l.first.easy.tank));
+    const prev = lv && CAMPAIGN.find((l) => l.n === lv.n - 1);
+    return lv && prev?.id && save.cleared().some((k) => k === prev.id || k === `${prev.id}:hard`) ? { tank: lv.first.easy.tank, n: lv.n } : null;
+  };
+  let promoOn = null;
+  function refreshPromo() {
+    promoOn = promoTank();
+    if (!promoOn) return;
+    promo.querySelector('img').src = tankPicture(renderer, promoOn.tank, 192, 112);
+    promo.querySelector('b').textContent = `Beat level ${promoOn.n} for a new tank!`;
+  }
   const fitting = createFitting({ renderer, cursor: CURSOR });
   const workshop = createWorkshop({ renderer, cursor: CURSOR });
   let freshTanks = []; // tanks unlocked since the hangar was last opened
@@ -1260,6 +1284,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       bankEl.textContent = bankTotal();
       fitHubTank();
       tags.get('hangar').classList.toggle('alert', upgradeHint()); // the first time an upgrade's affordable
+      refreshPromo();
       fade.classList.remove('off');
       requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('off')));
       news.hidden = true;
@@ -1287,6 +1312,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     // for the dev kit's data reset
     refresh() {
       bankEl.textContent = bankTotal();
+      refreshPromo();
       tags.get('hangar').classList.toggle('alert', upgradeHint());
       fitHubTank();
       if (open?.id === 'hangar') openFitting();
@@ -1369,6 +1395,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
         tag.style.left = `${Math.round(rect.left + ((v.x + 1) / 2) * rect.width)}px`;
         tag.style.top = `${Math.round(rect.top + ((1 - v.y) / 2) * rect.height)}px`;
         tag.classList.toggle('hot', r === lit);
+        if (r.id === 'briefing') {
+          promo.hidden = !promoOn || !!open || v.z > 1 || !news.hidden;
+          promo.style.left = tag.style.left;
+          promo.style.top = tag.style.top;
+        }
       }
     },
   };
