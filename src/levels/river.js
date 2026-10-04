@@ -744,18 +744,10 @@ function buildRiver(scene) {
       case 4:
         if (atDoor(api, shackB)) {
           go(5);
-          api.depot(shackB, { offers: shuffled(['dozer', 'autoloader', 'era', 'afterburner', 'twinmg', 'optics']), count: 2, onLeave: () => startSector3(api) });
+          api.depot(shackB, { offers: ['afterburner', 'twinmg', 'optics'], onLeave: () => startSector3(api) });
         }
         break;
     }
-  }
-  function shuffled(list) {
-    const a = [...list];
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
   }
 
   // 3: the bridge and its gun

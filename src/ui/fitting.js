@@ -3,12 +3,13 @@
 // and the storage of spare parts on the right, buttons (and in the hangar a
 // carousel of tanks) along the bottom.
 //
-// Click a fitted part to swap or remove it; click an EMPTY slot or a part in
-// storage to fit one. With every slot full, a part from storage asks which
-// one to replace (or Cancel). A part just found at a checkpoint is shown
-// as New with an "Equip now" button.
+// Click a fitted part to see what it does (and remove it); click an EMPTY
+// slot or a part in storage to fit one. With every slot full, a part from
+// storage asks which one to replace (or Cancel). A part just found at a
+// checkpoint is shown as New with an "Equip now" button. Upgrades have a
+// screen of their own (workshop.js), opened from the hangar.
 import * as THREE from 'three';
-import { PARTS, statsFor, TIERS, TIER_COST, tierOf } from '../game/parts.js';
+import { PARTS, statsFor, TIERS, tierOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { EQUIPMENT } from '../game/equipment.js';
@@ -56,12 +57,23 @@ const CSS = `
 .fit .slot .tiername, .fit .tip .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tc); }
 .fit .item .away { position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
 .fit .item.isaway img { filter: brightness(0.55) saturate(0.6); }
-.fit .tip .tiers { display: grid; gap: 3px; margin-top: 6px; }
-.fit .tip .tiers div { display: grid; gap: 1px; color: #6d655a; }
-.fit .tip .tiers div.got { color: #d8d0c0; }
-.fit .pop .up { color: #111; background: var(--go); }
-.fit .pop .up:disabled { color: #b9b0a0; background: #2a2628; cursor: default; }
-.fit .pop .up small { margin-left: auto; font-size: 10px; }
+.fit .slot .fx { display: flex; flex-wrap: wrap; gap: 2px 8px; font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; }
+.fit .slot .fx b { font-weight: 400; }
+.fit .slot .fx b.good { color: var(--go); }
+.fit .slot .fx b.bad { color: #ff7a6a; }
+.fit .slot .fx .pk { color: #ffc24a; }
+.fit .info { display: grid; gap: 5px; width: 230px; padding: 4px 4px 2px; }
+.fit .info .hd { display: flex; gap: 8px; align-items: center; }
+.fit .info .hd img { width: 72px; height: 48px; image-rendering: pixelated; background: #141215; box-shadow: 0 0 0 2px #000, 0 0 0 3px var(--tc); }
+.fit .info .hd b { display: grid; gap: 3px; font: 400 12px/1.1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; }
+.fit .info .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--tc); }
+.fit .info p { margin: 0; font: 400 12px/1.25 'Pixelify Sans', monospace; color: #b9b0a0; text-transform: none; }
+.fit .info .where { font: 400 11px/1.2 'Pixelify Sans', monospace; color: #8f877a; }
+.fit .upbtn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px 10px; font-size: 12px; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
+.fit .upbtn:hover { filter: brightness(1.12); }
+.fit .upbtn.hint { animation: fitglow 0.9s steps(2) infinite; }
+.fit .upbtn .dot { padding: 2px 5px; font-size: 9px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
+@keyframes fitglow { 50% { box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000, 0 0 0 5px #ffe2a0, 0 0 18px #ffc24a; } }
 .fit .slot.empty { color: var(--red); background: #241314; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; min-height: 54px; justify-content: center; font-size: 13px; }
 .fit .slot.empty::before { content: ''; width: 12px; height: 14px; background: var(--red); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .fit .slot.empty:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--red); }
@@ -90,6 +102,8 @@ const CSS = `
 .fit .pop button:hover { background: #2a2628; color: var(--amber); }
 .fit .pop img { width: 48px; height: 32px; image-rendering: pixelated; }
 .fit .pop .remove { justify-content: center; padding: 8px; color: #ff9a8a; }
+.fit .pop .fitb { justify-content: center; padding: 8px; color: #111; background: var(--go); }
+.fit .pop .fitb:hover { color: #111; background: #b6ffc4; }
 .fit .pop .none { padding: 6px; font-size: 13px; color: #b9b0a0; }
 .fit .bottom { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 14px; justify-items: center; pointer-events: none; }
 .fit .tanks { display: flex; gap: 12px; padding: 8px; pointer-events: auto; }
@@ -119,7 +133,7 @@ function inject() {
   if (injected) return;
   injected = true;
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + EFFECT_CSS;
   document.head.append(style);
 }
 
@@ -155,7 +169,7 @@ export function createFitting({ renderer, cursor }) {
   root.innerHTML = `
     <svg></svg>
     <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Change it in the hangar.</span></div></div>
-    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div></div>
+    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
   const $ = (s) => root.querySelector(s);
@@ -182,9 +196,8 @@ export function createFitting({ renderer, cursor }) {
     const tier = tierOf(id);
     tip.style.setProperty('--tc', TIERS[tier].color);
     tip.querySelector('b').innerHTML = `${PARTS[id].name} <span class="tiername">${TIERS[tier].name}</span>`;
-    // what each tier gives, the ones it has bright
-    const steps = [PARTS[id].text, ...(PARTS[id].tiers || []).map((t) => t.text)];
-    tip.querySelector('span').innerHTML = `<span class="tiers">${steps.map((t, k) => `<div class="${k <= tier ? 'got' : ''}"><span class="tiername" style="--tc:${TIERS[k].color}">${TIERS[k].name}</span>${t}</div>`).join('')}</span>${where(id) ? `<br>On the ${where(id)}.` : ''}`;
+    // what it does at its tier, in numbers
+    tip.querySelector('span').innerHTML = `${effectsHtml(id, o.tankId, tier)}${where(id) ? `<br>On the ${where(id)}.` : ''}`;
     tip.style.left = `${Math.round(Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100)))}px`;
     tip.style.top = `${Math.round(r.top - 12)}px`;
     tip.style.transform = 'translateY(-100%)';
@@ -207,29 +220,6 @@ export function createFitting({ renderer, cursor }) {
     // fitting it here takes it off any other tank
     if (added) for (const t of TANK_ORDER) if (t !== o.tankId && save.loadout(t).includes(added)) save.setLoadout(save.loadout(t).filter((x) => x !== added), t);
     o.onSet(list, added);
-  }
-  // Hangar only: scraps take a part up a tier
-  function upgrade(id) {
-    const tier = tierOf(id);
-    const cost = TIER_COST[tier + 1];
-    if (cost == null || save.bank() < cost) return;
-    save.addBank(-cost);
-    save.setTier(id, tier + 1);
-    closePop();
-    o.onUpgrade?.(id);
-    render();
-  }
-  function upgradeButton(id) {
-    const tier = tierOf(id);
-    if (!o.upgrades || tier >= TIERS.length - 1 || !PARTS[id].tiers) return null;
-    const cost = TIER_COST[tier + 1];
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'up';
-    b.innerHTML = `Upgrade to ${TIERS[tier + 1].name}<small>${cost} scraps</small>`;
-    b.disabled = save.bank() < cost;
-    b.addEventListener('click', () => upgrade(id));
-    return b;
   }
   // put a part from storage on: into a free slot, or ask which to replace
   function equip(id) {
@@ -279,9 +269,8 @@ export function createFitting({ renderer, cursor }) {
         const tier = tierOf(id);
         el.dataset.tier = tier;
         el.style.setProperty('--tc', TIERS[tier].color);
-        el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span><small></small></span>`;
+        el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
         el.querySelector('.nm .pn').textContent = PARTS[id].name;
-        el.querySelector('small').textContent = tier ? PARTS[id].tiers[tier - 1].text : PARTS[id].text;
         el.addEventListener('pointerenter', () => !replacing && showTip(el, id));
         el.addEventListener('pointerleave', hideTip);
       } else el.innerHTML = '<span>Empty</span>';
@@ -307,10 +296,19 @@ export function createFitting({ renderer, cursor }) {
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
       el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : ''}`;
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
-      el.addEventListener('click', () => (o.upgrades ? openItemPop(id, el) : equip(id)));
+      el.addEventListener('click', () => (o.tanks ? openItemPop(id, el) : equip(id)));
       el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(id)));
       el.addEventListener('pointerleave', () => (hideTip(), renderBars()));
       store.append(el);
+    }
+    // the hangar's way into the upgrades screen; it glows the first time
+    // there's an upgrade you can afford
+    const upb = $('.upbtn');
+    upb.hidden = !o.onUpgrades;
+    if (o.onUpgrades) {
+      upb.classList.toggle('hint', !!o.upgradeHint);
+      upb.innerHTML = `Upgrade parts${o.upgradeHint ? '<span class="dot">New</span>' : ''}`;
+      upb.onclick = () => (closePop(), o.onUpgrades());
     }
     // the message box: a fresh find, or which slot to replace
     const msg = $('.msg');
@@ -417,14 +415,31 @@ export function createFitting({ renderer, cursor }) {
     hideTip();
     pop = document.createElement('div');
     pop.className = 'pop pnl';
+    pop.append(infoBox(id));
     const fit = document.createElement('button');
     fit.type = 'button';
+    fit.className = 'fitb';
     fit.textContent = where(id) ? `Move here from the ${where(id)}` : 'Fit to this tank';
     fit.addEventListener('click', () => (closePop(), equip(id)));
     pop.append(fit);
-    const up = upgradeButton(id);
-    if (up) pop.append(up);
     placePop(el);
+  }
+  // a part's card for the pops: picture, tier, name, its one line, the numbers
+  function infoBox(id) {
+    const tier = tierOf(id);
+    const d = document.createElement('div');
+    d.className = 'info';
+    d.style.setProperty('--tc', TIERS[tier].color);
+    d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId, tier)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
+    d.querySelector('.pn').textContent = PARTS[id].name;
+    d.querySelector('p').textContent = PARTS[id].text;
+    return d;
+  }
+  // a slot's line: its biggest change or two, and its perk
+  function shortFx(id, tier) {
+    const rows = partEffects(id, o.tankId, tier).slice(0, 2);
+    const perk = tier >= TIERS.length - 1 && partPerk(id);
+    return rows.map((r) => `<span>${r.label} <b class="${r.good ? 'good' : 'bad'}">${r.delta}</b></span>`).join('') + (perk ? `<span class="pk">★ ${perk.name}</span>` : '');
   }
   function placePop(el) {
     root.append(pop);
@@ -440,22 +455,24 @@ export function createFitting({ renderer, cursor }) {
     const list = loadout();
     pop = document.createElement('div');
     pop.className = 'pop pnl';
+    if (id) {
+      // a fitted part: what it does, and Remove (to swap it, pick a part
+      // in storage and then this slot)
+      pop.append(infoBox(id));
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'remove';
+      b.textContent = 'Remove';
+      b.addEventListener('click', () => set(list.filter((x) => x !== id)));
+      pop.append(b);
+      return placePop(el);
+    }
     for (const s of spare()) {
       const b = document.createElement('button');
       b.type = 'button';
       b.innerHTML = `<img alt="" src="${pic(s)}"><span></span>`;
       b.querySelector('span').textContent = PARTS[s].name;
       b.addEventListener('click', () => set(id ? list.map((x) => (x === id ? s : x)) : [...list, s], s));
-      pop.append(b);
-    }
-    if (id) {
-      const up = upgradeButton(id);
-      if (up) pop.prepend(up);
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'remove';
-      b.textContent = 'Remove';
-      b.addEventListener('click', () => set(list.filter((x) => x !== id)));
       pop.append(b);
     }
     if (!pop.children.length) pop.innerHTML = '<span class="none">Nothing in storage to fit.</span>';

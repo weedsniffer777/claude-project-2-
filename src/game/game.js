@@ -19,7 +19,7 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, BASE_STATS } from './parts.js';
+import { PARTS, attachPart, statsFor, BASE_STATS, tierOf, effectsHtml } from './parts.js';
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
@@ -1255,7 +1255,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function showPicker() {
     const st = run.depot;
     hud.showPicker(
-      st.offers.map((id) => ({ id, ...PARTS[id] })),
+      st.offers.map((id) => ({ id, ...PARTS[id], lines: effectsHtml(id, tankId, tierOf(id)) })),
       (id) => pick(id),
       null, // no skip: a part is always worth taking (it goes to storage)
       // hovering a card swings the camera over to that part's pallet

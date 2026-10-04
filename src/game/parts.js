@@ -38,7 +38,7 @@ export const BASE_STATS = {
   breakSpeed: 1.0,
   breakCooldown: 8,
   afterburner: false,
-  extraMgs: 0, // extra roof machine guns (Second gun), each picking its own target
+  extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
   spotter: 0, // Legendary Wider view: enemies marked every few seconds (how many)
   hotLoader: false, // Legendary Fast reload: a kill reloads the main gun
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
@@ -66,7 +66,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Rams hit much harder.', apply: (s) => (s.ramDamage = 70) },
-      { text: 'Plough: rammed enemies are thrown back and stunned.', perk: true, apply: (s) => (s.dozerStun = 1.5) },
+      { text: '', perk: 'Plough', perkText: 'Rammed enemies are thrown back and stunned for 1.5 s.', apply: (s) => (s.dozerStun = 1.5) },
     ],
     build(t) {
       const g = new THREE.Group();
@@ -108,7 +108,7 @@ export const PARTS = {
           else s.reload *= 0.8;
         },
       },
-      { text: 'Hot loader: a kill reloads the main gun at once (an autocannon: +3 rounds).', perk: true, apply: (s) => (s.hotLoader = true) },
+      { text: '', perk: 'Hot loader', perkText: 'Every kill reloads the main gun at once (autocannon: +3 rounds).', apply: (s) => (s.hotLoader = true) },
     ],
     // an ammo can strapped on the turret's left bin
     light(t) {
@@ -164,7 +164,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Take 38% less damage.', apply: (s) => (s.armor *= 0.62 / 0.7) },
-      { text: 'Reactive burst: every 8 seconds the next hit is blocked completely, and the brick blasts enemies nearby.', perk: true, apply: (s) => (s.reactive = true) },
+      { text: '', perk: 'Reactive burst', perkText: 'Blocks one hit completely every 8 s, and the blast deals 30 damage to enemies nearby.', apply: (s) => (s.reactive = true) },
     ],
     build(t) {
       // a T-72 style conversion: shingled rows of bricks over the whole
@@ -278,7 +278,7 @@ export const PARTS = {
     },
   },
   twinmg: {
-    name: 'Second gun',
+    name: 'Extra MGs',
     text: 'A second machine gun that picks its own target.',
     icon: ['................', '.....------.....', '.....-####-.....', '#########-#.....', '.....-####-.....', '.....------.....', '#########-#.....', '.....-####-.....', '.....------.....', '................'],
     apply(s) {
@@ -323,7 +323,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Boost faster and longer still.', apply: (s) => ((s.boostSpeed *= 1.1), (s.boostTime *= 1.15)) },
-      { text: 'Afterburn: every kill while boosting takes 2 seconds off the recharge.', perk: true, apply: (s) => (s.boostRefund = 2) },
+      { text: '', perk: 'Afterburn', perkText: 'Every kill while boosting takes 2 s off the boost recharge.', apply: (s) => (s.boostRefund = 2) },
     ],
     build(t) {
       // nothing new to see until it fires: the flame burns blue and pink
@@ -371,7 +371,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'See further still; machine guns reach further.', apply: (s) => ((s.view *= 1.08), (s.mgRange += 2)) },
-      { text: 'Spotter: every 5 seconds the farthest enemies in sight are marked and take 30% more damage. Light tank: one more mark.', perk: true, apply: (s) => (s.spotter = 2) },
+      { text: '', perk: 'Spotter', perkText: 'Every 5 s the 2 farthest enemies in sight are marked: +30% damage to them for 5 s. Light tank: 3 marked.', apply: (s) => (s.spotter = 2) },
     ],
     build(t) {
       const g = sightHead();
@@ -406,7 +406,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'A bigger blast.', apply: (s) => (s.splash *= 1.2) },
-      { text: 'Heavy charge: more damage per shot again.', perk: true, apply: (s) => (s.cannonDamage += s.mag ? 4 : 15) },
+      { text: 'More damage per shot again.', apply: (s) => (s.cannonDamage += s.mag ? 4 : 15) },
     ],
     light(t) {
       const g = new THREE.Group();
@@ -486,7 +486,7 @@ export const TIERS = [
   { name: 'Epic', color: '#b884f0' },
   { name: 'Legendary', color: '#ffc24a' },
 ];
-export const TIER_COST = [0, 300, 900]; // scraps to reach each tier
+export const TIER_COST = [0, 1000, 3000]; // scraps to reach each tier
 export const tierOf = (id) => Math.min(TIERS.length - 1, save.tiers()[id] || 0);
 
 export function statsFor(parts, tank = 'battle', tiers = null) {
@@ -501,6 +501,70 @@ export function statsFor(parts, tank = 'battle', tiers = null) {
   if (s.spotter && tank === 'light') s.spotter += 1;
   return s;
 }
+
+// What a part does, as numbers: each stat it changes, from -> to, and
+// whether that's better. tier: the part at that tier against the bare tank;
+// with `from` (a tier), that tier against the one above it (an upgrade).
+const pct = (v) => `${Math.round(v * 100)}%`;
+const secs = (v) => `${+v.toFixed(2)} s`;
+const STAT_ROWS = [
+  ['maxHp', 'Hull', (v) => `${Math.round(v)}`, 1],
+  ['armor', 'Damage taken', pct, -1],
+  ['cannonDamage', 'Shell damage', (v) => `${Math.round(v)}`, 1],
+  ['splash', 'Blast radius', (v) => `${v.toFixed(1)} m`, 1],
+  ['reload', 'Reload', secs, -1],
+  ['mag', 'Rounds', (v) => `${v}`, 1],
+  ['magReload', 'Magazine reload', secs, -1],
+  ['extraMgs', 'Machine guns', (v) => `${v + 1}`, 1],
+  ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
+  ['ramDamage', 'Ram damage', (v) => `${Math.round(v)}`, 1],
+  ['crushHeavy', 'Crushes wrecks', (v) => (v ? 'Yes' : 'No'), 1],
+  ['view', 'View', pct, 1],
+  ['speed', 'Speed', pct, 1],
+  ['boostSpeed', 'Boost speed', pct, 1],
+  ['boostTime', 'Boost time', secs, 1],
+  ['boostCooldown', 'Boost recharge', secs, -1],
+];
+export function partEffects(id, tank = 'battle', tier = tierOf(id), from = null) {
+  const a = from == null ? statsFor([], tank) : statsFor([id], tank, { [id]: from });
+  const b = statsFor([id], tank, { [id]: tier });
+  const rows = [];
+  for (const [key, label, fmt, dir] of STAT_ROWS) {
+    const x = +a[key];
+    const y = +b[key];
+    if (Math.abs(x - y) < 1e-6) continue;
+    const up = y > x;
+    let delta;
+    if (key === 'crushHeavy') delta = 'Yes';
+    else if (fmt === pct) delta = `${up ? '+' : '−'}${Math.round(Math.abs(y - x) * 100)}%`;
+    else if (fmt === secs) delta = `${up ? '+' : '−'}${secs(Math.abs(y - x))}`;
+    else delta = `${up ? '+' : '−'}${fmt(Math.abs(y - x) - (key === 'extraMgs' ? 1 : 0)).replace(/^-/, '')}`;
+    rows.push({ key, label, from: fmt(x), to: fmt(y), delta, good: (up ? 1 : -1) * dir > 0, a: x, b: y, dir, fmt });
+  }
+  return rows;
+}
+// the Legendary perk (if the part has one): { name, text }
+export function partPerk(id) {
+  const t = PARTS[id].tiers?.[TIERS.length - 2];
+  return t?.perk ? { name: t.perk, text: t.perkText } : null;
+}
+// as HTML: coloured rows (and the perk, if it has it at that tier)
+export function effectsHtml(id, tank, tier = tierOf(id)) {
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const rows = partEffects(id, tank, tier)
+    .map((r) => `<div class="fx-row"><span>${r.label}</span><b class="${r.good ? 'good' : 'bad'}">${r.delta}</b></div>`)
+    .join('');
+  const perk = tier >= TIERS.length - 1 && partPerk(id);
+  return rows + (perk ? `<div class="fx-perk"><b>${esc(perk.name)}</b> ${esc(perk.text)}</div>` : '');
+}
+export const EFFECT_CSS = `
+.fx-row { display: flex; justify-content: space-between; gap: 10px; font: 400 12px/1.3 'Pixelify Sans', monospace; color: #d8d0c0; }
+.fx-row b { font: 400 11px/1.3 'Silkscreen', monospace; font-weight: 400; white-space: nowrap; }
+.fx-row b.good { color: #6be08a; }
+.fx-row b.bad { color: #ff7a6a; }
+.fx-perk { margin-top: 4px; padding: 5px 7px; font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #2a2210; box-shadow: 0 0 0 2px #000, 0 0 0 3px #ffc24a; text-transform: none; }
+.fx-perk b { display: block; font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #ffc24a; font-weight: 400; }
+`;
 
 // A small model of the part, for its pallet in the depot.
 export function partModel(id) {

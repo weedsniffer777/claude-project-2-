@@ -284,7 +284,7 @@ export function buildDepotRoom(scene) {
   placeCrane();
 
   // ------------------------------------------------------------ props
-  P.bus(B, 9, -6.6, 0.02);
+  P.tram(B, 9, -6.6, 0.02, { tilt: 0, burn: 0.35, snow: false }); // the old tram, in for repairs
   for (const x of [7, 11]) for (const z of [-5.8, -7.4]) B.piece(0.4, 0.5, 0.4, 0xc99a2e, x, 0.25, z);
   // workbench and tool racks along the back
   B.chunk(2.6, 0.12, 0.9, 0x6b5640, 20.5, 1.0, -8.2);

@@ -4,6 +4,7 @@
 // hazard amber; red only means danger (damage taken, low hull, machines).
 import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
+import { EFFECT_CSS } from './parts.js';
 
 const CSS = `
 .hud button, .hud .hud-card { cursor: var(--cursor); }
@@ -108,6 +109,7 @@ const CSS = `
   transition: transform 0.12s steps(3); }
 .hud-card .name { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
 .hud-card .what { font-size: 13px; line-height: 1.25; }
+.hud-card .fx { display: grid; gap: 3px; width: 100%; text-align: left; }
 .hud-card .take { margin-top: auto; padding: 7px 18px 8px; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40; }
 .hud-card:hover, .hud-card:focus-visible { transform: translateY(-6px) scale(1.07); outline: none; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 4px 4px 0 4px #000; }
 .hud-card:hover .take, .hud-card:focus-visible .take { background: #b6ffc4; box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000, 0 0 12px 2px #6be08a88; }
@@ -284,7 +286,7 @@ function inject() {
   link.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap';
   document.head.append(link);
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + EFFECT_CSS;
   document.head.append(style);
 }
 
@@ -629,9 +631,10 @@ export function createHud() {
         const el = document.createElement('button');
         el.type = 'button';
         el.className = 'hud-card panel';
-        el.innerHTML = '<span class="name"></span><span class="what"></span><span class="take">Pick</span>';
+        el.innerHTML = '<span class="name"></span><span class="what"></span><span class="fx"></span><span class="take">Pick</span>';
         el.querySelector('.name').textContent = c.name;
         el.querySelector('.what').textContent = c.text;
+        el.querySelector('.fx').innerHTML = c.lines || ''; // the numbers (built from the part's own stats)
         el.addEventListener('click', () => onPick(c.id));
         el.addEventListener('pointerenter', () => onHover?.(c.id));
         el.addEventListener('pointerleave', () => onHover?.(null));

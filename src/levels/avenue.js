@@ -1830,7 +1830,7 @@ function buildAvenue(scene) {
         case 6:
           if (atDoor(api, shackB)) {
             go(7);
-            api.depot(shackB, { offers: ['afterburner', 'twinmg', 'optics'], onLeave: () => startSector3(api) });
+            api.depot(shackB, { offers: [], onLeave: () => startSector3(api) }); // a repair stop: these parts turn up in level 2 now
           }
           break;
       }

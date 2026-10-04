@@ -18,6 +18,7 @@ import { CURSOR } from '../game/hud.js';
 import { PARTS, attachPart } from '../game/parts.js';
 import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
+import { createWorkshop, upgradeHint } from '../ui/workshop.js';
 import { save } from '../game/save.js';
 import { partPicture } from '../render/partPictures.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
@@ -46,6 +47,8 @@ const CSS = `
 .base-tag { position: absolute; left: 0; top: 0; transform: translate(-50%, -100%); padding: 3px 8px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase;
   color: var(--amber); background: rgba(12, 11, 13, 0.75); box-shadow: 0 0 0 2px #000; white-space: nowrap; pointer-events: auto; cursor: var(--cursor); }
 .base-tag.hot { color: #111; background: var(--amber); }
+.base-tag.alert::after { content: 'Upgrade!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
+@keyframes baseAlert { 50% { background: #b6ffc4; } }
 .base-menu { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: min(340px, calc(100vw - 48px)); padding: 16px 18px 18px;
   display: grid; gap: 12px; pointer-events: auto; }
 .base h2 { margin: 0; font: 400 20px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
@@ -888,6 +891,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const bankEl = root.querySelector('.base-bank b');
   const news = root.querySelector('.base-news');
   const fitting = createFitting({ renderer, cursor: CURSOR });
+  const workshop = createWorkshop({ renderer, cursor: CURSOR });
   let freshTanks = []; // tanks unlocked since the hangar was last opened
   let open = null;
   let hover = null;
@@ -1007,11 +1011,22 @@ export function createHub({ renderer, pixel, onDeploy }) {
         openFitting();
       },
       buttons: [['Back', () => closeRoom()]],
-      // scraps take parts up a tier here
-      upgrades: true,
-      onUpgrade() {
-        bankEl.textContent = bankTotal();
-        fitHubTank();
+      // scraps take parts up a tier on a screen of their own
+      upgradeHint: upgradeHint(),
+      onUpgrades() {
+        fitting.hide();
+        workshop.show({
+          tankId,
+          onChange() {
+            bankEl.textContent = bankTotal();
+            fitHubTank();
+          },
+          onClose() {
+            bankEl.textContent = bankTotal();
+            tags.get('hangar').classList.toggle('alert', upgradeHint());
+            if (open?.id === 'hangar') openFitting();
+          },
+        });
       },
       anchor: (id) => {
         const w = anchorWorld(tank, tankId, id);
@@ -1045,6 +1060,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function closeRoom() {
     open = null;
     fitting.hide();
+    workshop.hide();
+    tags.get('hangar').classList.toggle('alert', upgradeHint());
     menu.hidden = true;
     brief.hidden = true;
     hint.hidden = false;
@@ -1078,6 +1095,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
   };
   const onKeyDown = (e) => {
     if (e.code === 'Escape' && !news.hidden) return void (news.hidden = true);
+    if (e.code === 'Escape' && workshop.isOpen) {
+      workshop.hide();
+      bankEl.textContent = bankTotal();
+      return openFitting();
+    }
     if (e.code === 'Escape' && open) return closeRoom();
     keys.add(e.code);
   };
@@ -1104,7 +1126,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
   return {
     enter() {
-      document.body.append(root, fitting.el);
+      document.body.append(root, fitting.el, workshop.el);
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
       window.addEventListener('blur', onBlur);
@@ -1117,6 +1139,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       lastRoom = null;
       bankEl.textContent = bankTotal();
       fitHubTank();
+      tags.get('hangar').classList.toggle('alert', upgradeHint()); // the first time an upgrade's affordable
       fade.classList.remove('off');
       requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('off')));
       news.hidden = true;
@@ -1125,6 +1148,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     exit() {
       root.remove();
       fitting.el.remove();
+      workshop.el.remove();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
@@ -1141,6 +1165,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     // for the dev kit's data reset
     refresh() {
       bankEl.textContent = bankTotal();
+      tags.get('hangar').classList.toggle('alert', upgradeHint());
       fitHubTank();
       if (open?.id === 'hangar') openFitting();
     },
