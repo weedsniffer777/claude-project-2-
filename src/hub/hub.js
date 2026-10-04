@@ -139,6 +139,13 @@ const CSS = `
 .base-brief .node .stars .star.hard.got { background: #ff3b2f; }
 .base-brief .node .hardtag { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); padding: 4px 7px 5px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; animation: hardbob 1.2s steps(2) infinite; pointer-events: none; }
 @keyframes hardbob { 0%, 100% { transform: translateX(-50%); } 50% { transform: translateX(-50%) translateY(-4px); } }
+.base-brief .node .hardtag.rich { display: grid; gap: 4px; justify-items: center; padding: 6px 8px 8px; pointer-events: auto; }
+.base-brief .node .hardtag small { font-size: 8px; color: #ffd4cf; }
+.base-brief .node .hardtag .rw { position: relative; display: block; width: 60px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 10px #ffc24a99; }
+.base-brief .node .hardtag .rw img { width: 100%; height: 100%; image-rendering: pixelated; }
+.base-brief .node .hardtag em { margin-top: 3px; padding: 2px 5px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
+.base-brief .node .hardtag .rw:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 200px; padding: 7px 9px; z-index: 4;
+  font: 400 12px/1.3 'Pixelify Sans', monospace; text-transform: none; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a; white-space: normal; text-align: left; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
@@ -1021,12 +1028,21 @@ export function createHub({ renderer, pixel, onDeploy }) {
     selLevel = [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? '<span class="hardtag">Hard mode</span>' : ''}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
     showLevel(selLevel);
   }
+  // the Hard mode box; a level whose Hard first clear is a part shows it
+  // under the words: its picture in a gold frame, its tier, its description
+  // on hover
+  const hardTag = (z) => {
+    const id = z.first?.hard?.part;
+    if (!id || !PARTS[id]) return '<span class="hardtag">Hard mode</span>';
+    const tip = `${PARTS[id].name}: ${PARTS[id].text}`.replace(/"/g, '&quot;');
+    return `<span class="hardtag rich">Hard mode<small>First clear:</small><span class="rw" data-tip="${tip}"><img alt="" src="${partIcon(id)}"></span><em>Legendary</em></span>`;
+  };
   // beaten on Easy but not yet on Hard: a red "Hard mode" box over it
   const hardNext = (z) => z.id && save.cleared().includes(clearKey(z.id, 'easy')) && !save.cleared().includes(clearKey(z.id, 'hard'));
   // a level's two stars on the map: Easy cleared (amber), Hard (red)

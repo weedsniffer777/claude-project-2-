@@ -204,8 +204,54 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   const blockIn = B.block(x0 - 0.15, cz, 0.25, DOOR / 2);
   const blockOut = B.block(x1 + 0.15, cz, 0.25, DOOR / 2);
 
+  // locked (a level can lock a checkpoint until an area's cleared): a red
+  // hologram over the entry door, dashed edge, LOCKED across it, and the
+  // lamp over the door blinking red
+  const holo = (() => {
+    const c = document.createElement('canvas');
+    c.width = 80;
+    c.height = 56;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(255, 50, 40, 0.22)';
+    g.fillRect(0, 0, 80, 56);
+    g.fillStyle = 'rgba(255, 60, 45, 0.35)';
+    for (let i = -56; i < 80; i += 10) {
+      g.beginPath();
+      g.moveTo(i, 56);
+      g.lineTo(i + 4, 56);
+      g.lineTo(i + 60, 0);
+      g.lineTo(i + 56, 0);
+      g.fill();
+    }
+    g.fillStyle = '#ff4a3a';
+    for (let x = 0; x < 80; x += 8) {
+      g.fillRect(x, 0, 5, 3);
+      g.fillRect(x, 53, 5, 3);
+    }
+    for (let y = 0; y < 56; y += 8) {
+      g.fillRect(0, y, 3, 5);
+      g.fillRect(77, y, 3, 5);
+    }
+    g.fillStyle = '#1a0606';
+    g.fillRect(10, 20, 60, 16);
+    g.fillStyle = '#ff6a5a';
+    g.font = 'bold 13px monospace';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('LOCKED', 40, 29);
+    const t = new THREE.CanvasTexture(c);
+    t.magFilter = t.minFilter = THREE.NearestFilter;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(DOOR, H - 0.7), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+    m.rotation.y = -Math.PI / 2;
+    m.position.set(x0 - 0.45, (H - 0.7) / 2 + 0.05, cz);
+    m.visible = false;
+    B.add(m);
+    B.keep(m);
+    return m;
+  })();
+
   // ------------------------------------------------------ behaviour
-  const state = { inDoor: 0, outDoor: 0, openIn: false, openOut: false };
+  const state = { inDoor: 0, outDoor: 0, openIn: false, openOut: false, locked: false, lockK: 0 };
   let blocksRef = B.blocks;
   const drop = (b) => {
     const i = blocksRef.indexOf(b);
@@ -220,7 +266,7 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     signGlow.level = on ? 1 : 0.2;
     beacon.rotation.y = t * 5;
     beaconE.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5));
-    state.inDoor = THREE.MathUtils.clamp(state.inDoor + (state.openIn ? dt : -dt) * 0.9, 0, 1);
+    state.inDoor = THREE.MathUtils.clamp(state.inDoor + (state.openIn && !state.locked ? dt : -dt) * 0.9, 0, 1);
     if (state.openOut) state.outDoor = Math.min(1, state.outDoor + dt * 0.9);
     doorIn.position.y = state.inDoor * (H - 0.6);
     doorIn.scale.y = 1 - state.inDoor * 0.8;
@@ -229,7 +275,11 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     if (state.inDoor > 0.6) drop(blockIn);
     else if (state.inDoor < 0.3) keepBlock(blockIn);
     if (state.outDoor > 0.6) drop(blockOut);
-    goLamps[0].material = state.openIn && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
+    state.lockK = THREE.MathUtils.clamp(state.lockK + (state.locked ? dt * 4 : -dt * 2.5), 0, 1);
+    holo.visible = state.lockK > 0.01;
+    if (holo.visible) holo.material.opacity = state.lockK * (0.75 + Math.sin(t * 9) * 0.12 + (Math.random() < 0.04 ? -0.4 : 0)); // a hologram's flicker
+    if (state.locked) signMesh.material.color.setScalar(0.3); // the sign dims
+    goLamps[0].material = state.locked ? (Math.sin(t * 7) > 0 ? glowMat(0xff3b2f) : toon(0x2a1414)) : state.openIn && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
     goLamps[1].material = state.openOut && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
   }
 
@@ -244,6 +294,13 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     },
     closeIn() {
       state.openIn = false;
+    },
+    // locked: the door won't open (openIn waits) and says so
+    setLocked(on) {
+      state.locked = on;
+    },
+    get locked() {
+      return state.locked;
     },
     // the tank leaves through the back: snap that door open
     openOut() {

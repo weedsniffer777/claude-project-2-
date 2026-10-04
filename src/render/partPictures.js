@@ -24,30 +24,43 @@ export function partPicture(renderer, id, W = 84, H = 56) {
     }
     pic = snapshotCanvas(renderer, dozerTank.group, W, H, null, { target: new THREE.Vector3(1.55, 0.75, 0), dir: new THREE.Vector3(1, 0.55, 0.85), half: 1.15 });
   } else if (id === 'vulcan') {
-    // on the light tank, from the front three-quarters, firing: a flash
-    // out of the spinning barrels
+    // close in on the light tank's turret alone, the six barrels blazing
     if (!vulcanTank) {
       vulcanTank = createLightTank();
       const g = attachPart(vulcanTank, 'vulcan');
       vulcanTank.update(0.016, 0, {});
-      const hot = new THREE.MeshBasicMaterial({ color: 0xfff2c0 });
-      const warm = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+      // only the turret (and what's on it) shows
+      vulcanTank.group.updateMatrixWorld(true);
+      const keep = new Set();
+      vulcanTank.turret.traverse((o) => keep.add(o));
+      vulcanTank.group.traverse((o) => {
+        if ((o.isMesh || o.isInstancedMesh) && !keep.has(o)) o.visible = false;
+      });
+      // the muzzle flash: a white-hot core, a starburst of rays, a big warm glow
+      const hot = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const yellow = new THREE.MeshBasicMaterial({ color: 0xffe27a });
+      const orange = new THREE.MeshBasicMaterial({ color: 0xffa040 });
       const flash = new THREE.Group();
-      flash.position.set(0.9, 0, 0);
-      flash.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.16), hot));
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2;
-        const ray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.05), i % 2 ? warm : hot);
-        ray.position.set(0.12, Math.cos(a) * 0.12, Math.sin(a) * 0.12);
-        ray.rotation.set(a, 0, Math.cos(a) * 0.5);
+      flash.position.set(0.95, 0, 0);
+      flash.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.26), hot));
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const ray = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.07, 0.07), i % 2 ? orange : yellow);
+        ray.position.set(0.2 + Math.abs(Math.cos(a)) * 0.15, Math.cos(a) * 0.2, Math.sin(a) * 0.2);
+        ray.rotation.set(a, 0, Math.cos(a) * 0.6);
         flash.add(ray);
       }
-      const core = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.08), warm);
-      core.position.x = 0.35;
+      const core = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.12), yellow);
+      core.position.x = 0.6;
       flash.add(core);
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.45, depthWrite: false }));
+      glow.position.x = 0.15;
+      flash.add(glow);
       g.add(flash);
     }
-    pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: new THREE.Vector3(1.0, 1.0, 0), dir: new THREE.Vector3(1, 0.55, 0.85), half: 1.2 });
+    vulcanTank.group.updateMatrixWorld(true);
+    const at = vulcanTank.turret.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(1.35, 0.1, 0));
+    pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.8, 0.5, 1), half: 1.1 });
   } else {
     pic = snapshotCanvas(renderer, partModel(id), W, H, PARTS[id].badge === 'up' ? upArrow : null);
   }

@@ -167,6 +167,10 @@ const CSS = `
 .hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
   color: #111; background: var(--go, #6be08a); box-shadow: 0 0 0 3px #000, 6px 6px 0 3px #000; pointer-events: none; }
 .hud.touch .hud-banner { font-size: 20px; }
+.hud-pointers { position: absolute; inset: 0; pointer-events: none; }
+.hud-pointers i { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -9px 0 0 -7px; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 14px solid var(--danger);
+  filter: drop-shadow(1px 1px 0 #000) drop-shadow(-1px -1px 0 #000); }
+.hud-pointers i.boss { border-left-color: #ff7a1a; }
 .hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 10px var(--danger), inset 0 0 160px 20px rgba(255, 40, 30, 0.6); background: rgba(255, 40, 30, 0.12); opacity: 0; }
 .hud-hull.hit { animation: hudhit 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--danger), 4px 4px 0 4px #000; }
 .hud-hull.hit .val { color: var(--danger); }
@@ -370,6 +374,7 @@ export function createHud() {
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
     <div class="hud-pause panel" hidden><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div>
     <div class="hud-banner px" hidden></div>
+    <div class="hud-pointers"></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -540,6 +545,22 @@ export function createHud() {
       text.querySelectorAll('kbd').forEach((k) => (k.style.visibility = 'hidden'));
       typed = { nodes, shown: 0, total: nodes.reduce((a, x) => a + x.full.length, 0), text };
     },
+    // arrows to machines out of view: [{ a (screen angle, radians, 0 =
+    // right, clockwise), near (0..1), boss }]
+    setPointers(list) {
+      const box = $('.hud-pointers');
+      while (box.children.length < list.length) box.append(document.createElement('i'));
+      const R = Math.min(window.innerWidth, window.innerHeight) * 0.34;
+      [...box.children].forEach((el, i) => {
+        const p = list[i];
+        el.style.display = p ? '' : 'none';
+        if (!p) return;
+        const s = 0.75 + p.near * 0.6;
+        el.className = p.boss ? 'boss' : '';
+        el.style.opacity = String(0.55 + p.near * 0.45);
+        el.style.transform = `translate(${Math.cos(p.a) * R}px, ${Math.sin(p.a) * R}px) rotate(${p.a}rad) scale(${s})`;
+      });
+    },
     // a big strip across the screen for a moment ("Checkpoint reached")
     banner(text) {
       const el = $('.hud-banner');
@@ -599,7 +620,7 @@ export function createHud() {
       el.innerHTML = `<span class="zone">${zone}</span>` + names.map((n, i) => `${i ? '<span class="sep">-</span>' : ''}<span class="s ${i < current ? 'done' : i === current ? 'now' : ''}">${i < current ? '✓' : i + 1}</span>`).join('');
       el.title = names[current] || '';
     },
-    // upgrade tokens (the saved total): only shown once there are any
+    // upgrade tokens picked up this level: only shown once there are any
     setTokens(n, pop = false) {
       const el = $('.hud-token');
       el.hidden = !n;
@@ -763,9 +784,18 @@ export function createHud() {
       if (numbers.length > 40) numbers.shift().el.remove();
     },
     // parts: [{ name, text, icon }] shown as icons with a hover summary
-    // alt: an optional second button, [label, onClick]
-    showEnd(kind, title, stats, button, onClick, bank = '', parts = [], alt = null) {
-      const altBtn = end.querySelector('button.alt');
+    // alt: an optional second button, [label, onClick]; alt2 a third
+    showEnd(kind, title, stats, button, onClick, bank = '', parts = [], alt = null, alt2 = null) {
+      end.querySelector('button.alt2')?.remove();
+      if (alt2) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'alt alt2';
+        b.textContent = alt2[0];
+        b.addEventListener('click', () => alt2[1]());
+        end.querySelector('.btns').append(b);
+      }
+      const altBtn = end.querySelector('button.alt:not(.alt2)');
       altBtn.hidden = !alt;
       if (alt) {
         altBtn.textContent = alt[0];
@@ -801,6 +831,7 @@ export function createHud() {
       end.className = `hud-end panel ${kind}`;
       end.querySelector('h2').textContent = title;
       end.querySelector('.stats').innerHTML = stats.map(([k, val]) => `<span>${k}</span><b>${val}</b>`).join('');
+      end.querySelector('.stats').hidden = !stats.length;
       end.querySelector('button.main').textContent = button;
       onEnd = onClick;
       reticle.hidden = true;

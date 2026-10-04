@@ -754,17 +754,16 @@ function buildRiver(scene) {
     setBounds(api, B2);
     api.sectors(SECTORS, 1, 'Level 2');
     api.objective('');
-  }
-  // past the square, into the street to the bridge: made it through. The
-  // checkpoint opens; whatever's still about is left behind at its door.
-  function brokeThrough(api) {
-    if (S.step > 3 || api.tankPos.x < SQUARE.x1 + 3) return false;
-    openShack(api, shackB, 'Area cleared.');
-    go(4);
-    return true;
+    shackB.setLocked(true);
   }
   function sector2(api) {
-    if (brokeThrough(api)) return;
+    // the checkpoint at the far end stays locked until the square's clear;
+    // driving up to it says so
+    if (shackB.locked && S.step < 4 && Math.hypot(api.tankPos.x - shackB.door.x, api.tankPos.z - shackB.door.z) < 9 && !(S.toldLock > 0)) {
+      S.toldLock = 8;
+      api.prompt('Locked', 'Clear the square to unlock the checkpoint.', { danger: true, seconds: 3 });
+    }
+    S.toldLock = (S.toldLock || 0) - 1 / 60;
     switch (S.step) {
       case 0:
         if (S.t > 1.5) {
@@ -778,9 +777,10 @@ function buildRiver(scene) {
         break;
       case 1:
         if (api.enemiesAlive <= 1 && S.t > 4) {
-          fromSouth(api, 60);
-          fromSouth(api, 64, 0.4);
-          fromSouth(api, 72, 0.8);
+          // over the ruins at the checkpoint end, so the fight's near the door
+          fromSouth(api, 84);
+          fromSouth(api, 88, 0.4);
+          fromSouth(api, 92, 0.8);
           api.spawnWalker(92, 11);
           api.spawnDog(93, 0, { delay: 1.4 });
           go(2);
@@ -790,8 +790,8 @@ function buildRiver(scene) {
         if (api.enemiesAlive <= 1 && S.t > 4) {
           fromNorth(api, -1.5);
           fromNorth(api, 1.5, 0.4);
-          fromSouth(api, 78, 0.8);
-          fromSouth(api, 84, 1.2);
+          fromSouth(api, 86, 0.8);
+          fromSouth(api, 91, 1.2);
           api.spawnWalker(93, -3, { delay: 0.6 });
           api.spawnWalker(86, -18, { delay: 1.6 });
           contact(api, 'More of them!', 3);
@@ -800,6 +800,7 @@ function buildRiver(scene) {
         break;
       case 3:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
+          shackB.setLocked(false);
           openShack(api, shackB, 'Area cleared.');
           go(4);
         }

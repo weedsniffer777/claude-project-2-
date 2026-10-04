@@ -180,6 +180,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       won: false,
       scrap: 0,
       parts: [...loadout],
+      tokens: 0,
       checkpoint: null, // the last checkpoint entered (an Easy revive goes back there)
       revived: false,
       pendingTips: [], // tips shown this run, saved when it's finished
@@ -234,7 +235,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     hud.reset();
     hud.setHull(run.hp, stats.maxHp);
     hud.setScrap(0);
-    hud.setTokens(save.tokens());
+    hud.setTokens(0);
     // a scripted level (the tutorial) hands out the main gun and the scraps
     // counter as it introduces them; anywhere else they're there from the start
     // (once its tips have been seen, the level hands them over at the start)
@@ -578,7 +579,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         hud.showEnd(
           'win',
           title,
-          [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap], ...rewards],
+          [['Time', `${m}:${s}`], ['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap], ...(run.tokens ? [['Tokens picked up', run.tokens]] : []), ...rewards],
           onExit ? 'Exit' : 'Play again',
           () => (onExit ? onExit() : loadLevel(levelDef.id)),
           `+${run.scrap} scraps${total != null ? ` · ${total} total` : ''}`,
@@ -641,7 +642,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // tokens go straight into the save: rare enough never to lose one
       save.addTokens(p.value);
       run.tokens = (run.tokens || 0) + p.value;
-      hud.setTokens(save.tokens(), true);
+      hud.setTokens(run.tokens, true); // this level's, like the scraps
       hud.damage(pos.clone().setY(2.4), 0, 'token', '+1 token');
       combat.glow.flash(pos.clone().setY(1.4), 0xc77dff, 0.3, 1.2, 0.12);
       combat.fx.burst(pos.clone().setY(1.6), { count: 16, speed: 4, color: 0xc77dff, life: 0.4, size: 0.08, gravity: 6 });
@@ -724,15 +725,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // Easy, past a checkpoint, the first death: back to that checkpoint
       // instead (Retry starts the level over)
       if (!run.hard && run.checkpoint && !run.revived) {
+        // (no results yet: the run's not over)
         hud.showEnd(
           'lose',
           'Destroyed',
-          [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
+          [],
           'Revive at checkpoint',
           () => revive(),
-          'One revive per level',
+          '',
           [],
-          ['Retry level', () => (bank(Math.floor(run.scrap / 2)), loadLevel(levelDef.id))],
+          ['Retry', () => (bank(Math.floor(run.scrap / 2)), loadLevel(levelDef.id))],
+          onExit ? ['Exit', () => (bank(Math.floor(run.scrap / 2)), onExit())] : null,
         );
         setCursor();
         return;
@@ -752,6 +755,63 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       setCursor();
     }
   }
+  // The last one or two machines, stuck somewhere far off (behind a heap,
+  // up a side street): after 10 s they're moved to just out of view
+  // nearby, and come on from there. Never a boss, never mid-boss-fight.
+  const ndcTmp = new THREE.Vector3();
+  const offScreen = (x, y, z) => {
+    ndcTmp.set(x, y, z).project(camera);
+    return Math.abs(ndcTmp.x) > 1.08 || Math.abs(ndcTmp.y) > 1.08;
+  };
+  function stragglers(dt) {
+    if (run.over || run.mode !== 'field' || run.spot) return;
+    const live = enemies.alive.filter((e) => !(e.delay > 0));
+    if (!live.length || live.length > 2 || live.some((e) => e.stats.static || e.stats.scale > 1.5)) {
+      for (const e of live) e.strayT = 0;
+      return;
+    }
+    for (const e of live) {
+      const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
+      e.strayT = d > 16 || (!e.los && d > 10) ? (e.strayT || 0) + dt : 0;
+      if (e.strayT < 10) continue;
+      // somewhere round the tank, just off screen, inside the area and
+      // clear of walls
+      const b = level.bounds || {};
+      const reach = (camera.top - camera.bottom) / camera.zoom;
+      let best = null;
+      for (let i = 0; i < 28; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = reach * (0.75 + Math.random() * 0.5);
+        const p = new THREE.Vector3(pos.x + Math.cos(a) * r, 0, pos.z + Math.sin(a) * r);
+        if ((b.minX != null && p.x < b.minX + 1) || (b.maxX != null && p.x > b.maxX - 1) || (b.minZ != null && p.z < b.minZ + 1) || (b.maxZ != null && p.z > b.maxZ - 1)) continue;
+        if (!offScreen(p.x, 0.8, p.z)) continue;
+        const q = p.clone();
+        pushOut(q, () => ({ x: q.x, z: q.z, hx: 0.6, hz: 0.4, yaw: 0 }), blocks, 2);
+        if (q.distanceTo(p) > 0.3) continue; // inside something
+        if (!best || p.distanceTo(pos) < best.distanceTo(pos)) best = p;
+      }
+      if (!best) continue;
+      e.pos.x = best.x;
+      e.pos.z = best.z;
+      e.via = [];
+      e.strayT = 0;
+    }
+  }
+  // red arrows on a ring round the middle of the screen, one for each
+  // machine out of view, pointing the way to it (bigger when close)
+  function enemyPointers() {
+    if (run.over || run.mode !== 'field') return hud.setPointers([]);
+    const out = [];
+    for (const e of enemies.alive) {
+      if (e.delay > 0) continue;
+      ndcTmp.set(e.pos.x, 0.8 * (e.stats.scale || 1), e.pos.z).project(camera);
+      if (Math.abs(ndcTmp.x) <= 1 && Math.abs(ndcTmp.y) <= 1) continue;
+      const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
+      out.push({ a: Math.atan2(-ndcTmp.y * (canvas.clientHeight || 1), ndcTmp.x * (canvas.clientWidth || 1)), near: THREE.MathUtils.clamp(1 - (d - 10) / 40, 0, 1), boss: e.stats.scale > 1.5 });
+    }
+    hud.setPointers(out);
+  }
+
   // Back at the last checkpoint's door: a fresh tank with its parts, full
   // hull, the machines that got you gone. Once per level.
   function revive() {
@@ -2187,6 +2247,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       autoFire(dt);
       combat.handleTankEvents(tank);
       combat.update(dt);
+      stragglers(dt);
+      enemyPointers();
       pickups.bounds = run.mode === 'field' ? level.bounds : null;
       pickups.update(dt, t, pos, camera, collect);
       level.update(dt, t, { combat, focus: camTarget, api });
