@@ -67,11 +67,11 @@ export class CombatFx {
         return true;
       }
       const w = tank.tracerScale ?? 1; // (the Vulcan's rounds: thinner)
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14 * w, 0.14 * w, 1.5), new THREE.MeshBasicMaterial({ color: 0xffc4ae })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14 * w, 0.14 * w, 1.5), new THREE.MeshBasicMaterial({ color: tank.apRounds ? 0xffffff : 0xffc4ae })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts (armour-piercing: white)
       mesh.position.copy(m);
       mesh.lookAt(target);
       this.scene.add(mesh);
-      this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), small: true, w });
+      this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), small: true, w, ap: !!tank.apRounds });
       return true;
     }
 
@@ -112,14 +112,15 @@ export class CombatFx {
 
     const { target, hit } = this.traceShot(m, d, breech, aimPoint, colliders);
     if (target.clone().sub(m).dot(d) <= 0.05) {
-      this.explode(target, hit?.normal, hit?.mesh); // point blank: the muzzle is at (or in) the wall
+      if (tank.apRounds) this.apHit(target, hit?.normal, hit?.mesh);
+      else this.explode(target, hit?.normal, hit?.mesh); // point blank: the muzzle is at (or in) the wall
       return true;
     }
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), new THREE.MeshBasicMaterial({ color: 0xfff0b0 }));
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1.1), new THREE.MeshBasicMaterial({ color: tank.apRounds ? 0xffffff : 0xfff0b0 }));
     mesh.position.copy(m);
     mesh.lookAt(target);
     this.scene.add(mesh);
-    this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)) });
+    this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), ap: !!tank.apRounds });
     return true;
   }
 
@@ -208,6 +209,25 @@ export class CombatFx {
     fx.burst(p, { count: 6, speed: 4, color: 0xfff3c4, life: 0.2, size: 0.05, gravity: 6 });
     if (mesh && !mesh.isInstancedMesh && !mesh.userData.noDecal) craters.add(at, n, mesh, 0.45);
     this.shake = Math.max(this.shake, 0.12);
+  }
+
+  // An armour-piercing round striking: no fireball, a hard white flash, a
+  // spray of white and yellow sparks, a little dust, a small scar
+  apHit(at, normal = null, mesh = null) {
+    this.onImpact?.(at, mesh, false);
+    const { fx, glow, puffs, craters } = this;
+    const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    const p = at.clone().addScaledVector(n, 0.15);
+    const out = () => new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().addScaledVector(n, 0.9).normalize();
+    glow.flash(p, 0xffffff, 0.2, 1.1, 0.07);
+    glow.flash(p, 0xcfe4ff, 0.3, 1.4, 0.14);
+    for (let i = 0; i < 7; i++) glow.spike(p, out(), i % 2 ? 0xffffff : 0xfff3c4, 0.8 + Math.random() * 0.8, 0.12, 0.09);
+    glow.light(p, 0xdfeaff, 50, 0.15);
+    fx.burst(p, { count: 22, speed: 10, color: 0xffffff, life: 0.3, size: 0.06, gravity: 10 });
+    fx.burst(p, { count: 10, speed: 6, color: 0xffd36b, life: 0.35, size: 0.06, gravity: 12 });
+    for (let i = 0; i < 4; i++) puffs.spawn(p, out().multiplyScalar(1.2 + Math.random()), { color: i % 2 ? 0x8d8b86 : 0xa9a7a1, s0: 0.1, s1: 0.3 + Math.random() * 0.15, life: 0.5 + Math.random() * 0.2, drag: 3, lift: 1, fadeAt: 0.3 });
+    if (mesh && !mesh.isInstancedMesh && !mesh.userData.noDecal) craters.add(at, n, mesh, 0.35);
+    this.shake = Math.max(this.shake, 0.15);
   }
 
   // A Piercing shot going through a machine: a big, bright, sparky burst,
@@ -413,10 +433,17 @@ export class CombatFx {
       s.travelled = Math.min(s.total, s.travelled + SHELL_SPEED * dt);
       s.mesh.position.lerpVectors(s.from, s.target, s.travelled / s.total);
       const w = s.w ?? 1;
-      this.glow.tracer(prev, s.mesh.position, s.small ? 0xff9a7a : 0xffd27a, 0.12 * w, s.small ? 0.22 : 0.12); // hot trail
-      if (s.small) this.glow.tracer(prev, s.mesh.position, 0xff6a4a, 0.26 * w, 0.12); // and a red glow round it
+      if (s.ap) {
+        // armour-piercing: a white-hot streak, a cold white glow round it
+        this.glow.tracer(prev, s.mesh.position, 0xffffff, 0.12 * w, s.small ? 0.22 : 0.16);
+        this.glow.tracer(prev, s.mesh.position, 0xcfe4ff, 0.26 * w, 0.12);
+      } else {
+        this.glow.tracer(prev, s.mesh.position, s.small ? 0xff9a7a : 0xffd27a, 0.12 * w, s.small ? 0.22 : 0.12); // hot trail
+        if (s.small) this.glow.tracer(prev, s.mesh.position, 0xff6a4a, 0.26 * w, 0.12); // and a red glow round it
+      }
       if (s.travelled >= s.total) {
-        if (s.small) this.smallHit(s.target, s.hit?.normal, s.hit?.mesh);
+        if (s.ap && !s.small) this.apHit(s.target, s.hit?.normal, s.hit?.mesh);
+        else if (s.small) this.smallHit(s.target, s.hit?.normal, s.hit?.mesh);
         else this.explode(s.target, s.hit?.normal, s.hit?.mesh);
         this.removeShell(i);
       }

@@ -497,10 +497,10 @@ export class Enemies {
   }
 
   // Cannon splash. Returns [{ e, amount, killed }] for every machine hit.
-  blast(at, radius, amount) {
+  blast(at, radius, amount, skip = null) {
     const hits = [];
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0) continue;
+      if (!e.alive || e.delay > 0 || e === skip) continue;
       const d = Math.hypot(e.pos.x - at.x, e.pos.z - at.z);
       if (d >= radius) continue;
       const dmg = Math.round(amount * (d < radius * 0.5 ? 1 : 0.6));

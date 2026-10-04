@@ -41,6 +41,7 @@ export const BASE_STATS = {
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
   spotter: 0, // Legendary Optics: enemies marked every few seconds (how many)
+  apRounds: false, // Armor-piercing shells: white tracers, a sharp hit instead of a fireball
   hotLoader: false, // Legendary Fast reload: a kill reloads the main gun
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
   dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
@@ -59,16 +60,16 @@ const ERA_EDGE = 0x3a3626;
 // type: what the part's for (the hangar sorts and filters by it): weapons,
 // armor, movement, utility
 export const PART_TYPES = { weapons: 'Weapons', armor: 'Armour', movement: 'Movement', utility: 'Utility' };
-// One high-explosive round, lying along local +x (the hangar's rounds: a
-// brass case, a copper driving band, a pointed olive projectile) with a
-// red HE band near its nose.
+// One armour-piercing round, lying along local +x (the hangar's rounds: a
+// brass case, a copper driving band) with a black projectile and a white
+// band near its sharp nose.
 function heRound(parent, x, y, z) {
   put(parent, cyl(0.075, 0.46, 0xb08a3e, { axis: 'x', seg: 10 }), x, y, z);
   put(parent, cyl(0.08, 0.03, 0x8a6a2e, { axis: 'x', seg: 10 }), x - 0.23, y, z); // rim
   put(parent, cyl(0.068, 0.04, 0xa0603a, { axis: 'x', seg: 10 }), x + 0.25, y, z); // driving band
-  put(parent, cyl(0.066, 0.16, 0x4a5240, { axis: 'x', seg: 10 }), x + 0.35, y, z);
-  put(parent, cyl(0.067, 0.04, 0xc42a20, { axis: 'x', seg: 10 }), x + 0.4, y, z); // the HE band
-  put(parent, cyl(0.064, 0.16, 0x4a5240, { axis: 'x', seg: 10, radiusEnd: 0.012 }), x + 0.51, y, z); // the nose
+  put(parent, cyl(0.066, 0.16, 0x26272a, { axis: 'x', seg: 10 }), x + 0.35, y, z);
+  put(parent, cyl(0.067, 0.04, 0xe8e4da, { axis: 'x', seg: 10 }), x + 0.4, y, z); // the AP band
+  put(parent, cyl(0.064, 0.16, 0x26272a, { axis: 'x', seg: 10, radiusEnd: 0.008 }), x + 0.51, y, z); // the nose
 }
 // an open olive ammo box of them, noses out, its lid propped up behind
 function heCrate(n = 4) {
@@ -433,16 +434,17 @@ export const PARTS = {
   },
   he: {
     type: 'weapons',
-    name: 'Explosive shells',
-    text: 'Bigger blast and more damage per shot.',
+    name: 'Armor-piercing shells',
+    text: 'Much more damage to what you hit, a much smaller blast round it. White tracers.',
     icon: ['................', '......+.........', '.....+++........', '.....+++........', '.....###........', '.....+++........', '.....###........', '................', '................', '................'],
     apply(s) {
-      s.splash *= 1.5;
-      s.cannonDamage += s.mag ? 5 : 20;
+      s.apRounds = true;
+      s.splash *= 0.35;
+      s.cannonDamage *= 1.6;
     },
     tiers: [
-      { text: 'A bigger blast.', apply: (s) => (s.splash *= 1.2) },
-      { text: 'More damage per shot again.', apply: (s) => (s.cannonDamage += s.mag ? 4 : 15) },
+      { text: 'Hits harder.', apply: (s) => (s.cannonDamage *= 1.15) },
+      { text: 'Hits harder again.', apply: (s) => (s.cannonDamage *= 1.15) },
     ],
     light(t) {
       const g = heCrate(3);

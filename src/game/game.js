@@ -267,6 +267,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // the Vulcan: thin tracers, barely a kick per round
     const vulcan = list.includes('vulcan') && tank.kind === 'light';
     tank.tracerScale = vulcan ? 0.5 : 1;
+    tank.apRounds = !!stats.apRounds; // armour-piercing: white tracers, a sharp hit, no fireball
     if ('kick' in tank) tank.kick = vulcan ? 0.12 : 1;
     if (lastSize) game.resize(...lastSize); // optics widen the view
     fitLauncher();
@@ -673,7 +674,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // barricade or the gate takes a few of them.
   // shell: { radius, damage } instead of the gun's (an artillery shell)
   function onImpact(at, mesh, small = false, shell = null) {
-    for (const h of enemies.blast(at, shell ? shell.radius : stats.splash, shell ? shell.damage : stats.cannonDamage)) {
+    // armour-piercing: the machine it strikes takes the whole hit; a small
+    // splash round it does a fraction to anything else close by
+    const direct = !shell && stats.apRounds ? mesh?.userData?.enemy : null;
+    const hits = [];
+    if (direct?.alive) hits.push({ e: direct, amount: Math.round(stats.cannonDamage), killed: enemies.damage(direct, stats.cannonDamage, at) });
+    const amount = shell ? shell.damage : stats.apRounds ? stats.cannonDamage * 0.4 : stats.cannonDamage;
+    hits.push(...enemies.blast(at, shell ? shell.radius : stats.splash, amount, direct));
+    for (const h of hits) {
       const p = new THREE.Vector3(h.e.pos.x, 1.2, h.e.pos.z);
       hud.damage(p, h.amount, 'big');
       if (h.killed) hud.damage(p.clone().setY(1.9), 0, 'kill');
