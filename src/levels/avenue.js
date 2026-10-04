@@ -1829,7 +1829,7 @@ function buildAvenue(scene) {
 
     function start(api) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false });
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false, noCrush: false, multT: 0 });
       setBounds(api, B1);
       S.api = api;
       comb = api.combat;
@@ -1862,17 +1862,25 @@ function buildAvenue(scene) {
             if (S.t > 1.5) go(1); // seen it: straight to the first enemies
           } else if (x > S.spawnX + 3 || S.t > 4) {
             api.lesson('crush');
-            api.prompt('Crush', 'Drive over debris to <b>crush</b> it. Flatten that wreck!');
+            api.prompt('Crush', 'Drive over debris to <b>crush</b> it!');
             api.arrow(new THREE.Vector3(FIRST_WRECK.x, 1.6, FIRST_WRECK.z), 'Crush it!');
             go(-1);
           }
           break;
+        // (if it's driven past, or ignored for a while, the lesson's over
+        // anyway: the counter just appears, the scraps tips wait for later)
         case -1:
-          if (run.crushed > 0 || x > FIRST_WRECK.x + 6) {
+          if (run.crushed > 0) {
             api.arrow(null);
             if (api.lesson('scraps')) api.prompt('Scraps', 'Destroying obstacles gives <b>scraps</b>, a valuable currency.', { go: true });
             api.revealScraps();
             go(-2);
+          } else if (x > FIRST_WRECK.x + 6 || S.t > 12) {
+            api.arrow(null);
+            api.clearPrompt();
+            api.revealScraps(false);
+            S.noCrush = true;
+            go(1);
           }
           break;
         // 2: then the first walkers, and the main gun comes online
@@ -1924,7 +1932,7 @@ function buildAvenue(scene) {
           }
           break;
         case 4:
-          if (api.seen('drops')) go(5);
+          if (api.seen('drops') || S.noCrush) go(5); // (no scraps lesson yet: leave this one for another time)
           else if (run.drops > 0 && !api.spotlit) {
             const d = api.nearestDrop();
             if (d) {
@@ -1945,8 +1953,8 @@ function buildAvenue(scene) {
             api.spawnDog(gx, -5.5, { delay: 0.3 });
             api.spawnDog(gx + 1, 4.5, { delay: 0.7 });
             api.spawnDog(gx + 2.5, -0.5, { delay: 1.1 });
-            if (api.lesson('multiplier')) api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
-            else if (!api.cleared) api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
+            if (api.seen('multiplier') && !api.cleared) api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
+            S.multT = 3.5; // the multiplier tip, once they're in the thick of it
             go(6);
           }
           break;
@@ -1955,10 +1963,14 @@ function buildAvenue(scene) {
         // close in, whether or not they're all down (whatever's left behind
         // stays behind when you go in)
         case 6:
+          if (S.multT > 0 && S.t > S.multT) {
+            S.multT = 0;
+            if (api.enemiesAlive > 0 && !api.spotlit && api.lesson('multiplier')) api.prompt('Multiplier', 'Kill enemies quickly to build your <b>multiplier</b>: it increases the scraps they drop!', { go: true, seconds: 7 });
+          }
           if (api.enemiesAlive === 0 && S.t > 1.5 && S.n === 0) {
             S.n = 1;
             if (api.lesson('push')) {
-              api.prompt('Orders', 'Push on up the street.');
+              api.prompt('Orders', 'Continue up the street.');
               api.arrow(new THREE.Vector3(32, 0.4, 0), 'This way');
             }
           }
@@ -1968,13 +1980,12 @@ function buildAvenue(scene) {
             api.spawnDog(gx + 2, -6.4, { delay: 0.2 });
             api.spawnDog(gx + 2.5, 5.2, { delay: 0.5 });
             api.spawnDog(gx, 0, { delay: 0.8 });
-            if (!api.cleared) api.prompt('Contact', 'Enemies at the checkpoint!', { danger: true, seconds: 4 });
             go(7);
           }
           break;
         case 7:
           if (x > 40 || (api.enemiesAlive === 0 && S.t > 1)) {
-            openShack(api, shackA, 'Roll into the <b>checkpoint</b> for repairs and parts.');
+            openShack(api, shackA, 'Drive into the <b>checkpoint</b> for repairs and parts.');
             go(8);
           }
           break;
@@ -2199,7 +2210,7 @@ function buildAvenue(scene) {
         api.revealScraps();
         if (S.sector === 1) api.giveRockets();
         api.teleport(shack.door.x - 7, shack.door.z, 0);
-        openShack(api, shack, 'Skipped ahead. Roll into the <b>checkpoint</b>.');
+        openShack(api, shack, 'Skipped ahead. Drive into the <b>checkpoint</b>.');
         go(S.sector === 0 ? 8 : 6);
         return true;
       }

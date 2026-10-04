@@ -57,6 +57,7 @@ const PIERCE_HALF = 1.0; // how close to the line a machine must be (x its scale
 // Breakthrough (the light tank's Shift): the shockwave at the end of the dash
 const SHOCK_R = 3.2;
 const SHOCK_DAMAGE = 45;
+const REPAIR_SHARE = 0.5; // a checkpoint on Easy repairs up to this much of the hull
 const AIM_TIME = 4; // seconds (real time) to aim a Piercing shot before it fires itself
 const AIM_SLOW = 0.25; // game speed while aiming it
 
@@ -1098,14 +1099,23 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       speed = 0;
     }
     if (st.step === 'repair') {
-      if (!run.hard && run.hp < stats.maxHp) {
-        run.hp = Math.min(stats.maxHp, run.hp + dt * 80);
+      // Easy: a repair of up to half the hull (shown, so its absence on Hard
+      // is noticed); Hard: none
+      if (st.repairTo == null) {
+        st.repairTo = run.hard ? run.hp : Math.min(stats.maxHp, run.hp + stats.maxHp * REPAIR_SHARE);
+        st.repaired = st.repairTo - run.hp;
+      }
+      if (run.hp < st.repairTo) {
+        run.hp = Math.min(st.repairTo, run.hp + dt * 80);
         hud.setHull(run.hp, stats.maxHp);
       }
       if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
-      if (st.t > 0.8 && (run.hard || run.hp >= stats.maxHp - 0.01)) {
+      if (st.t > 0.8 && run.hp >= st.repairTo - 0.01) {
         if (st.gift === 'boost') run.rockets = true; // the drums get rigged as boosters
-        if (run.hard) hud.prompt('Hard', 'No repairs on Hard.', { seconds: 3 });
+        if (st.repaired > 0.5) {
+          hud.damage(pos.clone().setY(2.4), st.repaired, 'heal');
+          hud.prompt('Repairs', `Repaired <b>+${Math.round(st.repaired)}</b> HP`, { go: true, seconds: 3 });
+        }
         st.step = 'pick';
         if (st.offers.length) showPicker();
         else openFit(); // nothing new here: straight to the fitting screen
