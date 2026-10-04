@@ -9,10 +9,11 @@
 // checkpoint is shown as New with an "Equip now" button. Upgrades have a
 // screen of their own (workshop.js), opened from the hangar.
 import * as THREE from 'three';
-import { PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
+import { fitsTank, unfitLabel, PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { EQUIPMENT, equipmentIcon, equipmentPlain } from '../game/equipment.js';
+const SHORT = Object.fromEntries(Object.entries(TANKS).map(([k, t]) => [k, t.name.replace(' tank', '')])); // (filled below)
 // a part's improvement stars (found again at a checkpoint), by its icon
 const starBadge = (id) => {
   const n = save.stars(id);
@@ -382,7 +383,7 @@ export function createFitting({ renderer, cursor }) {
   }
   // put a part from storage on: into a free slot, or ask which to replace
   function equip(id) {
-    if (PARTS[id].only && PARTS[id].only !== o.tankId) return; // (another tank's own part)
+    if (!fitsTank(id, o.tankId)) return; // (another tank's own part, or one this tank can't take)
     const list = loadout();
     if (list.length < tankDef(o.tankId).slots) return set([...list, id], id);
     replacing = id;
@@ -455,12 +456,12 @@ export function createFitting({ renderer, cursor }) {
       .filter((id) => {
         const p = PARTS[id];
         // usable by one of the checked tanks, and one of the checked kinds
-        if (p.only ? !tanksOn.includes(p.only) : !tanksOn.length) return false;
+        if (!tanksOn.some((t) => fitsTank(id, t))) return false;
         return !p.type || typesOn.includes(p.type);
       })
       .sort((a, b) => {
         // what this tank can't take, or another tank has on, goes to the back
-        const back = (id) => ((PARTS[id].only && PARTS[id].only !== o.tankId) || where(id) ? 1 : 0);
+        const back = (id) => (!fitsTank(id, o.tankId) || where(id) ? 1 : 0);
         if (back(a) !== back(b)) return back(a) - back(b);
         if (view.sort === 'name') return PARTS[a].name.localeCompare(PARTS[b].name);
         if (view.sort === 'type') return typeOrder.indexOf(PARTS[a].type) - typeOrder.indexOf(PARTS[b].type) || PARTS[a].name.localeCompare(PARTS[b].name);
@@ -475,18 +476,17 @@ export function createFitting({ renderer, cursor }) {
       el.className = `item${id === o.highlight ? ' new' : ''}${id === o.improved ? ' improved' : ''}${id === replacing ? ' on' : ''}${away ? ' isaway' : ''}`;
       el.dataset.tier = tierOf(id);
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
-      const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
-      if (only) el.classList.add('isaway');
-      if (only) el.classList.add('notfor');
-      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
+      const unfit = !fitsTank(id, o.tankId) ? unfitLabel(id, o.tankId, SHORT) : null;
+      if (unfit) el.classList.add('isaway', 'notfor');
+      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away}</span>` : unfit ? `<span class="away only">${unfit}</span>` : ''}`;
       if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
       el.addEventListener('click', () => {
-        if (only) return; // another tank's own part: nothing to do with it here
+        if (unfit) return; // another tank's own part: nothing to do with it here
         if (o.tanks) openItemPop(id, el);
         else equip(id);
       });
-      el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(only ? null : id)));
+      el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(unfit ? null : id)));
       el.addEventListener('pointerleave', () => (hideTip(), renderBars()));
       store.append(el);
     }
@@ -647,9 +647,9 @@ export function createFitting({ renderer, cursor }) {
     fit.type = 'button';
     fit.className = 'fitb';
     fit.textContent = where(id) ? `Equip (from the ${where(id)})` : 'Equip';
-    if (PARTS[id].only && PARTS[id].only !== o.tankId) {
+    if (!fitsTank(id, o.tankId)) {
       fit.disabled = true;
-      fit.textContent = `${TANKS[PARTS[id].only].name} only`;
+      fit.textContent = unfitLabel(id, o.tankId, SHORT);
     }
     fit.addEventListener('click', () => (closePop(), equip(id)));
     // Equip first, Upgrade under it
@@ -712,7 +712,7 @@ export function createFitting({ renderer, cursor }) {
       pop.append(b);
       return placePop(el);
     }
-    for (const s of spare().filter((x) => !PARTS[x].only || PARTS[x].only === o.tankId)) {
+    for (const s of spare().filter((x) => fitsTank(x, o.tankId))) {
       const b = document.createElement('button');
       b.type = 'button';
       b.innerHTML = `<img alt="" src="${pic(s)}"><span></span>`;

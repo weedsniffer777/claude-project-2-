@@ -15,7 +15,7 @@ import { createCrew } from '../models/crew.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
-import { PARTS, attachPart, effectsHtml, improvementHtml, improveTo } from '../game/parts.js';
+import { PARTS, fitsTank, attachPart, effectsHtml, improvementHtml, improveTo } from '../game/parts.js';
 import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { createWorkshop, upgradeHint, evolveReady, canEvolve } from '../ui/workshop.js';
@@ -1288,7 +1288,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       title = 'Start with missing equipment?';
     }
     const fitted = new Set(save.tanks().flatMap((k) => save.loadout(k)));
-    const free = save.owned().filter((p) => PARTS[p] && !fitted.has(p) && (!PARTS[p].only || PARTS[p].only === t));
+    const free = save.owned().filter((p) => PARTS[p] && !fitted.has(p) && fitsTank(p, t));
     if (save.loadout(t).length < tankDef(t).slots && free.length) {
       lines.push(`${name} has empty part slots!`);
       title = title ? 'Start with empty slots?' : 'Start with empty part slots?';

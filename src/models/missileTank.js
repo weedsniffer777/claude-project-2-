@@ -71,48 +71,50 @@ const POD_SPEED = 1.6;
 let camoTex = null;
 function camoTexture() {
   if (camoTex) return camoTex;
-  const N = 48;
+  // three colours: a light green ground, dark green and tan blocks, in
+  // big chunky clumps
+  const N = 24;
   const c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
-  const cols = ['#6b7c47', '#4c5b33', '#a6925f', '#7d5a3a', '#2f3825'];
+  const cols = ['#76874d', '#46552f', '#a68c5c'];
   g.fillStyle = cols[0];
   g.fillRect(0, 0, N, N);
   let seed = 11;
   const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-  // clumps: a random walk of 2px squares per colour, wrapping round
+  const P = 3; // the pixel block size
   const clump = (col, n, steps) => {
     g.fillStyle = col;
     for (let k = 0; k < n; k++) {
-      let x = (rand() * N) | 0;
-      let y = (rand() * N) | 0;
+      let x = ((rand() * N) / P) | 0;
+      let y = ((rand() * N) / P) | 0;
       for (let i = 0; i < steps; i++) {
-        for (const [dx, dy] of [[0, 0], [N, 0], [-N, 0], [0, N], [0, -N]]) g.fillRect(((x >> 1) << 1) + dx, ((y >> 1) << 1) + dy, 2, 2);
-        x = (x + ((rand() * 3) | 0) * 2 - 2 + N) % N;
-        y = (y + ((rand() * 3) | 0) * 2 - 2 + N) % N;
+        for (const [dx, dy] of [[0, 0], [N, 0], [-N, 0], [0, N], [0, -N]]) g.fillRect(x * P + dx, y * P + dy, P, P);
+        x = (x + ((rand() * 3) | 0) - 1 + N / P) % (N / P);
+        y = (y + ((rand() * 3) | 0) - 1 + N / P) % (N / P);
       }
     }
   };
-  clump(cols[1], 10, 40);
-  clump(cols[2], 8, 30);
-  clump(cols[3], 7, 26);
-  clump(cols[4], 6, 12);
+  clump(cols[1], 7, 11); // plenty of dark green
+  clump(cols[2], 4, 7);
   camoTex = new THREE.CanvasTexture(c);
   camoTex.colorSpace = THREE.SRGBColorSpace;
   camoTex.magFilter = camoTex.minFilter = THREE.NearestFilter;
   camoTex.wrapS = camoTex.wrapT = THREE.RepeatWrapping;
   return camoTex;
 }
-function camo(scale = 0.45, shift = 0) {
+function camo(scale = 0.3, shift = 0) {
   const t = camoTexture().clone();
   t.needsUpdate = true;
   t.repeat.set(scale, scale);
   t.offset.set(shift * 0.37, shift * 0.61);
   return new THREE.MeshToonMaterial({ map: t, gradientMap });
 }
-function camoBox(w, h, d, shift, r = 0.02) {
-  const m = new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 1, r), camo(0.45 / Math.max(w, h, d, 0.5), shift));
-  m.castShadow = m.receiveShadow = true;
+// a box painted in the camo at the same scale as the hull (world-unit UVs
+// on every face, so nothing's stretched)
+const camoMat = camo(0.3, 0);
+function camoBox(w, h, d) {
+  const m = prism([[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]], d / 2, d / 2, camoMat);
   return m;
 }
 // a convex side profile given depth, planar UVs per face in world units
@@ -236,8 +238,8 @@ export function createMissileTank() {
   const slotGroups = { tracks: [tracks], armor: [], engine: [], gun: [], mg: [], sights: [], module: [] };
 
   // ---------------------------------------------------------------- hull
-  chassis.add(prism(UPPER, UPPER_HALF, UPPER_HALF, camo(0.45, 1)));
-  chassis.add(prism(LOWER, LOWER_HALF, LOWER_HALF, camo(0.45, 2)));
+  chassis.add(prism(UPPER, UPPER_HALF, UPPER_HALF, camo(0.3, 1)));
+  chassis.add(prism(LOWER, LOWER_HALF, LOWER_HALF, camo(0.3, 2)));
   // the glacis: things on its slope
   const slope = -Math.atan2(GLACIS.y1 - GLACIS.y0, GLACIS.x0 - GLACIS.x1);
   const onSlope = (x, z) => {
@@ -271,11 +273,17 @@ export function createMissileTank() {
   // top, the front one angled down toward the sprocket
   for (const s of [-1, 1]) {
     const z = s * (UPPER_HALF + 0.035);
-    for (const [x0, x1] of [[-1.9, -0.95], [-0.93, 0.02], [0.04, 0.99], [1.01, 1.55]]) put(chassis, camoBox(x1 - x0, 0.3, 0.05, 20 + x0 * 3 + s), (x0 + x1) / 2, 0.66, z);
-    const fr = put(chassis, camoBox(0.42, 0.26, 0.05, 31 + s), 1.76, 0.6, z);
-    fr.rotation.z = -0.35;
-    for (let x = -1.85; x < 1.55; x += 0.2) put(chassis, box(0.025, 0.025, 0.015, C.dark), x, 0.79, z + s * 0.028);
-    put(chassis, box(3.5, 0.03, 0.05, C.greenDark), -0.18, 0.51, z); // the skirt's bottom lip
+    // panels whose bottom edges dip to a shallow point in the middle of
+    // each, so the skirt's lower edge runs in slight chevrons
+    for (const [x0, x1] of [[-1.9, -1.05], [-1.03, -0.18], [-0.16, 0.69], [0.71, 1.56]]) {
+      const w = x1 - x0;
+      put(chassis, camoBox(w, 0.24, 0.05, 20 + x0 * 3 + s), (x0 + x1) / 2, 0.7, z);
+      for (const h of [-1, 1]) {
+        const lip = put(chassis, camoBox(w / 2 + 0.02, 0.12, 0.05, 25 + x0 * 3 + h), (x0 + x1) / 2 + (h * w) / 4, 0.55, z);
+        lip.rotation.z = h * 0.14;
+      }
+      put(chassis, box(0.03, 0.34, 0.06, C.greenDark), x1 + 0.01, 0.66, z); // the seam
+    }
     // a stowage box and a lamp on the rear side
     put(chassis, camoBox(0.5, 0.2, 0.12, 40 + s), -1.4, 0.92, s * (UPPER_HALF + 0.05));
     put(chassis, box(0.06, 0.06, 0.06, C.lamp), REAR - 0.02, 0.86, s * 0.68);
@@ -308,18 +316,26 @@ export function createMissileTank() {
   // the rear: the troop door, tail lights, a grille
   put(chassis, box(0.04, 0.42, 0.62, C.greenDark, { r: 0.02 }), REAR - 0.02, 0.72, 0);
   put(chassis, box(0.04, 0.04, 0.12, C.dark), REAR - 0.05, 0.72, 0.22);
-  // the boost: two rocket outlets low on the rear plate, flames out the back
+  // the Retreat: two exhaust outlets up at the front corners of the hull,
+  // angled a little forward; they fire forward and rocket it backwards
   const flameMats = [0.5, 0.75, 1].map((opacity) => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
   const plumes = [];
   const nozzles = [];
   for (const s of [-1, 1]) {
-    const at = new THREE.Vector3(REAR - 0.1, 0.56, s * 0.5);
-    put(chassis, cyl(0.09, 0.12, C.dark, { axis: 'x', seg: 10 }), REAR - 0.04, at.y, at.z);
-    put(chassis, cyl(0.07, 0.02, 0x0f1011, { axis: 'x', seg: 10 }), REAR - 0.1, at.y, at.z);
+    const at = new THREE.Vector3(1.62, 0.9, s * (UPPER_HALF + 0.06));
+    const ex = new THREE.Group();
+    ex.position.copy(at);
+    ex.rotation.y = s * 0.25; // splayed a little outward, pointing forward
+    chassis.add(ex);
+    put(ex, box(0.34, 0.2, 0.18, C.greenDark, { r: 0.03 }), -0.1, 0, 0); // its housing
+    put(ex, cyl(0.08, 0.16, C.dark, { axis: 'x', seg: 10 }), 0.12, 0, 0);
+    put(ex, cyl(0.065, 0.02, 0x0f1011, { axis: 'x', seg: 10 }), 0.2, 0, 0);
     const flame = new THREE.Group();
-    flame.position.copy(at);
+    flame.position.set(0.22, 0, 0);
+    flame.rotation.y = Math.PI; // (the plumes run out along -x: turned to face forward)
     flame.visible = false;
-    chassis.add(flame);
+    ex.add(flame);
+    at.copy(ex.localToWorld(new THREE.Vector3(0.22, 0, 0)));
     const plume = (prof, layer) => {
       const g = new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(r, y)), 10);
       g.rotateZ(Math.PI / 2);
@@ -355,31 +371,34 @@ export function createMissileTank() {
   slotGroups.gun.push(gunPivot);
   const mouths = [];
   {
-    const { len, cw, gap, rows, cols } = POD;
-    const W = cols * cw + (cols - 1) * gap;
-    const H = rows * cw + (rows - 1) * gap;
-    const y0 = 0.12 + cw / 2; // the pack sits on its cradle
-    put(gunPivot, box(len * 0.9, 0.08, W + 0.08, C.greenDark, { r: 0.02 }), 0, 0.06, 0); // the cradle
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const y = y0 + r * (cw + gap);
-        const z = -W / 2 + cw / 2 + c * (cw + gap);
-        put(gunPivot, camoBox(len, cw, cw, 70 + r * 4 + c, 0.015), 0, y, z);
-        // the ribbed end caps, front and back, a dark ring in front
-        for (const ex of [-1, 1]) put(gunPivot, box(0.05, cw + 0.02, cw + 0.02, C.greenDark, { r: 0.01 }), ex * (len / 2 - 0.02), y, z);
-        put(gunPivot, box(0.02, cw * 0.6, cw * 0.6, C.dark, { r: 0.01 }), len / 2 + 0.006, y, z);
-        for (const rx of [-0.25, 0.1]) put(gunPivot, box(0.03, cw + 0.015, cw + 0.015, C.greenDark, { r: 0.008 }), rx, y, z); // bands
-        const m = new THREE.Object3D();
-        m.position.set(len / 2 + 0.05, y, z);
-        gunPivot.add(m);
-        mouths.push(m);
+    // two packs of four (2 x 2) side by side on the cradle, a gap between
+    const { len, cw, gap } = POD;
+    const SPLIT = 0.16;
+    const y0 = 0.12 + cw / 2;
+    const packW = 2 * cw + gap;
+    put(gunPivot, box(len * 0.9, 0.08, 2 * packW + SPLIT + 0.08, C.greenDark, { r: 0.02 }), 0, 0.06, 0); // the cradle
+    for (const side of [-1, 1]) {
+      const zc = side * (packW / 2 + SPLIT / 2);
+      for (let r = 0; r < 2; r++) {
+        for (let c = 0; c < 2; c++) {
+          const y = y0 + r * (cw + gap);
+          const z = zc - packW / 2 + cw / 2 + c * (cw + gap);
+          put(gunPivot, camoBox(len, cw, cw, 70 + r * 4 + c + side * 9, 0.015), 0, y, z);
+          for (const ex of [-1, 1]) put(gunPivot, box(0.05, cw + 0.02, cw + 0.02, C.greenDark, { r: 0.01 }), ex * (len / 2 - 0.02), y, z);
+          put(gunPivot, box(0.02, cw * 0.6, cw * 0.6, C.dark, { r: 0.01 }), len / 2 + 0.006, y, z);
+          for (const rx of [-0.25, 0.1]) put(gunPivot, box(0.03, cw + 0.015, cw + 0.015, C.greenDark, { r: 0.008 }), rx, y, z);
+          const m = new THREE.Object3D();
+          m.position.set(len / 2 + 0.05, y, z);
+          gunPivot.add(m);
+          mouths.push(m);
+        }
       }
+      // each pack's frame
+      for (const s2 of [-1, 1]) put(gunPivot, box(len * 0.95, 2 * cw + gap + 0.06, 0.04, C.dark, { r: 0.01 }), 0, y0 + (cw + gap) / 2, zc + s2 * (packW / 2 + 0.02));
     }
-    // the frame round the pack
-    for (const s of [-1, 1]) put(gunPivot, box(len * 0.95, H + 0.06, 0.04, C.dark, { r: 0.01 }), 0, y0 + (H - cw) / 2, s * (W / 2 + 0.03));
   }
   // order: top row first, alternating sides, so it ripples across
-  const order = [4, 7, 5, 6, 0, 3, 1, 2];
+  const order = [2, 6, 3, 7, 0, 4, 1, 5]; // top rows first, alternating packs
   let next = 0;
 
   // ---------------------------------------------------------------- roof MG
@@ -616,7 +635,7 @@ export function createMissileTank() {
   }
   function rocketNozzles() {
     group.updateWorldMatrix(true, true);
-    return nozzles.map((n) => chassis.localToWorld(n.at.clone()));
+    return nozzles.map((n) => n.flame.getWorldPosition(new THREE.Vector3()));
   }
   const RAMPS = {
     normal: [[0, 0xfffaf0], [0.12, 0xe8f2ff], [0.24, 0xbcd8ff], [0.4, 0xffd27a], [0.65, 0xff8a2a], [1, 0xd8461a]],

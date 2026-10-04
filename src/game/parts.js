@@ -33,11 +33,13 @@ export const BASE_STATS = {
   // the light tank's Dash (Shift): seconds, x the boost speed
   dashTime: 0.55,
   dashSpeed: 1.5,
+  retreatTime: 0.5, // the missile tank's Retreat (Shift): a burst straight backwards
+  retreatSpeed: 1.3,
   // its Breakthrough (E): a slower, longer charge, and its recharge
   breakTime: 1.5,
   breakSpeed: 1.0,
   breakCooldown: 8,
-  salvoCooldown: 10, // the missile tank's Missile salvo
+  salvoCooldown: 14, // the missile tank's Missile salvo (eight at once)
   breakShield: 0.25, // damage cut while it (or the dash) runs: grows with the tank's level to 0.5
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
@@ -347,6 +349,7 @@ export const PARTS = {
   },
   afterburner: {
     type: 'movement',
+    not: ['missile'], // (the missile tank has no boost: a retreat instead)
     name: 'High-power boost',
     badge: 'up', // its picture gets an up arrow: an improved ability
     text: 'Boost burns hotter: faster and longer, but a longer recharge.',
@@ -582,6 +585,19 @@ function sightHead() {
 }
 
 // Mark a freshly built part for the player's team outline.
+// can this tank take the part? (only: one tank's own; not: tanks it
+// doesn't fit, like a boost part on a tank with no boost)
+export const fitsTank = (id, tank) => {
+  const p = PARTS[id];
+  if (!p) return false;
+  if (p.only) return p.only === tank;
+  return !p.not?.includes(tank);
+};
+// the tag on a part the tank can't take: "Light only", "Not for Missile"
+export function unfitLabel(id, tank, names) {
+  const p = PARTS[id];
+  return p.only ? `${names[p.only]} only` : `Not for ${names[tank]}`;
+}
 export function attachPart(tank, id) {
   const p = PARTS[id];
   const tier = tierOf(id);

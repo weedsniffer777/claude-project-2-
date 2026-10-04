@@ -6,6 +6,7 @@ import { createDog } from '../models/dog.js';
 import { createWalker } from '../models/walker.js';
 import { createBridgeGun } from '../models/bridgeGun.js';
 import { createDrone } from '../models/drone.js';
+import { createSpider } from '../models/spider.js';
 import { pushOut } from './collide.js';
 import { ENEMY_LAYER } from '../render/pixel.js';
 
@@ -163,6 +164,43 @@ function droneRocket() {
   return g;
 }
 
+// The siege spider: level 4's boss. A huge four-legged walker that is a
+// weapons platform: its beam (like the walker's, slower to line up, harder
+// hitting), mortar barrages, rocket salvos, a chin MG; drones when hurt.
+const SPIDER = {
+  ...WALKER,
+  model: createSpider,
+  spider: true,
+  shatterOnDeath: true,
+  hp: 1800,
+  runSpeed: 2.0,
+  walkSpeed: 1.3,
+  turnRate: 1.2,
+  range: 24,
+  tooClose: 11,
+  charge: 2.6,
+  track: 0.45,
+  lock: 0.6,
+  reload: 5.5,
+  damage: 30,
+  box: { hx: 2.6, hz: 2.6 },
+  scale: 1,
+  modelScale: 1,
+  aimY: 3.2,
+  muzzleY: 3.8,
+  hit: [4.2, 3.6, 3.6, 3.0],
+  scrap: 80,
+  mortarEvery: 8,
+  mortarShells: 5,
+  mortarFall: 1.6,
+  mortarBlast: 1.9,
+  mortarDamage: 14,
+  rocketEvery: 6.5,
+  rocketSalvo: 6,
+  rocketSpeed: 11,
+  rocketDamage: 8,
+};
+
 const DRONE = {
   ...DOG,
   model: createDrone,
@@ -235,6 +273,11 @@ export class Enemies {
   spawnDrone(x, z, opts) {
     const e = this.spawn(DRONE, 'drone', x, z, opts);
     e.pos.y = DRONE.fly + 6; // dropping in from higher up
+    return e;
+  }
+  spawnSpider(x, z, opts = {}) {
+    const e = this.spawn(SPIDER, 'spider', x, z, opts);
+    e.model.group.rotation.y = opts.yaw ?? Math.PI;
     return e;
   }
   spawnWalker(x, z, opts) {
@@ -346,6 +389,7 @@ export class Enemies {
 
   kill(e, blastFrom = null) {
     e.alive = false;
+    this.clearShells(e);
     e.markMesh?.removeFromParent();
     e.warn?.removeFromParent();
     e.warnLine?.removeFromParent();
@@ -656,12 +700,13 @@ export class Enemies {
       const g = e.model.group;
       let diff = facing - g.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      g.rotation.y += diff * Math.min(1, dt * 8);
+      g.rotation.y += diff * Math.min(1, dt * (DOG.turnRate || 8));
       // the rifle holds on the locked line while it winds up and fires
       const locked = e.lock && (e.windup > 0 || e.burstLeft > 0);
       let aimYaw = (DOG.sniper && e.charge > 0 ? e.lockYaw : locked ? Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x) : Math.atan2(-tz, tx)) - g.rotation.y;
       aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
       if (DOG.sniper) {
+        if (DOG.spider) this.spiderWeapons(e, dt, t, ctx, dist);
         this.sniperFrame(e, dt, t, ctx, dist, aimYaw);
         continue;
       }
@@ -899,7 +944,134 @@ export class Enemies {
     e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
     // the barrel dips to lay on the hull
     const pitch = -Math.atan2(Math.max(0, (S.muzzleY || 1.8) - HULL_Y), Math.max(4, dist));
-    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k });
+    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k, rockets: e.rocketK || 0 });
+  }
+
+  // The siege spider's other weapons, on top of its beam (sniperFrame):
+  //  - a mortar barrage: red rings land round the tank, shells come down on
+  //    them a moment later (drive out of the rings)
+  //  - rocket salvos from its side pods (pods glow first), like a drone's
+  //  - the chin MG: bursts when the tank's close
+  //  - below half health it also launches attack drones (two at a time)
+  spiderWeapons(e, dt, t, ctx, dist) {
+    const S = e.stats;
+    const { tankPos } = ctx;
+    const hurt = e.hp < e.maxHp * 0.5;
+    const pace = hurt ? 0.7 : 1; // angrier: everything comes round faster
+    e.mortarT = (e.mortarT ?? 4) - dt;
+    e.rocketT = (e.rocketT ?? 2.5) - dt;
+    e.mgT = (e.mgT ?? 1) - dt;
+    e.droneT = (e.droneT ?? 2) - dt;
+    const busy = e.charge > 0; // (not while it's lining up the beam)
+    const gy = (x, z) => (ctx.heightAt ? ctx.heightAt(x, z) : 0);
+    // mortars
+    if (e.mortarT <= 0 && !busy && dist < S.range + 6) {
+      e.mortarT = S.mortarEvery * pace;
+      e.shells ??= [];
+      const lead = ctx.tankVel || { x: 0, z: 0 };
+      for (let i = 0; i < S.mortarShells; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = i ? 1.5 + Math.random() * 3 : 0;
+        const at = new THREE.Vector3(tankPos.x + lead.x * 0.8 + Math.cos(a) * r, 0, tankPos.z + lead.z * 0.8 + Math.sin(a) * r);
+        at.y = gy(at.x, at.z);
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+        ring.position.set(at.x, at.y + 0.07, at.z);
+        this.scene.add(ring);
+        const from = e.model.mortarMuzzle();
+        this.combat.glow.flash(from, 0xffc070, 0.2, 1.2, 0.1);
+        this.combat.puffs.spawn(from, new THREE.Vector3(0, 3, 0), { color: 0x8d8b86, s0: 0.2, s1: 0.7, life: 0.8, drag: 2, lift: 1, fadeAt: 0.3 });
+        e.shells.push({ at, ring, t: S.mortarFall + i * 0.18, total: S.mortarFall + i * 0.18, from, shell: null });
+      }
+    }
+    for (let i = (e.shells?.length || 0) - 1; i >= 0; i--) {
+      const sh = e.shells[i];
+      sh.t -= dt;
+      const k = Math.max(0, sh.t / sh.total);
+      sh.ring.scale.setScalar(S.mortarBlast * (0.5 + 0.7 * k));
+      sh.ring.material.opacity = Math.sin(t * (12 + (1 - k) * 30)) > 0 ? 0.95 : 0.4;
+      // the shell itself, the last bit of its fall
+      if (sh.t < 0.45) {
+        if (!sh.shell) {
+          sh.shell = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.2), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
+          this.scene.add(sh.shell);
+        }
+        const p = sh.at.clone().add(new THREE.Vector3(-2, 9, 1.5).multiplyScalar(Math.max(0, sh.t) / 0.45));
+        if (sh.last) this.combat.glow.tracer(sh.last, p, 0xffb070, 0.14, 0.12);
+        sh.shell.position.copy(p);
+        sh.last = p;
+      }
+      if (sh.t <= 0) {
+        sh.ring.removeFromParent();
+        sh.shell?.removeFromParent();
+        e.shells.splice(i, 1);
+        const at = sh.at.clone().setY(sh.at.y + 0.2);
+        this.combat.explode(at);
+        this.combat.shake = Math.max(this.combat.shake, 0.25);
+        const tb = ctx.tankBox;
+        if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.mortarBlast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(S.mortarDamage, at);
+      }
+    }
+    // rocket salvos: the pods glow, then the rockets come one after another
+    if (e.rocketT <= 0 && !busy && !(e.salvoLeft > 0) && e.los && dist < S.range) {
+      e.rocketT = S.rocketEvery * pace;
+      e.salvoWind = 0.8;
+    }
+    if (e.salvoWind > 0) {
+      e.salvoWind -= dt;
+      e.rocketK = 1;
+      if (e.salvoWind <= 0) {
+        e.salvoLeft = S.rocketSalvo;
+        e.salvoGap = 0;
+      }
+    } else e.rocketK = e.salvoLeft > 0 ? 1 : 0;
+    if (e.salvoLeft > 0) {
+      e.salvoGap -= dt;
+      if (e.salvoGap <= 0) {
+        e.salvoLeft--;
+        e.salvoGap = 0.16;
+        const from = e.model.rocketMuzzle();
+        const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 2.4, tankPos.y + 0.9, tankPos.z + (Math.random() - 0.5) * 2.4);
+        const to = aim.clone().sub(from);
+        const time = to.length() / S.rocketSpeed;
+        const mesh = droneRocket();
+        mesh.position.copy(from);
+        this.scene.add(mesh);
+        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.6, damage: S.rocketDamage, rocket: mesh });
+        this.combat.glow.flash(from, 0xffb070, 0.15, 0.9, 0.06);
+      }
+    }
+    // the chin MG: bursts at the tank when it's close
+    if (e.mgT <= 0 && e.los && dist < 13) {
+      e.mgT = 2.2 * pace;
+      e.mgLeft = 8;
+      e.mgGap = 0;
+    }
+    if (e.mgLeft > 0) {
+      e.mgGap -= dt;
+      if (e.mgGap <= 0) {
+        e.mgLeft--;
+        e.mgGap = 0.07;
+        const from = e.model.mgMuzzle();
+        const dir = new THREE.Vector3(tankPos.x - from.x, 0, tankPos.z - from.z).normalize();
+        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.12);
+        const reach = dist + 4;
+        const time = reach / 24;
+        const vel = dir.multiplyScalar(24);
+        vel.y = (tankPos.y + 0.4 - from.y) / time;
+        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: 1.6 });
+        this.combat.glow.flash(from, 0xff6a3a, 0.08, 0.4, 0.05);
+      }
+    }
+    // hurt: attack drones out of its back, two at a time
+    if (hurt && e.droneT <= 0) {
+      e.droneT = 14;
+      const mine = this.list.filter((d) => d.alive && d.stats.flying).length;
+      for (let i = mine; i < 2; i++) {
+        const d = this.spawnDrone(e.pos.x + (Math.random() - 0.5) * 2, e.pos.z + (Math.random() - 0.5) * 2, { delay: i * 0.5 });
+        d.pos.y = 6;
+      }
+      if (mine < 2) this.onSpawnNote?.('drones');
+    }
   }
   // how far a beam from the muzzle along the lock goes before something solid stops it
   // The beam is laid on the hull, not the turret top: it runs along at
@@ -959,6 +1131,14 @@ export class Enemies {
     for (let k = 0; k < 3; k++) this.combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
     const tb = ctx.tankBox;
     if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
+  }
+  // the spider's mortar rounds still coming down: gone with it
+  clearShells(e) {
+    for (const sh of e.shells || []) {
+      sh.ring.removeFromParent();
+      sh.shell?.removeFromParent();
+    }
+    e.shells = [];
   }
   // the run's over: every round and rocket still in the air just goes
   // (a little puff where a rocket was), none left hanging there
@@ -1059,6 +1239,7 @@ export class Enemies {
       e.markMesh?.removeFromParent();
       e.warn?.removeFromParent();
       e.warnLine?.removeFromParent();
+      this.clearShells(e);
     }
     this.list = this.list.filter((e) => !e.alive);
     this.clearBolts();

@@ -802,8 +802,13 @@ function buildHighway(scene) {
   // the parts this level can turn up
   const PARTS3 = ['he', 'era', 'afterburner', 'dozer', 'autoloader', 'twinmg', 'optics'];
   // machines coming in: on the deck ahead; drones over the roofs either side
-  const deckDog = (api, x, z, delay = 0) => api.spawnDog(x, z, { delay });
-  const sideDrone = (api, x, s, delay = 0) => api.spawnDrone(x, DZ + s * 20, { delay, via: [[x - 4, DZ + s * 4]] });
+  // (always ahead of the tank, however far it's got: never behind it)
+  const ahead = (api, x) => Math.min(Math.max(x, api.tankPos.x + 14), Math.max(x, Math.min(bounds.maxX, BAR_X) - 2)); // (but not past the end of the area)
+  const deckDog = (api, x, z, delay = 0) => api.spawnDog(ahead(api, x), z, { delay });
+  const sideDrone = (api, x, s, delay = 0) => {
+    const ax = ahead(api, x);
+    api.spawnDrone(ax, DZ + s * 20, { delay, via: [[ax - 2, DZ + s * 4]] });
+  };
 
   function start(api) {
     Object.assign(S, { sector: 0, step: 0, t: 0, wave: 0 });
@@ -897,7 +902,7 @@ function buildHighway(scene) {
         break;
       case 1:
         if (api.enemiesAlive <= 1 && S.t > 3) {
-          api.spawnWalker(198, -3.6);
+          api.spawnWalker(ahead(api, 198), -3.6);
           sideDrone(api, 186, 1);
           deckDog(api, 206, 4, 1.2);
           go(2);
@@ -907,7 +912,7 @@ function buildHighway(scene) {
         if (api.enemiesAlive <= 1 && S.t > 3) {
           deckDog(api, 220, -5);
           deckDog(api, 220, 4, 0.4);
-          api.spawnWalker(221, 0, { delay: 0.8 });
+          api.spawnWalker(ahead(api, 221), 0, { delay: 0.8 });
           sideDrone(api, 212, -1, 1.2);
           contact(api, 'More of them!');
           go(3);

@@ -67,14 +67,14 @@ export const TANKS = {
     create: createMissileTank,
     slots: 3,
     gun: 'missile',
-    move: 'boost',
-    moveName: 'Boost',
+    move: 'retreat', // its boost: rockets out the front, a quick burst straight back
+    moveName: 'Retreat',
     ability: 'salvo',
     abilityName: 'Missile salvo',
-    blurb: 'A launcher on a long, low hull. Each shot is a missile that homes on the enemy under your aim and hits hard; the Missile salvo locks on to four at once.',
+    blurb: 'A launcher on a long, low hull. Each shot is a missile that homes on the enemy under your aim. Retreat rockets it straight back out of trouble; Missile salvo fires eight at once.',
     unlockText: 'Beat level 4 to unlock',
     // reload: seconds between missiles; cannonDamage / splash: each missile's hit
-    stats: { maxHp: 85, speed: 1.08, reload: 1.5, cannonDamage: 70, splash: 2.2, boostTime: 0.55 },
+    stats: { maxHp: 85, speed: 1.08, reload: 1.5, cannonDamage: 70, splash: 2.2, boostCooldown: 4 },
     box: { cx: 0.05, hx: 2.15, hz: 1.02 },
     pic: { target: [-0.2, 1.05, 0], half: 1.7 },
     anchors: {
