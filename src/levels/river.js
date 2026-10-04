@@ -592,7 +592,7 @@ function buildRiver(scene) {
     B.block(cx, cz, len * 0.25, 0.25, yaw);
     B.hitBox(cx, 0.45, cz, len * 0.5, 0.9, 0.4, yaw);
   }
-  B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement: still solid once it's destroyed
+  const gunBlock = B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement: solid while it stands (it's blown to pieces when destroyed, and then you drive through)
   // Past the bridge, across the street beyond it: road barriers, yellow and black
   // striped bars on trestles with sandbags. They won't break while the gun
   // stands; once it's destroyed, a shell or a ram knocks them flat.
@@ -842,6 +842,8 @@ function buildRiver(scene) {
     switch (S.step) {
       case 0:
         if (!S.boss.alive) {
+          const bi = B.blocks.indexOf(gunBlock);
+          if (bi >= 0) B.blocks.splice(bi, 1);
           for (const c of gate) c.armored = false; // the barriers can be broken now
           api.prompt('Bridge gun destroyed', 'The way is open. <b>Drive across!</b>', { go: true, seconds: 5 });
           setBounds(api, { maxX: MAP.x1 - 4 });

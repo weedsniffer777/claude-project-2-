@@ -87,6 +87,7 @@ const BRIDGE_GUN = {
   ...WALKER,
   model: createBridgeGun,
   static: true,
+  shatterOnDeath: true, // blown to pieces when destroyed: nothing left standing
   hp: 900,
   range: 44,
   tooClose: 0,
@@ -356,8 +357,14 @@ export class Enemies {
       // the big one goes up in a chain of blasts
       for (let i = 0; i < 3; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 2, 0.8 + Math.random(), e.pos.z + (Math.random() - 0.5) * 1.5));
     }
-    if (blastFrom) this.shatter(e, blastFrom);
-    this.onKill?.(e, !!blastFrom);
+    // the bridge gun: blown to pieces, however it died (no wreck left
+    // standing to block the way)
+    if (e.stats.shatterOnDeath) {
+      this.shatter(e, new THREE.Vector3(e.pos.x, -1, e.pos.z), 1.8);
+      for (let i = 0; i < 4; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 3.5, 0.6 + Math.random() * 1.6, e.pos.z + (Math.random() - 0.5) * 3.5));
+      this.combat.shake = Math.max(this.combat.shake, 0.8);
+    } else if (blastFrom) this.shatter(e, blastFrom);
+    this.onKill?.(e, !!blastFrom || !!e.stats.shatterOnDeath);
   }
 
   // Ram: machines the tank's box touches take damage and are thrown aside.
@@ -448,7 +455,7 @@ export class Enemies {
 
   // Blow a machine into its parts: every mesh becomes a loose piece thrown
   // away from the blast, tumbling, bouncing and settling on the ground.
-  shatter(e, from) {
+  shatter(e, from, power = 1) {
     const g = e.model.group;
     g.updateWorldMatrix(true, true);
     const meshes = [];
@@ -458,12 +465,12 @@ export class Enemies {
       const p = m.position;
       const away = new THREE.Vector3(p.x - from.x, 0, p.z - from.z);
       if (away.lengthSq() < 0.01) away.set(Math.random() - 0.5, 0, Math.random() - 0.5);
-      away.normalize().multiplyScalar(3 + Math.random() * 5);
+      away.normalize().multiplyScalar((3 + Math.random() * 5) * power);
       if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
       const r = m.geometry.boundingSphere.radius * Math.max(m.scale.x, m.scale.y, m.scale.z);
       this.parts.push({
         m,
-        vel: new THREE.Vector3(away.x + (Math.random() - 0.5) * 2, 4 + Math.random() * 5, away.z + (Math.random() - 0.5) * 2),
+        vel: new THREE.Vector3(away.x + (Math.random() - 0.5) * 2, (4 + Math.random() * 5) * Math.sqrt(power), away.z + (Math.random() - 0.5) * 2),
         spin: new THREE.Vector3((Math.random() - 0.5) * 16, (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 16),
         r: Math.min(0.25, r * 0.6),
         rest: false,
