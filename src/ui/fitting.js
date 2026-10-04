@@ -65,7 +65,7 @@ const CSS = `
 .fit .slot[data-tier]:hover, .fit .slot[data-tier].on { box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .fit .item[data-tier] { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--tc); }
 .fit .slot .tiername, .fit .tip .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tc); }
-.fit .item .away { z-index: 2; position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
+.fit .item .away { z-index: 2; position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; text-align: center; }
 .fit .item.isaway img { filter: brightness(0.55) saturate(0.6); }
 .fit .item .away.only { color: #fff; background: #c42a20; }
 .fit .item.notfor { cursor: var(--cursor); box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446 !important; }
@@ -473,7 +473,7 @@ export function createFitting({ renderer, cursor }) {
       const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
       if (only) el.classList.add('isaway');
       if (only) el.classList.add('notfor');
-      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
+      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
       if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
       el.addEventListener('click', () => {
@@ -573,7 +573,7 @@ export function createFitting({ renderer, cursor }) {
         b.type = 'button';
         // one of each: fitting it here takes it off any other tank
         const on = TANK_ORDER.find((t) => t !== o.tankId && save.equipment(t) === e);
-        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${on ? `<small class="eqon">On ${TANKS[on].name.replace(' tank', '')}</small>` : ''}`;
+        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${on ? `<small class="eqon">On ${TANKS[on].name}</small>` : ''}`;
         b.querySelector('span').textContent = on ? `${EQUIPMENT[e].name} · ${id ? 'swap' : 'move here'}` : EQUIPMENT[e].name;
         b.addEventListener('click', () => {
           // taken off another tank: that tank gets this one's equipment in
@@ -637,7 +637,7 @@ export function createFitting({ renderer, cursor }) {
     const fit = document.createElement('button');
     fit.type = 'button';
     fit.className = 'fitb';
-    fit.textContent = where(id) ? `Equip (from the ${where(id).replace(' tank', '')})` : 'Equip';
+    fit.textContent = where(id) ? `Equip (from the ${where(id)})` : 'Equip';
     if (PARTS[id].only && PARTS[id].only !== o.tankId) {
       fit.disabled = true;
       fit.textContent = `${TANKS[PARTS[id].only].name} only`;
