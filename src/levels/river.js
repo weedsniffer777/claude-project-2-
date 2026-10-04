@@ -589,12 +589,14 @@ function buildRiver(scene) {
     B.hitBox(cx, 0.45, cz, len * 0.5, 0.9, 0.4, yaw);
   }
   B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement: still solid once it's destroyed
-  // Behind the gun, right across the bridge: road barriers, yellow and black
+  // Past the bridge, across the street beyond it: road barriers, yellow and black
   // striped bars on trestles with sandbags. They won't break while the gun
   // stands; once it's destroyed, a shell or a ram knocks them flat.
   const gate = [];
-  const BAR_X = GUN_X + 6;
-  for (const [z0, z1] of [[BRIDGE.n + 0.3, -3.2], [-3.2, 2.4], [2.4, BRIDGE.s - 0.3]]) {
+  // (well back, past the bridge: out of sight while you fight the gun; it
+  // only stands in for the edge of the play area)
+  const BAR_X = END_X - 3;
+  for (const [z0, z1] of [[WALK.n + 0.3, -3.2], [-3.2, 2.4], [2.4, WALK.s - 0.3]]) {
     const zc = (z0 + z1) / 2;
     const len = z1 - z0;
     B.crushable(
@@ -668,7 +670,7 @@ function buildRiver(scene) {
   // blocks on the far side and the ruined arcade on the near one
   const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: SQUARE.n - 1.3, maxZ: SQUARE.s + 0.9 };
   // the bridge: room to drive right round the gun, out onto the far bank
-  const B3 = { minX: shackB.x1 + 1.2, maxX: END_X - 2, minZ: BRIDGE.n + 0.6, maxZ: BRIDGE.s - 0.6 };
+  const B3 = { minX: shackB.x1 + 1.2, maxX: END_X + 4, minZ: BRIDGE.n + 0.6, maxZ: BRIDGE.s - 0.6 }; // (the barriers stop you short of the end)
   const S = { sector: 0, step: 0, t: 0, n: 0, boss: null, waveT: 0, walkerT: 0 };
   const bounds = { ...B1 };
   const setBounds = (api, b) => api.setBounds(Object.assign(bounds, b));
