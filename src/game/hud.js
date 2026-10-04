@@ -84,12 +84,19 @@ const CSS = `
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
 .hud-ability.cooling canvas { filter: brightness(0.55) saturate(0.6); }
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
-.hud-ability.ready { animation: hudready 1s steps(2) infinite; }
+.hud-ability.ready canvas { filter: drop-shadow(0 0 4px #ffe2a0) drop-shadow(0 0 10px #ffb347aa); }
+.hud-ability.ready::before { content: 'Ready'; position: absolute; left: 50%; top: -24px; transform: translateX(-50%); padding: 3px 6px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; white-space: nowrap; }
+.hud.touch .hud-ability.ready::before { top: -20px; font-size: 10px; }
 .hud-ability .cd { position: relative; font: 400 26px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; }
 .hud:not(.touch) .hud-ability .cd { font-size: 20px; }
 @keyframes hudready { 50% { filter: brightness(1.35); } }
-.hud:not(.touch) .hud-ability { width: 64px; height: 64px; margin: -32px 0 0 -32px; }
-.hud:not(.touch) .hud-ability canvas { width: 64px; height: 64px; }
+.hud:not(.touch) .hud-ability { width: 84px; height: 84px; margin: -42px 0 0 -42px; }
+.hud:not(.touch) .hud-ability canvas { width: 84px; height: 84px; }
+/* on a computer the bottom of the screen is the tank's panel: HP in the
+   bottom left, the ability buttons bottom right */
+.hud:not(.touch) .hud-hull { position: fixed; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); min-width: 300px; padding: 10px 14px 12px; }
+.hud:not(.touch) .hud-hull .row { font-size: 13px; }
+.hud:not(.touch) .hud-bar { height: 16px; }
 .hud-picker { position: absolute; left: 50%; bottom: calc(22vh + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 14px; justify-items: center;
   width: min(660px, calc(100vw - 32px)); pointer-events: auto; }
 .hud-picker .title { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--go); text-shadow: 2px 2px 0 #000; }
@@ -391,10 +398,10 @@ export function createHud() {
   // ability button / icon
   // two ability buttons: the movement one (Shift) in the corner, the
   // signature one (E) beside it
-  const abilityCenter = () => (touchMode ? { x: window.innerWidth - 92, y: window.innerHeight - 104 } : { x: window.innerWidth - 70, y: window.innerHeight - 84 });
+  const abilityCenter = () => (touchMode ? { x: window.innerWidth - 92, y: window.innerHeight - 104 } : { x: window.innerWidth - 72, y: window.innerHeight - 72 });
   const ability2Center = () => {
     const c = abilityCenter();
-    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 84, y: c.y };
+    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
   };
   const abilities = [
     { el: $('.hud-ability.one'), key: '', center: abilityCenter },

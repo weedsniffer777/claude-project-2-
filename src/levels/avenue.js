@@ -1903,9 +1903,9 @@ function buildAvenue(scene) {
               api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
               api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
             } else if (api.tank.ability === 'breakthrough' && api.lesson('ability-breakthrough')) {
-              api.prompt('Ability', api.touch ? 'Enemies incoming! Tap the <b>E</b> button to <b>Breakthrough</b>: dash through them, knocking them aside and spoiling their aim!' : 'Enemies incoming! Press <kbd>E</kbd> to <b>Breakthrough</b>: dash through them, knocking them aside and spoiling their aim!', { danger: true, seconds: 8 });
+              api.prompt('Ability', api.touch ? 'Enemies incoming! Tap the <b>E</b> button to <b>Breakthrough</b>: charge through them, shielded, smashing anything in your way!' : 'Enemies incoming! Press <kbd>E</kbd> to <b>Breakthrough</b>: charge through them, shielded, smashing anything in your way!', { danger: true, seconds: 8 });
               api.spotlight({ targets: [api.ability2Screen(), onEnemy(api)], r: 110 }, () => (run.abilities || 0) > 0, { maxTime: 2.5 });
-            } else api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
+            } else if (!api.cleared) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
             go(3);
           } else if (!e && S.t > 3) {
             S.shots = -1; // already dealt with from long range: skip the lesson
@@ -1946,7 +1946,7 @@ function buildAvenue(scene) {
             api.spawnDog(gx + 1, 4.5, { delay: 0.7 });
             api.spawnDog(gx + 2.5, -0.5, { delay: 1.1 });
             if (api.lesson('multiplier')) api.prompt('Contact', 'More of them! Kill them in quick succession to build your <b>multiplier</b>: more scraps per kill.', { danger: true });
-            else api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
+            else if (!api.cleared) api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
             go(6);
           }
           break;
@@ -1968,7 +1968,7 @@ function buildAvenue(scene) {
             api.spawnDog(gx + 2, -6.4, { delay: 0.2 });
             api.spawnDog(gx + 2.5, 5.2, { delay: 0.5 });
             api.spawnDog(gx, 0, { delay: 0.8 });
-            api.prompt('Contact', 'Enemies at the checkpoint!', { danger: true, seconds: 4 });
+            if (!api.cleared) api.prompt('Contact', 'Enemies at the checkpoint!', { danger: true, seconds: 4 });
             go(7);
           }
           break;
@@ -2019,7 +2019,8 @@ function buildAvenue(scene) {
           if (x > BARRICADE_X + 2) {
             api.arrow(null);
             api.objective('Destroy all enemies');
-            api.prompt('Contact', api.lesson('ram') ? `Enemies! ${api.tank.moveName} rams them too.` : 'Enemies!', { danger: true, seconds: 4 });
+            if (api.lesson('ram')) api.prompt('Contact', `Enemies! ${api.tank.moveName === 'Dash' ? 'Dashing' : 'Boosting'} rams them too.`, { danger: true, seconds: 4 });
+            else if (!api.cleared) api.prompt('Contact', 'Enemies!', { danger: true, seconds: 4 });
             api.spawnDog(94, -3);
             api.spawnDog(95, 2, { delay: 0.4 });
             api.spawnDog(96.5, 5, { delay: 0.8 });

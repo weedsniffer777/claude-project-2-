@@ -209,6 +209,26 @@ export class CombatFx {
     this.shake = Math.max(this.shake, 0.12);
   }
 
+  // A Piercing shot going through a machine: a big, bright, sparky burst,
+  // white-hot, with a shock ring
+  sparkBlast(p) {
+    const { fx, glow } = this;
+    glow.flash(p, 0xffffff, 0.4, 2.2, 0.1);
+    glow.flash(p, 0xfff0c8, 0.6, 3.0, 0.22);
+    glow.ring(new THREE.Vector3(p.x, 0.1, p.z), 0xffffff, 0.4, 3.4, 0.3);
+    for (let i = 0; i < 12; i++) {
+      const d = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8 - 0.1, Math.random() - 0.5).normalize();
+      glow.spike(p, d, i % 3 ? 0xffffff : 0xffe08a, 1.4 + Math.random() * 1.4, 0.22, 0.12);
+    }
+    glow.light(p, 0xfff0d0, 120, 0.2);
+    fx.burst(p, { count: 40, speed: 13, color: 0xffffff, life: 0.5, size: 0.08, gravity: 9 });
+    fx.burst(p, { count: 30, speed: 8, color: 0xffd36b, life: 0.7, size: 0.09, gravity: 12 });
+    for (let i = 0; i < 10; i++) {
+      const d = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.6, Math.random() - 0.5).normalize();
+      glow.tracer(p, p.clone().addScaledVector(d, 1.5 + Math.random() * 1.5), 0xfff3c4, 0.06, 0.18); // spark streaks
+    }
+  }
+
   // Piercing shot: a glowing round flying down the line like a meteor, a
   // white-hot head and a long trail of light behind it that lingers and
   // fades. onPass(a0, a1) as it covers each stretch of the line, onEnd(at)
@@ -217,9 +237,9 @@ export class CombatFx {
     const mat = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
     const g = new THREE.Group();
     const layers = [
-      [0.13, mat(0xffffff, 0.95)],
-      [0.34, mat(0xffd27a, 0.6)],
-      [0.75, mat(0xff8a2a, 0.25)],
+      [0.16, mat(0xffffff, 1)],
+      [0.38, mat(0xfff6e0, 0.6)],
+      [0.8, mat(0xffe2b0, 0.22)],
     ].map(([w, m]) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), m);
       mesh.userData = { w, base: m.opacity };
@@ -228,16 +248,35 @@ export class CombatFx {
     });
     const head = [
       [0.32, mat(0xffffff, 1)],
-      [0.6, mat(0xffd27a, 0.55)],
-      [1.0, mat(0xff8a2a, 0.22)],
+      [0.6, mat(0xfff6e0, 0.55)],
+      [1.0, mat(0xffe8c0, 0.2)],
     ].map(([r, m]) => {
       const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), m);
       g.add(mesh);
       return mesh;
     });
+    // the sound barrier breaking at the head: a pale cone opening back from
+    // it, and rings of pressure peeling off behind
+    const machMat = mat(0xffffff, 0.35);
+    machMat.side = THREE.DoubleSide;
+    const mach = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 16, 1, true), machMat);
+    const aim = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    mach.quaternion.copy(aim);
+    g.add(mach);
+    head.push(mach);
+    const rings = [];
+    for (let i = 0; i < 10; i++) {
+      const rm = mat(0xffffff, 0);
+      rm.side = THREE.DoubleSide;
+      const r = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 20), rm);
+      r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
+      r.visible = false;
+      g.add(r);
+      rings.push({ mesh: r, t: 1 });
+    }
     this.scene.add(g);
     this.pierces ??= [];
-    this.pierces.push({ from: from.clone(), dir: dir.clone(), len, along: 0, onPass, onEnd, g, layers, head, fade: 0 });
+    this.pierces.push({ from: from.clone(), dir: dir.clone(), len, along: 0, onPass, onEnd, g, layers, head, rings, ringT: 0, ringI: 0, fade: 0 });
   }
   updatePierces(dt) {
     const SPEED = 55;
@@ -251,6 +290,16 @@ export class CombatFx {
         s.onPass(a0, s.along);
         const at = s.from.clone().addScaledVector(s.dir, s.along);
         for (const h of s.head) h.position.copy(at);
+        s.head[3].position.addScaledVector(s.dir, -0.6); // the cone sits just behind the round
+        // a pressure ring left behind every few hundredths of a second
+        s.ringT -= dt;
+        if (s.ringT <= 0) {
+          s.ringT = 0.03;
+          const r = s.rings[s.ringI++ % s.rings.length];
+          r.t = 0;
+          r.mesh.position.copy(at);
+          r.mesh.visible = true;
+        }
         s.head[0].scale.setScalar(0.9 + Math.random() * 0.25);
         this.glow.light(at, 0xffc070, 30, 0.06);
         // embers shed off the head, a few wisps of smoke
@@ -261,6 +310,15 @@ export class CombatFx {
           s.onEnd(at);
         }
       } else s.fade += dt;
+      for (const r of s.rings) {
+        if (r.t >= 1) {
+          r.mesh.visible = false;
+          continue;
+        }
+        r.t = Math.min(1, r.t + dt / 0.35);
+        r.mesh.scale.setScalar(0.4 + r.t * 1.8);
+        r.mesh.material.opacity = (1 - r.t) * 0.7;
+      }
       // the trail: from the muzzle to the head, thinning and fading once it's landed
       const k = 1 - Math.min(1, s.fade / FADE);
       const mid = s.from.clone().addScaledVector(s.dir, s.along / 2);

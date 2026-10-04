@@ -40,14 +40,15 @@ export const TANKS = {
     create: createLightTank,
     slots: 2,
     gun: 'autocannon',
-    move: 'boost',
-    moveName: 'Boost',
+    move: 'dash',
+    moveName: 'Dash',
     ability: 'breakthrough',
     abilityName: 'Breakthrough',
-    blurb: 'Fast and fragile. Hold to fire the autocannon; boost on its exhaust rockets; Breakthrough dashes through enemies, knocks them aside and spoils their aim.',
+    blurb: 'Fast and fragile. Hold to fire the autocannon; Dash on its exhaust rockets; Breakthrough charges through anything in the way, shielded, spoiling enemy aim.',
     unlockText: 'Beat level 1 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
-    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.6, boostCooldown: 5 },
+    // Shift: a quick, hard dash that recharges fast (boostCooldown)
+    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.6, boostCooldown: 3 },
     box: { cx: 0.2, hx: 1.55, hz: 0.88 },
     pic: { target: [0.15, 0.8, 0], half: 1.0 },
     anchors: {

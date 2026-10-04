@@ -29,9 +29,12 @@ export const BASE_STATS = {
   magReload: 0,
   pierceDamage: 140,
   pierceCooldown: 12,
-  // Breakthrough: a dash (seconds, x the boost speed) and its recharge
-  dashTime: 0.32,
-  dashSpeed: 1.5,
+  // the light tank's Dash (Shift): seconds, x the boost speed
+  dashTime: 0.3,
+  dashSpeed: 1.6,
+  // its Breakthrough (E): a slower, longer charge, and its recharge
+  breakTime: 1.5,
+  breakSpeed: 1.0,
   breakCooldown: 8,
   afterburner: false,
 };

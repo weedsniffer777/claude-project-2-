@@ -846,8 +846,10 @@ export function createTank() {
       // elevate or depress toward the target's height
       const dist = Math.hypot(ctx.aimPoint.x - tmp.x, ctx.aimPoint.z - tmp.z) - GUN_BASE_X;
       const dy = ctx.aimPoint.y - (tmp.y + WORLD_DECK_Y + GUN_Y);
-      const want = THREE.MathUtils.clamp(Math.atan2(dy, Math.max(0.4, dist)), GUN_DEPRESSION, GUN_ELEVATION);
-      gunElev += THREE.MathUtils.clamp(want - gunElev, -GUN_PITCH_SPEED * dt, GUN_PITCH_SPEED * dt);
+      // levelGun: held level (Piercing shot flies dead straight)
+      const want = ctx.levelGun ? 0 : THREE.MathUtils.clamp(Math.atan2(dy, Math.max(0.4, dist)), GUN_DEPRESSION, GUN_ELEVATION);
+      const pitch = GUN_PITCH_SPEED * (ctx.turretRate || 1) * dt;
+      gunElev += THREE.MathUtils.clamp(want - gunElev, -pitch, pitch);
     }
     if (ctx.mgPoint) {
       const want = wrapAngle(Math.atan2(-(ctx.mgPoint.z - tmp.z), ctx.mgPoint.x - tmp.x) - yaw - turret.rotation.y);

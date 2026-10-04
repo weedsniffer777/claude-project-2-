@@ -592,8 +592,9 @@ export function createLightTank() {
       aimError = Math.abs(wrapAngle(want - turret.rotation.y));
       const dist = Math.hypot(ctx.aimPoint.x - tmp.x, ctx.aimPoint.z - tmp.z) - GUN_BASE_X;
       const dy = ctx.aimPoint.y - (tmp.y + TURRET.y + GUN_Y);
-      const wantE = THREE.MathUtils.clamp(Math.atan2(dy, Math.max(0.4, dist)), GUN_DEPRESSION, GUN_ELEVATION);
-      gunElev += THREE.MathUtils.clamp(wantE - gunElev, -GUN_PITCH_SPEED * dt, GUN_PITCH_SPEED * dt);
+      const wantE = ctx.levelGun ? 0 : THREE.MathUtils.clamp(Math.atan2(dy, Math.max(0.4, dist)), GUN_DEPRESSION, GUN_ELEVATION);
+      const pitch = GUN_PITCH_SPEED * (ctx.turretRate || 1) * dt;
+      gunElev += THREE.MathUtils.clamp(wantE - gunElev, -pitch, pitch);
     }
     if (ctx.mgPoint) {
       const want = wrapAngle(Math.atan2(-(ctx.mgPoint.z - tmp.z), ctx.mgPoint.x - tmp.x) - yaw - turret.rotation.y);

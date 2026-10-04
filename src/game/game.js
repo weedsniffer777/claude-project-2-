@@ -64,6 +64,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   injectDevKitStyles();
   const canvas = renderer.domElement;
   let debug = null;
+  let bowShock = null; // Breakthrough's shock cone, on the light tank
   // the tank you drive: the one picked in the hangar (swapped on loading a
   // level)
   let tank = null;
@@ -74,6 +75,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function useTank(id) {
     if (id === tankId) return;
     tank?.group.removeFromParent();
+    bowShock = null;
     tankId = id;
     def = tankDef(id);
     tank = TANKS[def.id].create();
@@ -83,6 +85,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.group.traverse((o) => {
       if ((o.isMesh || o.isInstancedMesh) && !o.material.transparent && !o.userData.fx) o.layers.enable(PLAYER_LAYER);
     });
+    if (def.ability === 'breakthrough') tank.group.add((bowShock = makeBowShock()));
   }
   useTank(save.tank());
   const hud = createHud();
@@ -162,7 +165,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       ability: false, // the signature ability (E), once the level hands it over
       abilityCd: 0,
       aiming: 0, // Piercing shot: seconds left to aim it
-      dash: 0, // Breakthrough: seconds of dash left
+      dash: 0, // Dash (light tank's Shift): seconds left
+      brk: 0, // Breakthrough: seconds of charge left
       shield: 0, // Breakthrough: damage taken is cut while it lasts
       mag: stats.mag,
       magT: 0,
@@ -282,6 +286,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // tutorial tips: each one shows once, ever. lesson(id) is true the
     // first time (and marks it seen); seen(id) just asks.
     seen: (id) => save.tips().includes(id),
+    // this level beaten before (either difficulty): the generic callouts
+    // ("Enemies!") stay quiet, the level's own ones still show
+    get cleared() {
+      return save.cleared().some((k) => k === levelDef.id || k === `${levelDef.id}:hard`);
+    },
     lesson(id) {
       if (save.tips().includes(id)) return false;
       save.seeTip(id);
@@ -624,6 +633,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // tank's exhausts flare; either way it charges.
   function boost() {
     if (!run.rockets || run.over || run.mode !== 'field' || run.locked || run.boostCd > 0) return;
+    if (def.move === 'dash') {
+      // the light tank's Dash: an instant, hard burst, over in a moment
+      run.boostCd = stats.boostCooldown;
+      run.boosts++;
+      run.dash = stats.dashTime;
+      run.shield = stats.dashTime + 0.15;
+      speed = BOOST_SPEED * stats.dashSpeed;
+      for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.25, 1.4, 0.12);
+      combat.shake = Math.max(combat.shake, 0.22);
+      return launch(0.8);
+    }
     run.boost = stats.boostTime;
     run.boostCd = stats.boostCooldown;
     run.boosts++;
@@ -672,16 +692,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     } else if (def.ability === 'breakthrough') breakthrough();
   }
 
-  // Breakthrough (the light tank): an instant dash on full rockets,
-  // shielded, leaving a wall of smoke that spoils the machines' aim, ending
-  // in a shockwave that knocks them away.
+  // Breakthrough (the light tank's E): a deliberate charge on full rockets,
+  // shielded, a shock cone off the nose ploughing through whatever's in the
+  // way (barricades and all), knocking machines aside; smoke where it set
+  // off spoils their aim. It ends in a shockwave.
   function breakthrough() {
     if (run.abilityCd > 0) return;
     run.abilityCd = stats.breakCooldown;
     run.abilities = (run.abilities || 0) + 1;
-    run.dash = stats.dashTime;
-    run.shield = stats.dashTime + 0.4;
-    speed = BOOST_SPEED * stats.dashSpeed; // instant
+    run.brk = stats.breakTime;
+    run.shield = stats.breakTime + 0.4;
     launch(1);
     enemies.breakLocks(pos, 10);
     combat.shake = Math.max(combat.shake, 0.3);
@@ -698,6 +718,43 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         fadeAt: 0.6,
       });
     }
+  }
+  // the shock cone off the nose while it charges: a pale wedge with rings
+  // of pressure sliding back over it, like a body breaking the sound barrier
+  function makeBowShock() {
+    const g = new THREE.Group();
+    g.userData.fx = true;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.3, 14, 1, true), mat);
+    cone.rotation.z = Math.PI / 2; // apex forward (+x)
+    cone.position.x = -0.65;
+    g.add(cone);
+    const rings = [];
+    for (let i = 0; i < 4; i++) {
+      const r = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+      r.rotation.y = Math.PI / 2;
+      g.add(r);
+      rings.push(r);
+    }
+    g.userData = { fx: true, cone, rings };
+    g.visible = false;
+    return g;
+  }
+  function updateBowShock(t, on) {
+    if (!bowShock) return;
+    bowShock.userData.k = THREE.MathUtils.clamp((bowShock.userData.k || 0) + (on ? 0.12 : -0.08), 0, 1);
+    const k = bowShock.userData.k;
+    bowShock.visible = k > 0.01;
+    if (!bowShock.visible) return;
+    bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 0.35, 0.75, 0);
+    bowShock.scale.setScalar(TANK_BOX.hz * 0.95);
+    bowShock.userData.cone.material.opacity = (0.22 + Math.random() * 0.12) * k;
+    bowShock.userData.rings.forEach((r, i) => {
+      const u = (t * 2.6 + i / 4) % 1; // sliding back from the apex
+      r.position.x = -u * 1.3;
+      r.scale.setScalar(0.08 + u * 1.15);
+      r.material.opacity = (1 - u) * 0.6 * k;
+    });
   }
   // the end of the dash: a ring of force, machines knocked away and hurt
   function shockwave() {
@@ -734,6 +791,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function firePierce() {
     if (!(run.aiming > 0)) return;
     run.aiming = 0;
+    run.levelT = 0.5; // the barrel stays level through the shot
     pierceTouch = null;
     aimBeam.visible = false;
     run.abilityCd = stats.pierceCooldown;
@@ -771,10 +829,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
           hud.damage(p, stats.pierceDamage, 'big');
           if (killed) hud.damage(p.clone().setY(p.y + 0.7), 0, 'kill');
-          combat.glow.flash(p, 0xfff6d6, 0.3, 1.6, 0.1);
-          combat.fx.burst(p, { count: 22, speed: 8, color: 0xffd36b, life: 0.4, size: 0.09, gravity: 10 });
-          combat.shake = Math.max(combat.shake, 0.4);
+          combat.sparkBlast(p);
+          combat.shake = Math.max(combat.shake, 0.5);
           run.hitstop = Math.max(run.hitstop, 0.05);
+          run.dilate = Math.max(run.dilate || 0, 0.45); // and time drags for a moment
         }
         for (const c of level.crushables || []) {
           if (c.done || c.armored || broke.has(c)) continue;
@@ -1184,7 +1242,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     boostPics.set(key, pic);
     return pic;
   }
-  // Piercing shot's icon: a long round, a white-hot streak behind it
+  // Piercing shot's icon: a white-hot trail rising from bottom left to top
+  // right, rings of shock along it, the round at its head
   let pierceCanvas = null;
   function pierceArt() {
     if (pierceCanvas) return pierceCanvas;
@@ -1193,19 +1252,56 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const g = c.getContext('2d');
     g.fillStyle = '#1d1b1e';
     g.fillRect(0, 0, 26, 26);
-    const px = (x, y, w, h, col) => ((g.fillStyle = col), g.fillRect(x, y, w, h));
-    // the streak, rising left to right
-    for (let i = 0; i < 18; i++) px(1 + i, 18 - Math.floor(i * 0.55), 2, 2, i < 6 ? '#ff9a3a' : i < 12 ? '#ffd08a' : '#fff3c4');
-    // the round: a dark body, a brass band, a pointed tip
-    for (let i = 0; i < 6; i++) px(15 + i, 9 - Math.floor(i * 0.55), 3, 3, i < 2 ? '#c9a24a' : '#8e96a0');
-    px(21, 5, 2, 2, '#f1e9d8');
-    px(22, 4, 2, 2, '#f1e9d8');
-    // two enemies run through: small red marks either side of the line
-    px(7, 12, 3, 3, '#ff3b2f');
-    px(12, 8, 3, 3, '#ff3b2f');
+    const A = [3, 23];
+    const B = [18, 8];
+    const at = (k) => [A[0] + (B[0] - A[0]) * k, A[1] + (B[1] - A[1]) * k];
+    // the trail: a pale glow, then the white core, both fading toward the tail
+    for (let i = 0; i < 12; i++) {
+      const k0 = i / 12;
+      const [x0, y0] = at(k0);
+      const [x1, y1] = at(k0 + 1 / 12);
+      g.globalAlpha = 0.25 + 0.75 * k0;
+      g.strokeStyle = '#ffd9a0';
+      g.lineWidth = 5;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x1, y1);
+      g.stroke();
+      g.strokeStyle = '#ffffff';
+      g.lineWidth = 2.5;
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+    // the shock rings across it
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 1.5;
+    for (const [k, r] of [[0.42, 4.5], [0.72, 6]]) {
+      const [x, y] = at(k);
+      g.globalAlpha = 0.55 + k * 0.4;
+      g.beginPath();
+      g.ellipse(x, y, 1.6, r, -Math.PI / 4, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+    // the round
+    g.save();
+    g.translate(20, 6);
+    g.rotate(-Math.PI / 4);
+    g.fillStyle = '#9aa2ac';
+    g.fillRect(-4, -2, 6, 4);
+    g.fillStyle = '#c9a24a';
+    g.fillRect(-4, -2, 2, 4);
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(2, -2);
+    g.lineTo(5, 0);
+    g.lineTo(2, 2);
+    g.fill();
+    g.restore();
     return c;
   }
-  // Breakthrough's icon: chevrons punching forward out of a puff of smoke
+  // Breakthrough's icon: the light tank charging on its rockets, three
+  // white chevrons of shock ahead of its nose
   let breakCanvas = null;
   function breakArt() {
     if (breakCanvas) return breakCanvas;
@@ -1215,11 +1311,26 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     g.fillStyle = '#1d1b1e';
     g.fillRect(0, 0, 26, 26);
     const px = (x, y, w, h, col) => ((g.fillStyle = col), g.fillRect(x, y, w, h));
-    for (const [x, y, r] of [[4, 13, 4], [7, 9, 3], [6, 17, 3]]) px(x - r, y - r, r * 2, r * 2, '#b9bbb3'); // smoke
-    for (const [x0, col] of [[8, '#ff9a3a'], [13, '#ffd08a'], [18, '#fff3c4']]) {
-      for (let i = 0; i < 6; i++) {
-        px(x0 + i, 7 + i, 3, 2, col);
-        px(x0 + i, 18 - i, 3, 2, col);
+    // rocket flame out the back
+    px(0, 13, 3, 3, '#ff9a3a');
+    px(1, 14, 3, 1, '#fff3c4');
+    // tracks and wheels
+    px(3, 18, 12, 3, '#2b2b25');
+    for (const x of [4, 7, 10, 13]) px(x, 19, 1, 1, '#6a6e58');
+    // hull: a low box with a sloped nose
+    px(3, 14, 12, 4, '#5b6a3c');
+    px(15, 15, 1, 3, '#5b6a3c');
+    px(5, 15, 3, 1, '#6e5639'); // camo
+    px(10, 16, 2, 1, '#2b2b25');
+    // turret and gun
+    px(5, 11, 7, 3, '#4a5731');
+    px(7, 10, 3, 1, '#4a5731');
+    px(12, 12, 4, 1, '#232426');
+    // three chevrons of shock ahead of the nose
+    for (const x0 of [16, 19, 22]) {
+      for (let i = 0; i < 3; i++) {
+        px(x0 + i, 12 + i, 2, 1, '#ffffff');
+        px(x0 + i, 18 - i, 2, 1, '#ffffff');
       }
     }
     return c;
@@ -1397,7 +1508,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (keys.has('KeyA') || keys.has('ArrowLeft')) input.sub(INPUT_RIGHT);
         if (stick.id !== null) input.addScaledVector(INPUT_RIGHT, stick.x).addScaledVector(INPUT_FORWARD, -stick.y);
       }
-      const boosting = run.boost > 0 || run.dash > 0;
+      const boosting = run.boost > 0 || run.dash > 0 || run.brk > 0;
       let want = 0;
       let accel = ACCEL;
       let throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
@@ -1420,7 +1531,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (input.lengthSq() > 0.02) {
         input.normalize();
         const heading = Math.atan2(-input.z, input.x);
-        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * (boosting ? (run.dash > 0 ? 0.15 : 0.45) : 1) * dt);
+        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * (boosting ? (run.dash > 0 ? 0.15 : run.brk > 0 ? 0.6 : 0.45) : 1) * dt);
         const off = Math.abs(wrapAngle(heading - tank.group.rotation.y));
         want = MAX_SPEED * stats.speed * throttle * Math.max(0, Math.cos(off));
       }
@@ -1435,10 +1546,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         want = BOOST_SPEED * stats.dashSpeed;
         accel = 200;
         if (run.dash <= 0) {
-          speed = Math.min(speed, MAX_SPEED * stats.speed); // straight back to driving speed
-          shockwave();
+          speed = Math.min(speed, MAX_SPEED * stats.speed * 1.2); // straight back to (nearly) driving speed
+          landing();
         }
       }
+      if (run.brk > 0) {
+        run.brk -= dt;
+        want = BOOST_SPEED * stats.breakSpeed;
+        accel = 40;
+        if (run.brk <= 0) shockwave();
+      }
+      updateBowShock(t, run.brk > 0);
       speed += THREE.MathUtils.clamp(want - speed, -accel * dt, accel * dt);
       const yaw = tank.group.rotation.y;
       const before = tmp.copy(pos);
@@ -1553,7 +1671,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         camera.zoom = zoom;
         camera.updateProjectionMatrix();
       }
-      hud.setSpeed(run.over ? 0 : Math.min(1, speedK * (run.dash > 0 ? 1 : 0.7) + run.punch * 0.5));
+      hud.setSpeed(run.over ? 0 : Math.min(1, speedK * 0.22 + run.punch * 1.2)); // a rush at the kick, then just a few faint streaks
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       camera.updateMatrixWorld();
@@ -1582,7 +1700,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
       mgActive = !!mgTarget;
 
-      tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.aiming > 0 ? 1 / AIM_SLOW : 1 }); // the turret keeps its real speed while time's slowed
+      tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
+      run.levelT = Math.max(0, (run.levelT || 0) - realDt); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
       for (const e of tank.events) {
         if (e.type !== 'mg' || !mgTarget?.alive || Math.random() > MG_ACCURACY) continue;
@@ -1651,7 +1770,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const live = !run.over && run.mode === 'field';
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
-      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.dash > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
+      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
