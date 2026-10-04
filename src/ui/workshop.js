@@ -8,7 +8,7 @@
 //    speed every level.
 // A level up pops; an evolve flashes the screen in the new tier's colour,
 // throws sparks, slams a banner down and grows the bars.
-import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, partEffects, partPerk, statsFor } from '../game/parts.js';
+import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { tankPicture } from './fitting.js';
@@ -321,7 +321,9 @@ export function createWorkshop({ renderer, cursor }) {
       b.type = 'button';
       b.className = `card${id === selTank ? ' sel' : ''}`;
       b.style.setProperty('--tc', '#ffb347');
-      b.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}"><span class="tn">Lv ${lvl}</span><span class="nm"></span>${lvl < TANK_MAX && save.bank() >= tankLevelCost(lvl) ? '<span class="can">Can level up</span>' : ''}`;
+      const promo = tankPromotes(lvl);
+      const can = lvl < TANK_MAX && (promo ? save.bank() >= tankPromoteCost(lvl).scraps && save.tokens() >= tankPromoteCost(lvl).tokens : save.bank() >= tankLevelCost(lvl));
+      b.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}"><span class="tn">Lv ${lvl}</span><span class="nm"></span>${can ? `<span class="can${promo ? ' ev' : ''}">${promo ? 'Can promote' : 'Can level up'}</span>` : ''}`;
       b.querySelector('.nm').textContent = TANKS[id].name;
       b.addEventListener('click', () => {
         if (busy) return;
@@ -345,8 +347,13 @@ export function createWorkshop({ renderer, cursor }) {
     if (!id) return void (d.innerHTML = '');
     const lvl = save.tankLevel(id);
     const max = lvl >= TANK_MAX;
-    const cost = tankLevelCost(lvl);
+    // every tenth level the next is a promotion: tokens too
+    const promo = tankPromotes(lvl);
+    const pc = promo ? tankPromoteCost(lvl) : null;
+    const cost = promo ? pc.scraps : tankLevelCost(lvl);
+    const tokens = promo ? pc.tokens : 0;
     const short = Math.max(0, cost - save.bank());
+    const shortT = Math.max(0, tokens - save.tokens());
     d.style.setProperty('--tc', '#ffb347');
     const at = (l) => statsFor([], id, null, l);
     const now = at(lvl);
@@ -356,7 +363,7 @@ export function createWorkshop({ renderer, cursor }) {
     d.innerHTML = `
       <div class="head">
         <div class="frame"><img alt="" src="${tankPicture(renderer, id, 216, 144)}"><i class="ring"></i></div>
-        <div class="who"><span class="tier">Tank</span><h2></h2><div class="lvl">Lv ${lvl}<small>/ ${TANK_MAX}</small></div><div class="lbar"><i style="width:${(lvl / TANK_MAX) * 100}%"></i></div><p>Every level: a little more hull, gun and speed. Parts add on top.</p></div>
+        <div class="who"><span class="tier">Tank</span><h2></h2><div class="lvl">Lv ${lvl}<small>/ ${TANK_MAX}</small></div><div class="lbar"><i style="width:${(lvl / TANK_MAX) * 100}%"></i></div><p>Every level: a little more hull, gun and speed. Every tenth, a promotion (tokens too). Parts add on top.</p></div>
       </div>
       ${max ? '' : `<div class="step" style="--from:#ffb347;--to:#ffb347"><b>Lv ${lvl}</b><i class="arrow"></i><b class="to">Lv ${lvl + 1}</b></div>`}
       <div class="stats">${TANK_ROWS.filter(([key]) => key !== 'breakShield' || TANKS[id].ability === 'breakthrough').map(([key, label, fmt]) => {
@@ -364,16 +371,24 @@ export function createWorkshop({ renderer, cursor }) {
         const gain = !max && fmt(nx[key]) !== fmt(now[key]) ? fmt(nx[key]) : null;
         return `<span class="lb">${label}</span><span class="sbar${max ? ' full' : ''}"><i class="max" style="width:100%"></i><i class="next" style="width:${k(gain ? nx : now) * 100}%"></i><i class="now" style="width:${k(now) * 100}%"></i></span><span class="val">${fmt(now[key])}${gain ? ` <span class="gain">→ ${gain}</span>` : ''}</span>`;
       }).join('')}</div>
-      <button type="button" class="go${max ? ' maxed' : ''}" ${!max && short ? 'disabled' : ''}>${max ? 'Max level' : short ? `Need ${short} more scraps` : `Level up<span class="cost"><i></i>${cost}</span>`}</button>`;
+      <button type="button" class="go${max ? ' maxed' : promo ? ' ev' : ''}" ${!max && (short || shortT) ? 'disabled' : ''}>${
+        max
+          ? 'Max level'
+          : short || shortT
+            ? `Need ${[short && `${short} more scraps`, shortT && `${shortT} more tokens`].filter(Boolean).join(' and ')}`
+            : promo
+              ? `Promote to Lv ${lvl + 1}<span class="cost"><i></i>${cost}</span><span class="cost tk"><i></i>${tokens}</span>`
+              : `Level up<span class="cost"><i></i>${cost}</span>`
+      }</button>`;
     d.querySelector('h2').textContent = TANKS[id].name;
     d.querySelector('.go').addEventListener('click', () => {
-      if (max || busy || save.bank() < cost) return;
-      spend({ scraps: cost, tokens: 0 });
+      if (max || busy || save.bank() < cost || save.tokens() < tokens) return;
+      spend({ scraps: cost, tokens });
       save.setTankLevel(id, lvl + 1);
       o?.onChange?.(null);
       const redraw = () => (renderTanks(), renderTank());
-      // every tenth level gets the full show
-      if ((lvl + 1) % 10 === 0) evolve(null, { name: `Level ${lvl + 1}`, color: '#ffb347' }, TANKS[id].name, redraw);
+      // a promotion gets the full show
+      if (promo) evolve(null, { name: 'Promoted', color: '#c77dff' }, `${TANKS[id].name} · Lv ${lvl + 1}`, redraw);
       else levelPop(redraw);
     });
   }
@@ -524,6 +539,6 @@ export const evolveReady = () => save.owned().filter((id) => PARTS[id] && canEvo
 // the upgrades screen yet? (the hangar and its button glow)
 export function upgradeHint() {
   if (save.tips().includes('upgrades')) return false;
-  if (save.tanks().some((t) => save.tankLevel(t) < TANK_MAX && save.bank() >= tankLevelCost(save.tankLevel(t)))) return true;
+  if (save.tanks().some((t) => save.tankLevel(t) < TANK_MAX && !tankPromotes(save.tankLevel(t)) && save.bank() >= tankLevelCost(save.tankLevel(t)))) return true;
   return save.owned().some((id) => PARTS[id] && levelOf(id) < MAX_LEVEL && !evolvesAt(levelOf(id)) && save.bank() >= levelCost(levelOf(id)));
 }

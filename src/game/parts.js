@@ -560,6 +560,9 @@ export const evolveCost = (lvl) => (lvl === 10 ? { scraps: 600, tokens: 3 } : { 
 // Tank levels, 1 to 50, for scraps: a little more hull, gun and speed each.
 export const TANK_MAX = 50;
 export const tankLevelCost = (lvl) => 100 + 30 * (lvl - 1);
+// at 10, 20, 30, 40 the next level is a promotion: tokens as well as scraps
+export const tankPromotes = (lvl) => lvl % 10 === 0 && lvl < TANK_MAX;
+export const tankPromoteCost = (lvl) => ({ scraps: tankLevelCost(lvl) * 2, tokens: 2 + lvl / 5 });
 export function applyTankLevel(s, lvl) {
   const k = lvl - 1;
   s.maxHp *= 1 + 0.015 * k;
