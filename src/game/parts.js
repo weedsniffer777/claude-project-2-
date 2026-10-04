@@ -284,6 +284,7 @@ export const PARTS = {
     apply(s) {
       s.twinMg = true;
       s.extraMgs = Math.max(s.extraMgs, 1);
+      s.mgDamage += 0.3; // (and its levels make every MG hit a bit harder)
     },
     tiers: [
       { text: 'One more machine gun: three in all.', apply: (s) => (s.extraMgs = 2) },
@@ -478,33 +479,84 @@ export function attachPart(tank, id) {
   return g;
 }
 
-// Tiers: every part is found Rare; scraps in the hangar take it to Epic
-// (an improvement of its own) then Legendary (a perk that changes how it
-// plays). A part's tier goes with it to whichever tank carries it.
+// Levels and tiers. A part is found at level 1 and goes up to 30: levels
+// 1-10 are Rare, 11-20 Epic, 21-30 Legendary. Scraps level it up within a
+// tier (each level a little better: by level 10 it's half way to the next
+// tier's numbers); at 10 and 20 it evolves, for scraps and upgrade tokens,
+// to the next tier (Epic: its full numbers; Legendary: its perk too). A
+// part's level goes with it to whichever tank carries it.
 export const TIERS = [
   { name: 'Rare', color: '#5fa8e8' },
   { name: 'Epic', color: '#b884f0' },
   { name: 'Legendary', color: '#ffc24a' },
 ];
-export const TIER_COST = [0, 1000, 3000]; // scraps to reach each tier
-export const tierOf = (id) => Math.min(TIERS.length - 1, save.tiers()[id] || 0);
+export const MAX_LEVEL = 30;
+export const levelOf = (id) => Math.max(1, Math.min(MAX_LEVEL, save.partLevel(id)));
+export const tierOfLevel = (lvl) => Math.min(TIERS.length - 1, Math.floor((lvl - 1) / 10));
+export const tierOf = (id) => tierOfLevel(levelOf(id));
+// at 10 and 20 the next step is an evolve, not a level
+export const evolvesAt = (lvl) => lvl % 10 === 0 && lvl < MAX_LEVEL;
+// scraps for the next level (within a tier)
+export function levelCost(lvl) {
+  const k = (lvl - 1) % 10 + 1; // 1..9 within the tier
+  return [100 + 30 * k, 300 + 60 * k, 800 + 150 * k][tierOfLevel(lvl)];
+}
+// scraps and tokens to evolve at 10 (to Epic) and 20 (to Legendary)
+export const evolveCost = (lvl) => (lvl === 10 ? { scraps: 600, tokens: 3 } : { scraps: 2000, tokens: 8 });
 
-export function statsFor(parts, tank = 'battle', tiers = null) {
-  const s = { ...BASE_STATS, ...tankDef(tank).stats };
-  for (const id of parts) {
-    const p = PARTS[id];
-    p.apply(s);
-    const tier = tiers ? tiers[id] || 0 : tierOf(id);
-    for (let k = 0; k < tier; k++) p.tiers?.[k]?.apply(s);
+// Tank levels, 1 to 50, for scraps: a little more hull, gun and speed each.
+export const TANK_MAX = 50;
+export const tankLevelCost = (lvl) => 100 + 30 * (lvl - 1);
+export function applyTankLevel(s, lvl) {
+  const k = lvl - 1;
+  s.maxHp *= 1 + 0.015 * k;
+  s.cannonDamage *= 1 + 0.012 * k;
+  s.mgDamage *= 1 + 0.01 * k;
+  s.speed *= 1 + 0.003 * k;
+}
+
+const INT_KEYS = new Set(['mag', 'extraMgs', 'view']); // (view: the camera; it only widens by tier)
+const PER_LEVEL = 0.8 / 29; // by level 30, the part's own effect most of the way to twice as strong
+// a part at a level, applied to s: its tier's numbers, then every level past
+// the first makes what the part improves a little better again (a share of
+// its own effect, compounding for the stats it scales). Perks and switches
+// come with the tier; whole numbers (machine guns, rounds) only by tier.
+function applyPart(s, id, lvl) {
+  const p = PARTS[id];
+  const tier = tierOfLevel(lvl);
+  const bare = { ...s };
+  const r1 = { ...s };
+  p.apply(r1);
+  const S = { ...s };
+  p.apply(S);
+  for (let k = 0; k < tier; k++) p.tiers?.[k]?.apply(S);
+  const n = (lvl - 1) * PER_LEVEL;
+  if (n > 0) {
+    for (const [key, , , dir] of STAT_ROWS) {
+      const a = bare[key];
+      const b = r1[key];
+      if (typeof a !== 'number' || typeof b !== 'number' || a === b || INT_KEYS.has(key)) continue;
+      if ((b - a) * dir <= 0) continue; // a cost of the part (a longer recharge) doesn't grow
+      S[key] = a ? S[key] * Math.pow(b / a, n) : S[key] + (b - a) * n;
+    }
   }
+  Object.assign(s, S);
+}
+
+// levels: { partId: level } to use instead of the saved ones; tankLevel
+// likewise (null: the saved one)
+export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null) {
+  const s = { ...BASE_STATS, ...tankDef(tank).stats };
+  applyTankLevel(s, tankLevel ?? save.tankLevel(tank));
+  for (const id of parts) applyPart(s, id, levels?.[id] ?? levelOf(id));
   // the light tank's affinity for spotting: one more mark
   if (s.spotter && tank === 'light') s.spotter += 1;
   return s;
 }
 
 // What a part does, as numbers: each stat it changes, from -> to, and
-// whether that's better. tier: the part at that tier against the bare tank;
-// with `from` (a tier), that tier against the one above it (an upgrade).
+// whether that's better. lvl: the part at that level against the bare tank
+// (at level 1); with `from` (a level), that level against this one.
 const pct = (v) => `${Math.round(v * 100)}%`;
 const secs = (v) => `${+v.toFixed(2)} s`;
 const STAT_ROWS = [
@@ -516,6 +568,7 @@ const STAT_ROWS = [
   ['mag', 'Rounds', (v) => `${v}`, 1],
   ['magReload', 'Magazine reload', secs, -1],
   ['extraMgs', 'Machine guns', (v) => `${v + 1}`, 1],
+  ['mgDamage', 'MG damage', (v) => `${+v.toFixed(1)}`, 1],
   ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
   ['ramDamage', 'Ram damage without boost', (v) => `${Math.round(v)}`, 1],
   ['view', 'View', pct, 1],
@@ -524,9 +577,9 @@ const STAT_ROWS = [
   ['boostTime', 'Boost time', secs, 1],
   ['boostCooldown', 'Boost recharge', secs, -1],
 ];
-export function partEffects(id, tank = 'battle', tier = tierOf(id), from = null) {
-  const a = from == null ? statsFor([], tank) : statsFor([id], tank, { [id]: from });
-  const b = statsFor([id], tank, { [id]: tier });
+export function partEffects(id, tank = 'battle', lvl = levelOf(id), from = null) {
+  const a = from == null ? statsFor([], tank, null, 1) : statsFor([id], tank, { [id]: from }, 1);
+  const b = statsFor([id], tank, { [id]: lvl }, 1);
   const rows = [];
   for (const [key, label, fmt, dir] of STAT_ROWS) {
     const x = +a[key];
@@ -546,10 +599,11 @@ export function partPerk(id) {
   const t = PARTS[id].tiers?.[TIERS.length - 2];
   return t?.perk ? { name: t.perk, text: t.perkText } : null;
 }
-// as HTML: coloured rows (and the perk, if it has it at that tier)
-export function effectsHtml(id, tank, tier = tierOf(id)) {
+// as HTML: coloured rows (and the perk, if it has it at that level)
+export function effectsHtml(id, tank, lvl = levelOf(id)) {
+  const tier = tierOfLevel(lvl);
   const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const rows = partEffects(id, tank, tier)
+  const rows = partEffects(id, tank, lvl)
     .map((r) => `<div class="fx-row"><span>${r.label}</span><b class="${r.good ? 'good' : 'bad'}">${r.delta}</b></div>`)
     .join('');
   const perk = tier >= TIERS.length - 1 && partPerk(id);

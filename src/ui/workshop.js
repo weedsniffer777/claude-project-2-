@@ -1,33 +1,42 @@
-// The upgrades screen (the workshop), opened from the hangar. Its own big
-// screen so an upgrade feels like something: every part you own down the
-// left; the one picked large on the right, with bars for what the next tier
-// adds (filled to where it is now, the gain in green, full at Legendary),
-// the Legendary perk waiting, the cost and a big button. Upgrading flashes
-// the screen in the new tier's colour, bursts sparks off the part, slams a
-// banner down and grows the bars.
-import { PARTS, TIERS, TIER_COST, tierOf, partEffects, partPerk } from '../game/parts.js';
-import { TANKS } from '../game/tanks.js';
+// The upgrades screen (the workshop), opened from the hangar. Two tabs:
+//  Parts: every part you own; the one picked large, its level (1-30: Rare
+//    1-10, Epic 11-20, Legendary 21-30), bars for what it does (full at
+//    level 30: filled to now, the next level's gain in green), its
+//    Legendary perk, and the button: Level up for scraps, or at 10 and 20
+//    Evolve to the next tier for scraps and upgrade tokens.
+//  Tanks: each tank's level (1-50) for scraps: a little more hull, gun and
+//    speed every level.
+// A level up pops; an evolve flashes the screen in the new tier's colour,
+// throws sparks, slams a banner down and grows the bars.
+import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, partEffects, partPerk, statsFor } from '../game/parts.js';
+import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
+import { tankPicture } from './fitting.js';
 import { save } from '../game/save.js';
 
 const CSS = `
-.ws { position: fixed; inset: 0; z-index: 13; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 560px); grid-template-rows: auto minmax(0, 1fr); gap: 18px 26px; justify-content: center; align-content: center;
+.ws { position: fixed; inset: 0; z-index: 13; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 560px); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 26px; justify-content: center; align-content: center;
   padding: calc(18px + env(safe-area-inset-top, 0px)) 20px calc(18px + env(safe-area-inset-bottom, 0px)); background: rgba(8, 7, 9, 0.78);
-  color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --go: #6be08a; }
+  color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --go: #6be08a; --tok: #c77dff; }
 .ws[hidden] { display: none !important; }
 .ws [hidden] { display: none !important; }
 .ws button { cursor: var(--cursor); font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; border: 0; color: #f1e9d8; }
 .ws .pnl { background: rgba(12, 11, 13, 0.94); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 4px 4px 0 4px #000; }
-.ws .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; }
+.ws .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ws .top h1 { margin: 0; font: 400 26px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.04em; color: var(--amber); text-shadow: 3px 3px 0 #000; }
 .ws .bank { display: flex; gap: 8px; align-items: center; padding: 6px 12px; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
 .ws .bank i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .ws .bank b { font-weight: 400; color: #f1e9d8; font-variant-numeric: tabular-nums; }
+.ws .bank.tk { color: #d9a8ff; }
+.ws .bank.tk i { width: 13px; height: 13px; border-radius: 50%; clip-path: none; background: var(--tok); box-shadow: inset -2px -2px 0 #8a3fc4; }
 .ws .bank.spend { animation: wsSpend 0.5s steps(4); }
 @keyframes wsSpend { 30% { transform: scale(1.15); color: #ff7a6a; } }
 .ws .top .back { margin-left: auto; padding: 9px 16px 10px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.ws .tabs { grid-column: 1 / -1; display: flex; gap: 12px; }
+.ws .tabs button { padding: 9px 18px 10px; font-size: 13px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.ws .tabs button.on { color: #111; background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .ws .first { grid-column: 1 / -1; padding: 10px 14px; font-size: 14px; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
-.ws .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; padding: 14px; overflow-y: auto; max-height: 70vh; }
+.ws .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; padding: 14px; overflow-y: auto; max-height: 66vh; }
 .ws .list .empty { grid-column: 1 / -1; font-size: 14px; color: #8f877a; }
 .ws .card { position: relative; display: grid; gap: 4px; justify-items: center; padding: 8px 6px 9px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--tc); text-align: center; }
 .ws .card img { width: 96px; height: 64px; image-rendering: pixelated; }
@@ -36,19 +45,24 @@ const CSS = `
 .ws .card.sel { background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 0 6px var(--tc); }
 .ws .card:hover { filter: brightness(1.15); }
 .ws .card .can { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font-size: 9px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
-.ws .pips { display: flex; gap: 4px; }
-.ws .pips i { width: 10px; height: 10px; background: #2a2628; box-shadow: 0 0 0 2px #000; }
-.ws .pips i.on { background: var(--c); }
+.ws .card .can.ev { background: var(--tok); }
 .ws .detail { position: relative; display: grid; gap: 12px; padding: 18px 20px 20px; align-content: start; overflow: hidden; }
 .ws .head { display: flex; gap: 18px; align-items: center; }
 .ws .frame { position: relative; flex: none; width: 216px; height: 144px; background: #141215; box-shadow: 0 0 0 3px #000, 0 0 0 6px var(--tc), 0 0 24px -4px var(--tc); }
 .ws .frame img { width: 100%; height: 100%; image-rendering: pixelated; }
 .ws .frame .ring { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px; border: 4px solid var(--tc); opacity: 0; pointer-events: none; }
-.ws .who { display: grid; gap: 8px; min-width: 0; }
+.ws .who { display: grid; gap: 7px; min-width: 0; }
 .ws .who .tier { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--tc); letter-spacing: 0.08em; }
 .ws .who h2 { margin: 0; font: 400 24px/1.05 'Silkscreen', monospace; text-transform: uppercase; text-wrap: balance; }
 .ws .who p { margin: 0; font-size: 14px; color: #b9b0a0; }
 .ws .who .on { font-size: 12px; color: #8f877a; }
+.ws .lvl { position: relative; display: flex; align-items: baseline; gap: 8px; font: 400 18px/1 'Silkscreen', monospace; text-transform: uppercase; }
+.ws .lvl small { font-size: 11px; color: #8f877a; }
+.ws .pips { display: flex; gap: 3px; }
+.ws .pips i { width: 9px; height: 9px; background: #2a2628; box-shadow: 0 0 0 2px #000; }
+.ws .pips i.on { background: var(--tc); }
+.ws .lbar { position: relative; height: 10px; background: #2a2628; box-shadow: 0 0 0 2px #000; }
+.ws .lbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tc); }
 .ws .step { display: flex; align-items: center; gap: 10px; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #8f877a; }
 .ws .step b { font-weight: 400; color: var(--from); }
 .ws .step b.to { color: var(--to); }
@@ -69,20 +83,25 @@ const CSS = `
 .ws .perk b { font: 400 15px/1.1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; }
 .ws .perk span { font-size: 14px; color: #e8dcc0; }
 .ws .perk.locked { filter: saturate(0.4) brightness(0.8); }
-.ws .perk.locked .k::after { content: ' · at Legendary'; color: #b9b0a0; }
-.ws .go { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 20px 17px; font-size: 17px; color: #111; background: var(--go); box-shadow: 0 5px 0 #2f6b40, 0 0 0 2px #000; }
+.ws .perk.locked .k::after { content: ' · at Legendary (level 21)'; color: #b9b0a0; }
+.ws .go { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 16px 20px 17px; font-size: 17px; color: #111; background: var(--go); box-shadow: 0 5px 0 #2f6b40, 0 0 0 2px #000; }
+.ws .go.ev { background: var(--tok); box-shadow: 0 5px 0 #6a2fa0, 0 0 0 2px #000; animation: wsEv 1.2s steps(2) infinite; }
+@keyframes wsEv { 50% { box-shadow: 0 5px 0 #6a2fa0, 0 0 0 2px #000, 0 0 18px 2px #c77dffaa; } }
 .ws .go .cost { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 13px; background: #111; color: var(--amber); }
 .ws .go .cost i { width: 8px; height: 12px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.ws .go .cost.tk { color: #d9a8ff; }
+.ws .go .cost.tk i { width: 11px; height: 11px; border-radius: 50%; clip-path: none; background: var(--tok); }
 .ws .go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
-.ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: default; }
+.ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: default; animation: none; }
 .ws .go.maxed { color: #111; background: #ffc24a; box-shadow: 0 5px 0 #8a5a1c, 0 0 0 2px #000; }
 .ws .flash { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 2; }
 .ws .banner { position: fixed; left: 50%; top: 42%; z-index: 3; transform: translate(-50%, -50%); pointer-events: none; font: 400 64px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--tc); text-shadow: 4px 4px 0 #000, -3px 0 0 #000, 3px 0 0 #000, 0 -3px 0 #000, 0 0 30px var(--tc); opacity: 0; white-space: nowrap; }
 .ws .banner small { display: block; margin-top: 10px; font-size: 18px; color: #f1e9d8; text-align: center; }
+.ws .plus { position: absolute; left: 100%; top: -4px; margin-left: 10px; font: 400 16px/1 'Silkscreen', monospace; color: var(--go); text-shadow: 2px 2px 0 #000; pointer-events: none; white-space: nowrap; }
 .ws .spark { position: fixed; z-index: 3; width: 8px; height: 8px; pointer-events: none; box-shadow: 0 0 0 2px #000; }
 @media (max-width: 860px) {
-  .ws { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); align-content: start; overflow-y: auto; }
+  .ws { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); align-content: start; overflow-y: auto; }
   .ws .list { display: flex; overflow-x: auto; overflow-y: hidden; max-height: none; padding: 12px; }
   .ws .card { flex: none; width: 120px; }
   .ws .card img { width: 72px; height: 48px; }
@@ -106,21 +125,40 @@ export function createWorkshop({ renderer, cursor }) {
   root.hidden = true;
   root.style.setProperty('--cursor', cursor);
   root.innerHTML = `
-    <div class="top"><h1>Upgrades</h1><div class="bank pnl"><i></i>Scraps <b>0</b></div><button type="button" class="back">Back</button></div>
-    <div class="first" hidden>Spend scraps to upgrade a part. <b>Epic</b> makes its numbers better; <b>Legendary</b> adds a special perk. Upgrades stay with the part, on whichever tank you fit it to.</div>
+    <div class="top"><h1>Upgrades</h1><div class="bank pnl sc"><i></i>Scraps <b>0</b></div><div class="bank pnl tk"><i></i>Tokens <b>0</b></div><button type="button" class="back">Back</button></div>
+    <div class="tabs"><button type="button" data-tab="parts">Parts</button><button type="button" data-tab="tanks">Tanks</button></div>
+    <div class="first" hidden>Spend scraps to <b>level up</b> parts and tanks. At level 10 and 20 a part <b>evolves</b> to the next tier (Epic, then Legendary with a special perk); that also costs <b>upgrade tokens</b>, rare drops from enemies.</div>
     <div class="list pnl"></div>
     <div class="detail pnl"></div>
     <div class="flash"></div>`;
   for (const ev of ['pointerdown', 'pointerup', 'click', 'wheel']) root.addEventListener(ev, (e) => e.stopPropagation());
   const $ = (s) => root.querySelector(s);
   let o = null; // { tankId, onClose, onChange }
+  let tab = 'parts';
   let sel = null;
+  let selTank = null;
   let busy = false;
   $('.back').addEventListener('click', () => !busy && close());
+  for (const b of root.querySelectorAll('.tabs button'))
+    b.addEventListener('click', () => {
+      if (busy) return;
+      tab = b.dataset.tab;
+      render();
+    });
 
-  const tankFor = (id) => ['battle', 'light'].find((t) => save.loadout(t).includes(id)) || o.tankId;
-  const canAfford = (id) => tierOf(id) < TIERS.length - 1 && save.bank() >= TIER_COST[tierOf(id) + 1];
-  const pips = (tier) => `<span class="pips">${TIERS.map((t, k) => `<i class="${k <= tier ? 'on' : ''}" style="--c:${TIERS[tier].color}"></i>`).join('')}</span>`;
+  const tankFor = (id) => TANK_ORDER.find((t) => save.loadout(t).includes(id)) || o.tankId;
+  // what the next step for a part costs, and whether it's an evolve
+  function nextStep(id) {
+    const lvl = levelOf(id);
+    if (lvl >= MAX_LEVEL) return null;
+    if (evolvesAt(lvl)) return { evolve: true, ...evolveCost(lvl) };
+    return { evolve: false, scraps: levelCost(lvl), tokens: 0 };
+  }
+  const affordable = (n) => !!n && save.bank() >= n.scraps && save.tokens() >= n.tokens;
+  const tierPips = (lvl) => {
+    const within = ((lvl - 1) % 10) + 1;
+    return `<span class="pips">${Array.from({ length: 10 }, (_, k) => `<i class="${k < within ? 'on' : ''}"></i>`).join('')}</span>`;
+  };
 
   function close() {
     root.hidden = true;
@@ -128,19 +166,38 @@ export function createWorkshop({ renderer, cursor }) {
     o = null;
     cb?.();
   }
+  function setBank() {
+    $('.bank.sc b').textContent = save.bank();
+    $('.bank.tk b').textContent = save.tokens();
+  }
 
+  function render() {
+    for (const b of root.querySelectorAll('.tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+    setBank();
+    if (tab === 'parts') {
+      renderList();
+      renderDetail();
+    } else {
+      renderTanks();
+      renderTank();
+    }
+  }
+
+  // ------------------------------------------------------------- parts
   function renderList() {
     const list = $('.list');
     const owned = save.owned().filter((id) => PARTS[id]);
     list.innerHTML = owned.length ? '' : '<span class="empty">No parts yet. Find them at checkpoints.</span>';
     for (const id of owned) {
-      const tier = tierOf(id);
+      const lvl = levelOf(id);
+      const tier = tierOfLevel(lvl);
+      const n = nextStep(id);
       const b = document.createElement('button');
       b.type = 'button';
       b.className = `card${id === sel ? ' sel' : ''}`;
       b.dataset.id = id;
       b.style.setProperty('--tc', TIERS[tier].color);
-      b.innerHTML = `<img alt="" src="${partPicture(renderer, id, 96, 64)}"><span class="tn">${TIERS[tier].name}</span><span class="nm"></span>${pips(tier)}${canAfford(id) ? '<span class="can">Can upgrade</span>' : ''}`;
+      b.innerHTML = `<img alt="" src="${partPicture(renderer, id, 96, 64)}"><span class="tn">${TIERS[tier].name} · Lv ${lvl}</span><span class="nm"></span>${tierPips(lvl)}${affordable(n) ? `<span class="can${n.evolve ? ' ev' : ''}">${n.evolve ? 'Can evolve' : 'Can level up'}</span>` : ''}`;
       b.querySelector('.nm').textContent = PARTS[id].name;
       b.addEventListener('click', () => {
         if (busy) return;
@@ -152,27 +209,27 @@ export function createWorkshop({ renderer, cursor }) {
     }
   }
 
-  // each stat the part changes, as a bar: full at its Legendary value
-  // (lower-is-better stats inverted), filled to now, the next tier's gain
-  // in green
-  function statRows(id, tank, tier) {
-    const byTier = [0, 1, 2].map((t) => partEffects(id, tank, t));
-    const keys = [...new Set(byTier.flatMap((rows) => rows.map((r) => r.key)))];
+  // bars over the part's whole range, full at level 30 (lower-is-better
+  // stats inverted): filled to now, the next step's gain in green
+  function statRows(id, tank, lvl) {
+    const at = (l) => partEffects(id, tank, l);
+    const now = at(lvl);
+    const nx = at(Math.min(MAX_LEVEL, lvl + 1));
+    const top = at(MAX_LEVEL);
+    const keys = [...new Set([...top, ...nx, ...now].map((r) => r.key))];
     return keys.map((key) => {
-      const at = (t) => byTier[t].find((r) => r.key === key);
-      const ref = at(2) || at(1) || at(0);
-      const g = (v) => (ref.dir > 0 ? v : 1 / Math.max(v, 1e-3));
-      const base = g(ref.a);
-      const max = g(ref.b);
-      const span = Math.abs(max - base) < 1e-6 ? 1 : max - base;
-      // how much of the way from the bare tank to Legendary this tier is
-      const k = (t) => {
-        const r = byTier[t].find((x) => x.key === key);
-        return r ? Math.max(0.06, Math.min(1, (g(r.b) - base) / span)) : 0.06;
+      const r0 = top.find((r) => r.key === key) || nx.find((r) => r.key === key) || now.find((r) => r.key === key);
+      const g = (v) => (r0.dir > 0 ? v : 1 / Math.max(v, 1e-3));
+      const base = g(r0.a);
+      const span = g(r0.b) - base || 1;
+      const k = (rows) => {
+        const r = rows.find((x) => x.key === key);
+        return r ? Math.max(0.05, Math.min(1, (g(r.b) - base) / span)) : 0.05;
       };
-      const now = byTier[tier].find((x) => x.key === key);
-      const next = tier < 2 ? byTier[tier + 1].find((x) => x.key === key) : null;
-      return { key, label: ref.label, fmt: ref.fmt, now: now ? now.to : ref.from, next: next && (!now || next.to !== now.to) ? next.to : null, kNow: k(tier), kNext: tier < 2 ? k(tier + 1) : k(tier) };
+      const rn = now.find((x) => x.key === key);
+      const rx = nx.find((x) => x.key === key);
+      const gain = lvl < MAX_LEVEL && rx && (!rn || rx.to !== rn.to) ? rx.to : null;
+      return { key, label: r0.label, now: rn ? rn.to : r0.from, next: gain, kNow: k(now), kNext: k(nx) };
     });
   }
 
@@ -180,93 +237,189 @@ export function createWorkshop({ renderer, cursor }) {
     const d = $('.detail');
     if (!sel) return void (d.innerHTML = '<span class="empty">Pick a part.</span>');
     const id = sel;
-    const tier = tierOf(id);
-    const max = tier >= TIERS.length - 1;
+    const lvl = levelOf(id);
+    const tier = tierOfLevel(lvl);
+    const max = lvl >= MAX_LEVEL;
+    const n = nextStep(id);
     const tank = tankFor(id);
     const tc = TIERS[tier].color;
     d.style.setProperty('--tc', tc);
-    const rows = statRows(id, tank, tier);
+    const rows = statRows(id, tank, lvl);
     const perk = partPerk(id);
-    const cost = TIER_COST[tier + 1];
-    const short = max ? 0 : cost - save.bank();
+    const shortS = n ? Math.max(0, n.scraps - save.bank()) : 0;
+    const shortT = n ? Math.max(0, n.tokens - save.tokens()) : 0;
+    const toTier = n?.evolve ? TIERS[tier + 1] : null;
+    const btn = max
+      ? 'Fully upgraded'
+      : shortS || shortT
+        ? `Need ${[shortS && `${shortS} more scraps`, shortT && `${shortT} more tokens`].filter(Boolean).join(' and ')}`
+        : n.evolve
+          ? `Evolve to ${toTier.name}<span class="cost"><i></i>${n.scraps}</span><span class="cost tk"><i></i>${n.tokens}</span>`
+          : `Level up<span class="cost"><i></i>${n.scraps}</span>`;
+    const step = max
+      ? ''
+      : n.evolve
+        ? `<div class="step" style="--from:${tc};--to:${toTier.color}"><b>${TIERS[tier].name} Lv ${lvl}</b><i class="arrow"></i><b class="to">${toTier.name} Lv ${lvl + 1}</b></div>`
+        : `<div class="step" style="--from:${tc};--to:${tc}"><b>Lv ${lvl}</b><i class="arrow"></i><b class="to">Lv ${lvl + 1}</b></div>`;
     d.innerHTML = `
       <div class="head">
         <div class="frame"><img alt="" src="${partPicture(renderer, id, 216, 144)}"><i class="ring"></i></div>
-        <div class="who"><span class="tier">${TIERS[tier].name}</span><h2></h2>${pips(tier)}<p></p><span class="on">Numbers for the ${TANKS[tank].name}${save.loadout(tank).includes(id) ? ' (fitted)' : ''}</span></div>
+        <div class="who"><span class="tier">${TIERS[tier].name}</span><h2></h2><div class="lvl">Lv ${lvl}<small>/ ${MAX_LEVEL}</small></div>${tierPips(lvl)}<p></p><span class="on">Numbers for the ${TANKS[tank].name}${save.loadout(tank).includes(id) ? ' (fitted)' : ''}</span></div>
       </div>
-      ${max ? '' : `<div class="step" style="--from:${tc};--to:${TIERS[tier + 1].color}"><b>${TIERS[tier].name}</b><i class="arrow"></i><b class="to">${TIERS[tier + 1].name}</b></div>`}
+      ${step}
       <div class="stats">${rows
         .map(
-          (r) => `<span class="lb">${r.label}</span>${
-            `<span class="sbar${max ? ' full' : ''}" data-key="${r.key}"><i class="max" style="width:100%"></i><i class="next" style="width:${(r.next ? r.kNext : r.kNow) * 100}%"></i><i class="now" style="width:${r.kNow * 100}%"></i></span>`
-          }<span class="val">${r.now}${r.next ? ` <span class="gain">→ ${r.next}</span>` : ''}</span>`,
+          (r) =>
+            `<span class="lb">${r.label}</span><span class="sbar${max ? ' full' : ''}"><i class="max" style="width:100%"></i><i class="next" style="width:${(r.next ? r.kNext : r.kNow) * 100}%"></i><i class="now" style="width:${r.kNow * 100}%"></i></span><span class="val">${r.now}${r.next ? ` <span class="gain">→ ${r.next}</span>` : ''}</span>`,
         )
         .join('')}</div>
-      ${perk ? `<div class="perk${max ? '' : ' locked'}"><span class="k">Legendary perk</span><b></b><span class="pt"></span></div>` : ''}
-      <button type="button" class="go${max ? ' maxed' : ''}" ${max || short > 0 ? 'disabled' : ''}>${
-        max ? 'Fully upgraded' : short > 0 ? `Need ${short} more scraps` : `Upgrade to ${TIERS[tier + 1].name}<span class="cost"><i></i>${cost}</span>`
-      }</button>`;
+      ${perk ? `<div class="perk${tier >= TIERS.length - 1 ? '' : ' locked'}"><span class="k">Legendary perk</span><b></b><span class="pt"></span></div>` : ''}
+      <button type="button" class="go${max ? ' maxed' : n.evolve ? ' ev' : ''}" ${!max && (shortS || shortT) ? 'disabled' : ''}>${btn}</button>`;
     d.querySelector('h2').textContent = PARTS[id].name;
     d.querySelector('.who p').textContent = PARTS[id].text;
     if (perk) {
       d.querySelector('.perk b').textContent = perk.name;
       d.querySelector('.perk .pt').textContent = perk.text;
     }
-    if (max) d.querySelector('.go').disabled = false; // (shown bright, does nothing)
-    d.querySelector('.go').addEventListener('click', () => !max && upgrade(id));
+    d.querySelector('.go').addEventListener('click', () => !max && upgradePart(id));
   }
 
-  function setBank(v) {
-    $('.bank b').textContent = v;
+  function spend(n) {
+    for (const b of root.querySelectorAll('.bank')) {
+      b.classList.remove('spend');
+      void b.offsetWidth;
+      b.classList.add('spend');
+    }
+    save.addBank(-n.scraps);
+    if (n.tokens) save.addTokens(-n.tokens);
+    setBank();
   }
 
-  // the moment: spend, flash, sparks, banner, then the bars grow
-  function upgrade(id) {
-    const tier = tierOf(id);
-    const cost = TIER_COST[tier + 1];
-    if (busy || cost == null || save.bank() < cost) return;
+  function upgradePart(id) {
+    const n = nextStep(id);
+    if (busy || !affordable(n)) return;
+    const lvl = levelOf(id);
+    spend(n);
+    save.setPartLevel(id, lvl + 1);
+    o?.onChange?.(id);
+    const redraw = () => (renderList(), renderDetail());
+    if (!n.evolve) return levelPop(redraw);
+    evolve(id, TIERS[tierOfLevel(lvl + 1)], lvl + 1 === 21 && partPerk(id) ? `New perk: ${partPerk(id).name}` : PARTS[id].name, redraw);
+  }
+
+  // ------------------------------------------------------------- tanks
+  function renderTanks() {
+    const list = $('.list');
+    list.innerHTML = '';
+    const have = save.tanks();
+    if (!selTank || !have.includes(selTank)) selTank = have.includes(o.tankId) ? o.tankId : have[0];
+    for (const id of TANK_ORDER.filter((t) => have.includes(t))) {
+      const lvl = save.tankLevel(id);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `card${id === selTank ? ' sel' : ''}`;
+      b.style.setProperty('--tc', '#ffb347');
+      b.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}"><span class="tn">Lv ${lvl}</span><span class="nm"></span>${lvl < TANK_MAX && save.bank() >= tankLevelCost(lvl) ? '<span class="can">Can level up</span>' : ''}`;
+      b.querySelector('.nm').textContent = TANKS[id].name;
+      b.addEventListener('click', () => {
+        if (busy) return;
+        selTank = id;
+        renderTanks();
+        renderTank();
+      });
+      list.append(b);
+    }
+  }
+  const TANK_ROWS = [
+    ['maxHp', 'Hull', (v) => `${Math.round(v)}`],
+    ['cannonDamage', 'Shell damage', (v) => `${Math.round(v)}`],
+    ['mgDamage', 'MG damage', (v) => `${+v.toFixed(1)}`],
+    ['speed', 'Speed', (v) => `${Math.round(v * 100)}%`],
+  ];
+  function renderTank() {
+    const d = $('.detail');
+    const id = selTank;
+    if (!id) return void (d.innerHTML = '');
+    const lvl = save.tankLevel(id);
+    const max = lvl >= TANK_MAX;
+    const cost = tankLevelCost(lvl);
+    const short = Math.max(0, cost - save.bank());
+    d.style.setProperty('--tc', '#ffb347');
+    const at = (l) => statsFor([], id, null, l);
+    const now = at(lvl);
+    const nx = at(Math.min(TANK_MAX, lvl + 1));
+    const top = at(TANK_MAX);
+    const one = at(1);
+    d.innerHTML = `
+      <div class="head">
+        <div class="frame"><img alt="" src="${tankPicture(renderer, id, 216, 144)}"><i class="ring"></i></div>
+        <div class="who"><span class="tier">Tank</span><h2></h2><div class="lvl">Lv ${lvl}<small>/ ${TANK_MAX}</small></div><div class="lbar"><i style="width:${(lvl / TANK_MAX) * 100}%"></i></div><p>Every level: a little more hull, gun and speed. Parts add on top.</p></div>
+      </div>
+      ${max ? '' : `<div class="step" style="--from:#ffb347;--to:#ffb347"><b>Lv ${lvl}</b><i class="arrow"></i><b class="to">Lv ${lvl + 1}</b></div>`}
+      <div class="stats">${TANK_ROWS.map(([key, label, fmt]) => {
+        const k = (s) => Math.max(0.05, (s[key] - one[key] * 0.5) / (top[key] - one[key] * 0.5));
+        const gain = !max && fmt(nx[key]) !== fmt(now[key]) ? fmt(nx[key]) : null;
+        return `<span class="lb">${label}</span><span class="sbar${max ? ' full' : ''}"><i class="max" style="width:100%"></i><i class="next" style="width:${k(gain ? nx : now) * 100}%"></i><i class="now" style="width:${k(now) * 100}%"></i></span><span class="val">${fmt(now[key])}${gain ? ` <span class="gain">→ ${gain}</span>` : ''}</span>`;
+      }).join('')}</div>
+      <button type="button" class="go${max ? ' maxed' : ''}" ${!max && short ? 'disabled' : ''}>${max ? 'Max level' : short ? `Need ${short} more scraps` : `Level up<span class="cost"><i></i>${cost}</span>`}</button>`;
+    d.querySelector('h2').textContent = TANKS[id].name;
+    d.querySelector('.go').addEventListener('click', () => {
+      if (max || busy || save.bank() < cost) return;
+      spend({ scraps: cost, tokens: 0 });
+      save.setTankLevel(id, lvl + 1);
+      o?.onChange?.(null);
+      const redraw = () => (renderTanks(), renderTank());
+      // every tenth level gets the full show
+      if ((lvl + 1) % 10 === 0) evolve(null, { name: `Level ${lvl + 1}`, color: '#ffb347' }, TANKS[id].name, redraw);
+      else levelPop(redraw);
+    });
+  }
+
+  // ------------------------------------------------------- celebrations
+  // a level: redrawn, the picture pops, sparks, "+1" by the level, the
+  // bars grow
+  function levelPop(redraw) {
     busy = true;
-    const from = save.bank();
-    save.addBank(-cost);
-    save.setTier(id, tier + 1);
-    const to = TIERS[tier + 1];
-    // the scraps roll down
-    const bank = $('.bank');
-    bank.classList.remove('spend');
-    void bank.offsetWidth;
-    bank.classList.add('spend');
-    const t0 = performance.now();
-    const roll = () => {
-      const k = Math.min(1, (performance.now() - t0) / 500);
-      setBank(Math.round(from - cost * k));
-      if (k < 1) requestAnimationFrame(roll);
-    };
-    roll();
-    // the part shudders as it charges up
+    redraw();
     const frame = $('.detail .frame');
-    frame.animate(
+    frame.animate([{ transform: 'scale(1.1)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' });
+    const tc = getComputedStyle($('.detail')).getPropertyValue('--tc').trim() || '#ffb347';
+    sparks(frame.getBoundingClientRect(), tc, 18, 0.6);
+    const lv = $('.detail .lvl');
+    if (lv) {
+      const plus = document.createElement('span');
+      plus.className = 'plus';
+      plus.textContent = '+1';
+      lv.append(plus);
+      plus
+        .animate([{ transform: 'translateY(6px)', opacity: 0 }, { transform: 'translateY(-4px)', opacity: 1, offset: 0.25 }, { transform: 'translateY(-14px)', opacity: 0 }], { duration: 900, easing: 'ease-out' })
+        .finished.then(() => plus.remove());
+    }
+    growBars();
+    setTimeout(() => (busy = false), 250);
+  }
+  // an evolve (or a tank's tenth level): the full show
+  function evolve(id, to, sub, redraw) {
+    busy = true;
+    $('.detail .frame').animate(
       [{ transform: 'translate(0,0)' }, { transform: 'translate(-3px,1px)' }, { transform: 'translate(3px,-1px)' }, { transform: 'translate(-2px,0)' }, { transform: 'translate(0,0)' }],
       { duration: 380, iterations: 1, easing: 'steps(5)' },
     );
     setTimeout(() => {
-      // the flash, in the new tier's colour
       const flash = $('.flash');
       flash.style.background = `radial-gradient(circle at 50% 45%, #ffffff 0%, ${to.color} 35%, transparent 75%)`;
       flash.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 700, easing: 'ease-out' });
-      // the part's frame now in its new colour, a ring bursting off it
-      renderList();
-      renderDetail();
+      redraw();
       const nf = $('.detail .frame');
       nf.animate([{ transform: 'scale(1.18)' }, { transform: 'scale(0.96)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'ease-out' });
       nf.querySelector('.ring').animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(7)' }], { duration: 650, easing: 'ease-out' });
-      sparks(nf.getBoundingClientRect(), to.color);
-      $(`.list .card[data-id="${id}"]`)?.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'ease-out' });
-      // the banner slams down
+      sparks(nf.getBoundingClientRect(), to.color, 46, 1);
+      if (id) $(`.list .card[data-id="${id}"]`)?.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'ease-out' });
       const banner = document.createElement('div');
       banner.className = 'banner';
       banner.style.setProperty('--tc', to.color);
       banner.innerHTML = `${to.name}!<small></small>`;
-      banner.querySelector('small').textContent = tier + 1 === TIERS.length - 1 && partPerk(id) ? `New perk: ${partPerk(id).name}` : PARTS[id].name;
+      banner.querySelector('small').textContent = sub;
       root.append(banner);
       banner
         .animate(
@@ -280,28 +433,29 @@ export function createWorkshop({ renderer, cursor }) {
           { duration: 1700, easing: 'ease-out' },
         )
         .finished.then(() => banner.remove());
-      // the bars grow from where they were to the new tier
-      for (const bar of root.querySelectorAll('.detail .sbar')) {
-        const now = bar.querySelector('.now');
-        const w = now.style.width;
-        now.style.transition = 'none';
-        now.style.width = '0%';
-        void now.offsetWidth;
-        now.style.transition = '';
-        setTimeout(() => (now.style.width = w), 250);
-      }
+      growBars();
       const perkEl = root.querySelector('.detail .perk:not(.locked)');
-      if (perkEl && tier + 1 === TIERS.length - 1) perkEl.animate([{ transform: 'scale(0.6)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 600, delay: 300, easing: 'ease-out', fill: 'backwards' });
-      o?.onChange?.(id);
+      if (perkEl && id && levelOf(id) === 21) perkEl.animate([{ transform: 'scale(0.6)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 600, delay: 300, easing: 'ease-out', fill: 'backwards' });
       setTimeout(() => (busy = false), 600);
     }, 380);
   }
-
-  // pixel sparks flung off the part
-  function sparks(rect, color) {
+  // the bars grow from nothing to where they are now
+  function growBars() {
+    for (const bar of root.querySelectorAll('.detail .sbar')) {
+      const now = bar.querySelector('.now');
+      const w = now.style.width;
+      now.style.transition = 'none';
+      now.style.width = '0%';
+      void now.offsetWidth;
+      now.style.transition = '';
+      setTimeout(() => (now.style.width = w), 120);
+    }
+  }
+  // pixel sparks flung off the picture
+  function sparks(rect, color, count, reach) {
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < count; i++) {
       const s = document.createElement('i');
       s.className = 'spark';
       s.style.background = i % 4 ? color : '#ffffff';
@@ -311,7 +465,7 @@ export function createWorkshop({ renderer, cursor }) {
       s.style.width = s.style.height = `${size}px`;
       root.append(s);
       const a = Math.random() * Math.PI * 2;
-      const d = 90 + Math.random() * 220;
+      const d = (90 + Math.random() * 220) * reach;
       const dx = Math.cos(a) * d;
       const dy = Math.sin(a) * d * 0.8;
       s.animate(
@@ -329,22 +483,22 @@ export function createWorkshop({ renderer, cursor }) {
     get isOpen() {
       return !root.hidden;
     },
-    // opts: { tankId (the hangar's tank), onClose(), onChange(id) }
+    // opts: { tankId (the hangar's tank), select (a part id), onClose(),
+    // onChange(partId | null) }
     show(opts) {
       o = opts;
       root.hidden = false;
       busy = false;
       const owned = save.owned().filter((id) => PARTS[id]);
-      // start on something worth upgrading
-      if (opts.select && owned.includes(opts.select)) sel = opts.select;
-      else if (!sel || !owned.includes(sel)) sel = owned.find(canAfford) || owned.find((id) => save.loadout(o.tankId).includes(id)) || owned[0] || null;
-      setBank(save.bank());
+      if (opts.select && owned.includes(opts.select)) {
+        sel = opts.select;
+        tab = 'parts';
+      } else if (!sel || !owned.includes(sel)) sel = owned.find((id) => affordable(nextStep(id))) || owned.find((id) => save.loadout(o.tankId).includes(id)) || owned[0] || null;
       // the first visit: what this is for
       const first = !save.tips().includes('upgrades');
       $('.first').hidden = !first;
       if (first) save.seeTip('upgrades');
-      renderList();
-      renderDetail();
+      render();
     },
     hide() {
       root.hidden = true;
@@ -353,10 +507,10 @@ export function createWorkshop({ renderer, cursor }) {
   };
 }
 
-// is there an upgrade the player can afford and hasn't been shown the
-// upgrades screen yet? (the hangar and its button glow)
+// is there a level up the player can afford, and they haven't been shown
+// the upgrades screen yet? (the hangar and its button glow)
 export function upgradeHint() {
   if (save.tips().includes('upgrades')) return false;
-  return save.owned().some((id) => PARTS[id] && tierOf(id) < TIERS.length - 1 && save.bank() >= TIER_COST[tierOf(id) + 1]);
+  if (save.tanks().some((t) => save.tankLevel(t) < TANK_MAX && save.bank() >= tankLevelCost(save.tankLevel(t)))) return true;
+  return save.owned().some((id) => PARTS[id] && levelOf(id) < MAX_LEVEL && !evolvesAt(levelOf(id)) && save.bank() >= levelCost(levelOf(id)));
 }
-

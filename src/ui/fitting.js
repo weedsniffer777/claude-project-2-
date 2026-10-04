@@ -9,7 +9,7 @@
 // checkpoint is shown as New with an "Equip now" button. Upgrades have a
 // screen of their own (workshop.js), opened from the hangar.
 import * as THREE from 'three';
-import { PARTS, statsFor, TIERS, tierOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
+import { PARTS, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
@@ -31,6 +31,8 @@ const CSS = `
 .fit .bars { display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; align-items: center; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; }
 .fit .bar { position: relative; height: 10px; background: #2a2628; box-shadow: 0 0 0 2px #000; }
 .fit .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--amber); }
+.fit .bar i.up { background: var(--go); }
+.fit .bar i.cost { background: #ff7a6a; opacity: 0.8; }
 .fit .bar i.pre { background: #f1e9d8; opacity: 0.55; }
 .fit .bar i.pre.down { background: var(--red); }
 .fit .kit { display: grid; gap: 5px; font-size: 13px; }
@@ -146,7 +148,8 @@ const clamp01 = (v) => Math.max(0, Math.min(1, v));
 // per second), speed
 function bars(s) {
   const dps = s.mag ? (s.cannonDamage * s.mag) / (s.mag * s.reload + s.magReload) : s.cannonDamage / s.reload;
-  return { Armour: clamp01(s.maxHp / s.armor / 160), Gun: clamp01(dps / 44), Speed: clamp01((s.speed - 0.55) / 0.85) };
+  // (room at the top for tank levels and maxed parts)
+  return { Armour: clamp01(s.maxHp / s.armor / 320), Gun: clamp01(dps / 100), Speed: clamp01((s.speed - 0.55) / 1.2) };
 }
 
 // pictures of the tanks for the carousel, drawn once
@@ -199,9 +202,9 @@ export function createFitting({ renderer, cursor }) {
     tip.hidden = false;
     const tier = tierOf(id);
     tip.style.setProperty('--tc', TIERS[tier].color);
-    tip.querySelector('b').innerHTML = `${PARTS[id].name} <span class="tiername">${TIERS[tier].name}</span>`;
+    tip.querySelector('b').innerHTML = `${PARTS[id].name} <span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span>`;
     // what it does at its tier, in numbers
-    tip.querySelector('span').innerHTML = `${effectsHtml(id, o.tankId, tier)}${where(id) ? `<br>On the ${where(id)}.` : ''}`;
+    tip.querySelector('span').innerHTML = `${effectsHtml(id, o.tankId)}${where(id) ? `<br>On the ${where(id)}.` : ''}`;
     tip.style.left = `${Math.round(Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100)))}px`;
     tip.style.top = `${Math.round(r.top - 12)}px`;
     tip.style.transform = 'translateY(-100%)';
@@ -238,7 +241,7 @@ export function createFitting({ renderer, cursor }) {
     const def = tankDef(o.tankId);
     const list = loadout();
     root.classList.toggle('replacing', !!replacing);
-    $('.left .tag').textContent = o.tag || '';
+    $('.left .tag').textContent = `${o.tag || ''} · Lv ${save.tankLevel(o.tankId)}`;
     $('.left h2').textContent = def.name;
     $('.left p').textContent = def.blurb;
     renderBars();
@@ -273,7 +276,7 @@ export function createFitting({ renderer, cursor }) {
         const tier = tierOf(id);
         el.dataset.tier = tier;
         el.style.setProperty('--tc', TIERS[tier].color);
-        el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
+        el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
         el.querySelector('.nm .pn').textContent = PARTS[id].name;
         el.addEventListener('pointerenter', () => !replacing && showTip(el, id));
         el.addEventListener('pointerleave', hideTip);
@@ -399,9 +402,12 @@ export function createFitting({ renderer, cursor }) {
     });
   }
 
-  // the bars, and with a part hovered in storage, what it would change
+  // the bars: amber for the tank itself (at its level), green for what its
+  // parts add (red where they cost), and with a part hovered in storage,
+  // white for what that would change
   function renderBars(preview = null) {
     const list = loadout();
+    const base = bars(statsFor([], o.tankId));
     const now = bars(statsFor(list, o.tankId));
     let pre = null;
     if (preview) {
@@ -410,10 +416,13 @@ export function createFitting({ renderer, cursor }) {
     }
     $('.bars').innerHTML = Object.entries(now)
       .map(([k, v]) => {
+        const b = base[k];
+        const lo0 = Math.min(b, v);
+        const parts = Math.abs(v - b) > 0.001 ? `<i class="${v > b ? 'up' : 'cost'}" style="left:${lo0 * 100}%;width:${Math.abs(v - b) * 100}%"></i>` : '';
         const p = pre ? pre[k] : v;
         const lo = Math.min(v, p);
         const hi = Math.max(v, p);
-        return `<span>${k}</span><span class="bar"><i style="width:${lo * 100}%"></i>${hi > lo + 0.001 ? `<i class="pre${p < v ? ' down' : ''}" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></i>` : ''}</span>`;
+        return `<span>${k}</span><span class="bar"><i style="width:${lo0 * 100}%"></i>${parts}${hi > lo + 0.001 ? `<i class="pre${p < v ? ' down' : ''}" style="left:${lo * 100}%;width:${(hi - lo) * 100}%"></i>` : ''}</span>`;
       })
       .join('');
   }
@@ -438,7 +447,7 @@ export function createFitting({ renderer, cursor }) {
     const d = document.createElement('div');
     d.className = 'info';
     d.style.setProperty('--tc', TIERS[tier].color);
-    d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId, tier)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
+    d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
     d.querySelector('.pn').textContent = PARTS[id].name;
     d.querySelector('p').textContent = PARTS[id].text;
     // in the hangar: straight to this part on the upgrades screen
@@ -454,7 +463,7 @@ export function createFitting({ renderer, cursor }) {
   }
   // a slot's line: its biggest change or two, and its perk
   function shortFx(id, tier) {
-    const rows = partEffects(id, o.tankId, tier).slice(0, 2);
+    const rows = partEffects(id, o.tankId).slice(0, 2);
     const perk = tier >= TIERS.length - 1 && partPerk(id);
     return rows.map((r) => `<span>${r.label} <b class="${r.good ? 'good' : 'bad'}">${r.delta}</b></span>`).join('') + (perk ? `<span class="pk">★ ${perk.name}</span>` : '');
   }

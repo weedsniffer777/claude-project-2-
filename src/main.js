@@ -109,6 +109,15 @@ const devkit = createDevKit({
         hub.refresh();
       },
     },
+    {
+      id: 'add-tokens',
+      label: 'Add 50 upgrade tokens',
+      detail: 'For testing part evolves',
+      open: () => {
+        save.addTokens(50);
+        hub.refresh();
+      },
+    },
   ],
   settings: [
     {
