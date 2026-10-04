@@ -745,7 +745,7 @@ function buildStadium(scene) {
     if (text) api.prompt('Zone clear', text, { go: true });
     api.arrow(shack.door, 'Checkpoint');
   }
-  const PARTS4 = ['twinmg', 'optics', 'autoloader', 'he', 'era', 'afterburner', 'dozer'];
+  const PARTS4 = ['rangefinder', 'twinmg', 'optics', 'autoloader', 'he', 'era', 'afterburner', 'dozer'];
   // where the tank can go: on the plaza, out to just past its barricade
   // lines (the barricades and the stands hold it, nothing invisible);
   // inside the stadium, its walls

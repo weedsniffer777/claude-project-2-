@@ -616,6 +616,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let hardCount = 0;
   let speedK = 0; // eased 0..1 while boosting (camera and speed lines)
   let deathK = 0; // eased 0..1 while the tank goes up
+  let rangeK = 0; // eased 0..1 while Ranging has the view opened out
   let salvoK = 0; // eased 0..1 while a missile salvo's out (the view pulled back)
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
@@ -657,7 +658,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const before = run.hp;
       run.hp = Math.min(stats.maxHp, run.hp + p.value);
       hud.setHull(run.hp, stats.maxHp);
-      if (run.hp > before) hud.damage(pos.clone().setY(2.2), run.hp - before, 'heal');
+      if (run.hp > before) hud.heal(run.hp - before);
       combat.fx.burst(pos.clone().setY(1.4), { count: 8, speed: 3, color: 0x4fdc6a, life: 0.3, size: 0.07, gravity: 4 });
     } else if (p.kind === 'token') {
       // tokens go straight into the save: rare enough never to lose one
@@ -681,9 +682,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function onImpact(at, mesh, small = false, shell = null) {
     // armour-piercing: the machine it strikes takes the whole hit; a small
     // splash round it does a fraction to anything else close by
-    const direct = !shell && stats.apRounds ? mesh?.userData?.enemy : null;
+    // (and whatever a shell strikes takes its full hit, more with a Rangefinder)
+    const struck = !shell ? mesh?.userData?.enemy : null;
+    const direct = struck && (stats.apRounds || stats.directHit > 1) ? struck : null;
     const hits = [];
-    if (direct?.alive) hits.push({ e: direct, amount: Math.round(stats.cannonDamage), killed: enemies.damage(direct, stats.cannonDamage, at) });
+    if (direct?.alive) {
+      const dmg = stats.cannonDamage * stats.directHit;
+      hits.push({ e: direct, amount: Math.round(dmg), killed: enemies.damage(direct, dmg, at) });
+    }
     const amount = shell ? shell.damage : stats.apRounds ? stats.cannonDamage * 0.4 : stats.cannonDamage;
     hits.push(...enemies.blast(at, shell ? shell.radius : stats.splash, amount, direct));
     for (const h of hits) {
@@ -859,7 +865,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.group.rotation.y = 0;
     speed = 0;
     enemies.retire();
-    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, retreat: 0, magT: 0, mag: stats.mag, mReload: false, trickleT: 0 });
+    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, retreat: 0, magT: 0, mag: stats.mag, mReload: false, trickleT: 0, rangeT: 0 });
     reload = 1;
     hud.setHull(run.hp, stats.maxHp);
     camTarget.set(pos.x + 0.6, 0.8, pos.z);
@@ -951,7 +957,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (run.hp < stats.maxHp) {
         run.hp = Math.min(stats.maxHp, run.hp + 5);
         hud.setHull(run.hp, stats.maxHp);
-        hud.damage(pos.clone().setY(pos.y + 2.2), 5, 'heal');
+        hud.heal(5);
       }
       tank.setRocket(1, true, 0);
       for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.25, 1.4, 0.12);
@@ -1088,10 +1094,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const targets = foes.map((e) => ({ e }));
     const center = hasAim ? aimPoint.clone() : foes[0] ? foes[0].pos.clone() : pos.clone().add(new THREE.Vector3(Math.cos(tank.group.rotation.y) * 10, 0, -Math.sin(tank.group.rotation.y) * 10));
     for (let i = 0; targets.length < N; i++) {
-      // round the aim point (and the machines), spread out
-      const base = foes.length && i % 2 ? foes[i % foes.length].pos : center;
+      // the spares: clustered round the machines locked (like an artillery
+      // strike's spread), the toughest first; only with nothing in sight do
+      // they spread round the aim point
+      const base = foes.length ? foes[i % foes.length].pos : center;
       const a = Math.random() * Math.PI * 2;
-      const r = 1.2 + Math.random() * 3.2;
+      const r = foes.length ? 0.6 + Math.random() * 1.9 : 1.2 + Math.random() * 3.2;
       const p = new THREE.Vector3(base.x + Math.cos(a) * r, 0, base.z + Math.sin(a) * r);
       p.y = (level.heightAt ? level.heightAt(p.x, p.z) : 0) + 0.2;
       targets.push({ point: p });
@@ -1221,6 +1229,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         combat.fx.burst(at.clone().setY(at.y + 0.4), { count: 34, speed: 10, color: 0xffd36b, life: 0.5, size: 0.09, gravity: 14 });
         for (let k = 0; k < 7; k++) combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 2, (Math.random() - 0.5) * 5), { color: 0x6f6a62, s0: 0.4, s1: 1.5, life: 1.4, drag: 2.5, lift: 0.6, fadeAt: 0.3 });
         combat.shake = Math.max(combat.shake, 0.45);
+        // a missile right onto its machine: the Rangefinder's extra on it
+        if (d < 0.9 && ms.e?.alive && stats.directHit > 1) enemies.damage(ms.e, ms.damage * (stats.directHit - 1), at);
         onImpact(at, null, false, { radius: ms.blast, damage: ms.damage });
       }
     }
@@ -1516,6 +1526,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the autocannon: holding the trigger fires a round every reload until the
   // magazine's empty, then it changes magazines
   let trigger = false;
+  // Legendary Rangefinder (Ranging): a reload done, the view opens right out for a moment
+  function ranging() {
+    if (!stats.rangeBurst || run.over || run.mode !== 'field') return;
+    run.rangeT = 3;
+    pulse('rangefinder');
+  }
   function autoFire(dt) {
     if (!stats.mag) return;
     if (def.gun === 'missile') {
@@ -1531,6 +1547,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           run.mag++;
         }
       } else {
+        if (run.mReload) ranging(); // (the pack's full again)
         run.trickleT = 0;
         run.mReload = false;
       }
@@ -1545,7 +1562,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
     if (run.magT > 0) {
       run.magT -= dt;
-      if (run.magT <= 0) run.mag = stats.mag;
+      if (run.magT <= 0) {
+        run.mag = stats.mag;
+        ranging();
+      }
       return;
     }
     if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1) return;
@@ -1803,8 +1823,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setHull(run.hp, stats.maxHp);
       if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
       if (run.hp >= st.repairTo - 0.01 && st.repaired > 0.5) {
-        hud.damage(pos.clone().setY(2.4), st.repaired, 'heal');
-        hud.prompt('Repairs', `Repaired <b>+${Math.round(st.repaired)}</b> HP`, { go: true, seconds: 3 });
+        hud.heal(st.repaired);
       }
     }
     if (st.step === 'repair') {
@@ -1928,8 +1947,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.healed ??= [];
     const heal = added && list.includes(added) && !run.healed.includes(added) ? PARTS[added].heal || 0 : 0;
     if (heal) run.healed.push(added);
+    const hp0 = run.hp;
     run.hp = Math.min(stats.maxHp, run.hp + Math.max(0, stats.maxHp - was) + heal);
     hud.setHull(run.hp, stats.maxHp);
+    if (run.hp > hp0 + 0.5) hud.heal(run.hp - hp0);
     if (!added) return;
     combat.fx.burst(pos.clone().setY(1.6), { count: 30, speed: 6, color: 0xffd36b, life: 0.45, size: 0.07, gravity: 12 });
     combat.glow.flash(pos.clone().setY(1.6), 0xfff0c8, 0.2, 1.4, 0.1);
@@ -1973,6 +1994,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (stats.hotLoader) add('autoloader', 'Ready rack');
     if (stats.boostRefund) add('afterburner', 'Afterburner');
     if (stats.dozerStun) add('dozer', 'Disorient');
+    if (stats.rangeBurst) add('rangefinder', 'Ranging', { k: run.rangeT > 0 ? run.rangeT / 3 : 1, ready: run.rangeT > 0 });
     return list;
   }
 
@@ -2013,7 +2035,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const retreatPics = new Map();
   function retreatArt(firing) {
     if (retreatPics.has(firing)) return retreatPics.get(firing);
-    const base = boostPicture(firing, 'normal');
+    const base = boostPicture(firing, 'afterburner'); // (the High-power boost's own look on this tank)
     const c = document.createElement('canvas');
     c.width = base.width;
     c.height = base.height;
@@ -2310,7 +2332,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         }
       }
       if (!run.over) run.time += dt;
+      if (!stats.mag && reload < 1 && reload + dt / stats.reload >= 1) ranging();
       reload = Math.min(1, reload + dt / stats.reload);
+      run.rangeT = Math.max(0, (run.rangeT || 0) - dt);
       run.boostCd = Math.max(0, run.boostCd - dt);
       run.abilityCd = Math.max(0, run.abilityCd - dt);
       run.equipCd = Math.max(0, run.equipCd - dt);
@@ -2556,7 +2580,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // it gets locked) until the last missile's gone off
       const scanning = !!run.msl?.salvo || missiles.some((ms) => ms.top);
       salvoK += ((scanning ? 1 : 0) - salvoK) * (1 - Math.exp(-realDt * (scanning ? 5 : 2)));
-      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch) / (1 + ((stats.salvoZoom || 1) - 1) * salvoK); // and leaning in on the wreck
+      rangeK += ((run.rangeT > 0 ? 1 : 0) - rangeK) * (1 - Math.exp(-realDt * (run.rangeT > 0 ? 4 : 1.5)));
+      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch) / (1 + ((stats.salvoZoom || 1) - 1) * salvoK) / (1 + 0.5 * rangeK); // and leaning in on the wreck
       if (Math.abs(camera.zoom - zoom) > 1e-4) {
         camera.zoom = zoom;
         camera.updateProjectionMatrix();

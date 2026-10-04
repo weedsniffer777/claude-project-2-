@@ -182,6 +182,8 @@ const CSS = `
 .hud-pointers i { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -9px 0 0 -7px; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 14px solid var(--danger);
   filter: drop-shadow(1px 1px 0 #000) drop-shadow(-1px -1px 0 #000); }
 .hud-pointers i.boss { border-left-color: #ff7a1a; }
+.hud-healfx { position: absolute; inset: 0; box-shadow: inset 0 0 140px 10px rgba(80, 240, 120, 0.35); opacity: 0; pointer-events: none; }
+.hud-heal { position: absolute; left: 50%; top: 34%; transform: translate(-50%, 0); font: 400 34px/1 'Silkscreen', monospace; color: #6bf08a; text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 18px rgba(80, 240, 120, 0.6); pointer-events: none; white-space: nowrap; opacity: 0; }
 .hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 10px var(--danger), inset 0 0 160px 20px rgba(255, 40, 30, 0.6); background: rgba(255, 40, 30, 0.12); opacity: 0; }
 .hud-hull.hit { animation: hudhit 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--danger), 4px 4px 0 4px #000; }
 .hud-hull.hit .val { color: var(--danger); }
@@ -354,6 +356,8 @@ export function createHud() {
     <canvas class="hud-speed"></canvas>
     <canvas class="hud-spot"></canvas>
     <div class="hud-hurt"></div>
+    <div class="hud-healfx"></div>
+    <div class="hud-heal"></div>
     <div class="hud-top">
       <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div><div class="hud-ammo" hidden><span class="px">Ammo</span></div></div>
       <div class="hud-sectors panel px" hidden></div>
@@ -404,6 +408,10 @@ export function createHud() {
   const marker = $('.hud-marker');
   const numbersEl = $('.hud-numbers');
   const hurt = $('.hud-hurt');
+  const healFx = $('.hud-healfx');
+  const healEl = $('.hud-heal');
+  let healT = 0;
+  let healSum = 0;
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
@@ -528,6 +536,14 @@ export function createHud() {
       $('.hud-hull .val').textContent = Math.ceil(Math.max(0, hp));
       [...bar.children].forEach((el, i) => el.classList.toggle('off', i >= Math.ceil(k * 12)));
       root.classList.toggle('low', k < 0.3);
+    },
+    // a heal (repairs, pickups, the retreat): +N HP big over the middle of
+    // the screen (heals close together add up), a faint green edge
+    heal(amount) {
+      if (!(amount > 0.5)) return;
+      healSum = healT > 0 ? healSum + amount : amount;
+      healT = 1.6;
+      healEl.textContent = `+${Math.round(healSum)} HP`;
     },
     hurt() {
       hurtT = 0.45;
@@ -955,6 +971,15 @@ export function createHud() {
       }
       hurtT = Math.max(0, hurtT - dt);
       hurt.style.opacity = String(Math.min(1, hurtT * 3));
+      // a heal: the big green +N HP rising over the middle, a faint green edge
+      if (healT > 0) {
+        healT = Math.max(0, healT - dt);
+        const age = 1.6 - healT;
+        healEl.style.opacity = String(Math.min(1, healT * 2.5));
+        healEl.style.transform = `translate(-50%, ${-age * 18}px) scale(${1 + Math.max(0, 0.25 - age) * 1.2})`;
+        healFx.style.opacity = String(Math.max(0, 0.6 - age) * 1.2);
+        if (healT <= 0) healSum = 0;
+      }
       if (arrowAt) {
         const p = typeof arrowAt === 'function' ? arrowAt() : arrowAt;
         if (!p) arrow.hidden = true;

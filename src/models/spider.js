@@ -24,15 +24,20 @@ const C = {
 };
 
 const BODY_Y = 1.75;
-const THIGH = 1.7;
-const SHIN = 2.1;
-// the legs: hip on the hull's side, the foot planted out wide
+const THIGH = 2.0;
+const SHIN = 2.7;
+// the legs: an X, one off each corner of the hull, splayed out diagonally;
+// the thigh reaches out and up to a high knee, the armoured shin comes
+// steeply down to a clawed foot
 const LEGS = [
-  { hip: [1.5, 0, 1.25], foot: [2.7, 3.0], phase: 0 },
-  { hip: [-1.5, 0, -1.25], foot: [-2.7, -3.0], phase: 0 },
-  { hip: [1.5, 0, -1.25], foot: [2.7, -3.0], phase: Math.PI },
-  { hip: [-1.5, 0, 1.25], foot: [-2.7, 3.0], phase: Math.PI },
-];
+  { hip: [1.7, -0.05, 1.0], phase: 0 },
+  { hip: [-1.7, -0.05, -1.0], phase: 0 },
+  { hip: [1.7, -0.05, -1.0], phase: Math.PI },
+  { hip: [-1.7, -0.05, 1.0], phase: Math.PI },
+].map((L) => {
+  const r = Math.SQRT1_2 * 2.7; // how far out the foot is planted, along the diagonal
+  return { ...L, foot: [L.hip[0] + Math.sign(L.hip[0]) * r, L.hip[2] + Math.sign(L.hip[2]) * r] };
+});
 
 export function createSpider() {
   const group = new THREE.Group();
@@ -134,29 +139,44 @@ export function createSpider() {
   glowy.push(muzzleGlow);
 
   // --------------------------------------------------------------- the legs
-  // each: a big hip hub on the hull's side, a short thigh out and up to the
-  // knee, an armoured shin down to a broad foot, a strut alongside
+  // each: a turning hip hub on the hull's corner, an open box-girder thigh,
+  // a big round knee, a broad armoured shin (hazard stripes, a piston up
+  // its back) down to a two-toed claw
   const legs = [];
   for (const L of LEGS) {
-    const [hx, , hz] = L.hip;
-    const sz = Math.sign(hz);
-    put(body, cyl(0.42, 0.3, C.joint, { axis: 'z', seg: 12 }), hx, -0.05, hz + sz * 0.15);
-    put(body, cyl(0.24, 0.34, C.dark, { axis: 'z', seg: 10 }), hx, -0.05, hz + sz * 0.17);
+    const [hx, hy, hz] = L.hip;
+    put(body, cyl(0.5, 0.5, C.joint, { seg: 12 }), hx, hy, hz); // the hip's turning hub
+    put(body, cyl(0.3, 0.56, C.dark, { seg: 10 }), hx, hy, hz);
+    put(body, box(0.5, 0.12, 0.5, C.hazard, { r: 0.02 }), hx, hy + 0.3, hz);
     const thigh = new THREE.Group();
     group.add(thigh);
-    put(thigh, box(0.5, 0.5, THIGH, C.hull, { r: 0.03 }), 0, 0, THIGH / 2);
-    put(thigh, box(0.3, 0.56, THIGH * 0.7, C.panel, { r: 0.02 }), 0, 0.05, THIGH / 2);
+    // an open girder: two side rails, top and bottom chords, braces
+    for (const sx of [-1, 1]) put(thigh, box(0.08, 0.5, THIGH, C.hull, { r: 0.02 }), sx * 0.22, 0, THIGH / 2);
+    for (const sy of [-1, 1]) put(thigh, box(0.5, 0.08, THIGH, C.panel, { r: 0.02 }), 0, sy * 0.24, THIGH / 2);
+    for (let k = 0; k < 3; k++) {
+      const br = put(thigh, box(0.06, 0.06, 0.62, C.dark), 0, 0, 0.35 + k * 0.55);
+      br.rotation.x = k % 2 ? 0.75 : -0.75;
+    }
+    put(thigh, cyl(0.06, THIGH * 0.85, C.dark, { axis: 'z', seg: 6 }), 0, -0.36, THIGH * 0.45); // a hydraulic line under it
     const knee = new THREE.Group();
     group.add(knee);
-    put(knee, cyl(0.34, 0.6, C.joint, { axis: 'z', seg: 12 }), 0, 0, 0);
-    put(knee, cyl(0.18, 0.64, C.dark, { axis: 'z', seg: 8 }), 0, 0, 0);
+    put(knee, cyl(0.42, 0.72, C.joint, { axis: 'x', seg: 14 }), 0, 0, 0);
+    put(knee, cyl(0.24, 0.78, C.dark, { axis: 'x', seg: 10 }), 0, 0, 0);
+    for (const sx of [-1, 1]) put(knee, cyl(0.12, 0.04, C.hazard, { axis: 'x', seg: 10 }), sx * 0.4, 0, 0);
     const shin = new THREE.Group();
     group.add(shin);
-    put(shin, box(0.6, 0.62, SHIN, C.hull, { r: 0.03 }), 0, 0, SHIN / 2);
-    put(shin, box(0.66, 0.4, SHIN * 0.5, C.panel, { r: 0.02 }), 0, 0.1, SHIN * 0.4); // its armour plate
-    put(shin, cyl(0.05, SHIN * 0.8, C.dark, { axis: 'z', seg: 6 }), 0.36, 0, SHIN * 0.45); // a strut
-    put(shin, box(0.9, 0.3, 0.7, C.joint, { r: 0.03 }), 0, 0, SHIN - 0.1); // the foot
-    put(shin, box(1.0, 0.12, 0.8, C.dark, { r: 0.02 }), 0, 0, SHIN + 0.04);
+    put(shin, box(0.78, 0.36, SHIN * 0.92, C.hull, { r: 0.04 }), 0, 0, SHIN * 0.46);
+    put(shin, box(0.84, 0.2, SHIN * 0.5, C.panel, { r: 0.03 }), 0, 0.18, SHIN * 0.42); // the armour plate on its face
+    for (let k = 0; k < 3; k++) put(shin, box(0.1, 0.03, 0.26, k % 2 ? C.dark : C.hazard), -0.3 + k * 0.1, 0.29, SHIN * 0.7); // hazard stripes
+    put(shin, box(0.5, 0.05, 0.3, C.dark, { r: 0.01 }), 0, 0.29, SHIN * 0.25); // a vent
+    put(shin, cyl(0.08, SHIN * 0.55, C.dark, { axis: 'z', seg: 8 }), 0, -0.3, SHIN * 0.32); // the piston
+    put(shin, cyl(0.05, SHIN * 0.35, 0x9a9488, { axis: 'z', seg: 6 }), 0, -0.3, SHIN * 0.68); // its rod
+    // the claw: a pad and two toes
+    put(shin, box(0.9, 0.5, 0.36, C.joint, { r: 0.04 }), 0, 0, SHIN * 0.94);
+    for (const sx of [-1, 1]) {
+      const toe = put(shin, box(0.3, 0.3, 0.4, C.dark, { r: 0.03 }), sx * 0.3, -0.05, SHIN + 0.05);
+      toe.rotation.y = sx * 0.2;
+    }
     legs.push({ ...L, thigh, knee, shin });
   }
   group.traverse((m) => {
@@ -183,23 +203,24 @@ export function createSpider() {
     group.updateWorldMatrix(true, true);
     inv.copy(group.matrixWorld).invert();
     for (const L of legs) {
-      hipW.set(L.hip[0], L.hip[1], L.hip[2] + Math.sign(L.hip[2]) * 0.3);
+      hipW.set(L.hip[0], L.hip[1], L.hip[2]);
       body.localToWorld(hipW).applyMatrix4(inv);
       const s = Math.sin(walk + L.phase);
       const c = Math.cos(walk + L.phase);
-      footW.set(L.foot[0] + s * 0.55 * lift, Math.max(0, c) * 0.45 * lift + 0.15, L.foot[1]);
+      footW.set(L.foot[0] + s * 0.55 * lift, Math.max(0, c) * 0.5 * lift + 0.05, L.foot[1]);
       // the knee: up and out between them
       const d = hipW.distanceTo(footW);
       const a = Math.min(THIGH, (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d));
       const h = Math.sqrt(Math.max(0.01, THIGH * THIGH - a * a));
       const dir = v.copy(footW).sub(hipW).normalize();
-      const out = new THREE.Vector3(0, 0, Math.sign(L.hip[2])); // bend outward and up
-      const side = new THREE.Vector3().crossVectors(dir, out).normalize();
+      // the knee bends up, in the plane of the leg (a high, sharp angle)
+      const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
       const bend = new THREE.Vector3().crossVectors(side, dir).normalize();
       if (bend.y < 0) bend.negate();
       kneeW.copy(hipW).addScaledVector(dir, a).addScaledVector(bend, h);
       lay(L.thigh, hipW, kneeW);
       L.knee.position.copy(kneeW);
+      L.knee.quaternion.copy(L.thigh.quaternion);
       lay(L.shin, kneeW, footW);
     }
   }

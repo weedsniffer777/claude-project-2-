@@ -49,6 +49,8 @@ export const BASE_STATS = {
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
   dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
   boostRefund: 0, // Legendary High-power boost: seconds of recharge back per kill while boosting
+  directHit: 1, // x the damage to the machine a shell or missile actually strikes (Rangefinder)
+  rangeBurst: false, // Legendary Rangefinder (Ranging): the view opens out 50% for 3 s after every reload
 };
 
 const RUST = 0x6d5a48;
@@ -87,6 +89,20 @@ function heCrate(n = 4) {
   return g;
 }
 
+// The missile tank's hull, for fitting parts to it (models/missileTank.js):
+// the glacis runs from the nose (x 2.05, y 0.68) up to the deck (x 0.75,
+// y 1.0); the deck is at y 1.0; the launcher turns behind x -0.1.
+const M_GLACIS = { x0: 2.05, y0: 0.68, x1: 0.75, y1: 1.0 };
+const M_SLOPE = -Math.atan2(M_GLACIS.y1 - M_GLACIS.y0, M_GLACIS.x0 - M_GLACIS.x1);
+function onGlacis(parent, x, z) {
+  const g = new THREE.Group();
+  const k = (M_GLACIS.x0 - x) / (M_GLACIS.x0 - M_GLACIS.x1);
+  g.position.set(x, M_GLACIS.y0 + k * (M_GLACIS.y1 - M_GLACIS.y0), z);
+  g.rotation.z = M_SLOPE;
+  parent.add(g);
+  return g;
+}
+
 export const PARTS = {
   dozer: {
     type: 'armor',
@@ -110,6 +126,15 @@ export const PARTS = {
         const arm = put(g, box(0.9, 0.12, 0.12, STEEL, { r: 0.02 }), 1.85, 0.48, z);
         arm.rotation.z = -0.1;
       }
+      t.chassis.add(g);
+      return g;
+    },
+    // the missile tank: a blade across its nose, arms back to the hull
+    missile(t) {
+      const g = new THREE.Group();
+      put(g, box(0.14, 0.58, 2.0, RUST, { r: 0.03 }), 2.38, 0.36, 0).rotation.z = 0.18;
+      put(g, box(0.05, 0.1, 2.02, 0xc99a2e, { r: 0.01 }), 2.46, 0.62, 0);
+      for (const z of [-0.62, 0.62]) put(g, box(0.5, 0.12, 0.12, STEEL, { r: 0.02 }), 2.12, 0.42, z).rotation.z = -0.1;
       t.chassis.add(g);
       return g;
     },
@@ -286,6 +311,37 @@ export const PARTS = {
       }
       return g;
     },
+    // the missile tank: bricks shingled over the nose of the glacis (the
+    // driver's hatch and louvre left clear), along the front skirts, and
+    // a pair on each front corner of the launcher's turntable
+    missile(t) {
+      const G = 0x56653a;
+      const g = new THREE.Group();
+      for (const x of [1.92, 1.62]) {
+        const row = onGlacis(g, x, 0);
+        for (let i = 0; i < 6; i++) {
+          const z = -0.62 + i * 0.248;
+          if (x < 1.7 && z > 0.1) continue; // (the louvre)
+          put(row, box(0.27, 0.07, 0.22, G, { r: 0.012 }), 0, 0.045, z).rotation.z = 0.1;
+          put(row, box(0.28, 0.02, 0.23, ERA_EDGE), 0, 0.008, z);
+        }
+      }
+      for (const s of [-1, 1])
+        for (const x of [0.92, 1.3]) {
+          put(g, box(0.32, 0.2, 0.06, G, { r: 0.012 }), x, 0.72, s * 0.9);
+          put(g, box(0.33, 0.02, 0.07, ERA_EDGE), x, 0.83, s * 0.9);
+        }
+      t.chassis.add(g);
+      const tg = new THREE.Group();
+      for (const s of [-1, 1])
+        for (const dz of [0, 0.2]) {
+          put(tg, box(0.1, 0.14, 0.18, G, { r: 0.012 }), 0.6, 0.17, s * (0.28 + dz));
+          put(tg, box(0.02, 0.15, 0.19, ERA_EDGE), 0.56, 0.17, s * (0.28 + dz));
+        }
+      t.turret.add(tg);
+      g.userData.extra = [tg];
+      return g;
+    },
     // the light tank: bricks shingled over the front slope, two rows on the
     // front of each turret bin either side of the gun
     light(t) {
@@ -344,6 +400,21 @@ export const PARTS = {
         all.userData.mounts.push({ pivot: g.userData.pivot, muzzle: g.userData.muzzle, timer: Math.random() * 0.1 });
       }
       t.turret.add(all);
+      return all;
+    },
+    // the missile tank: on pintles round the front deck and glacis (clear
+    // of the launcher's swing)
+    missile(t, tier = 0) {
+      const all = new THREE.Group();
+      all.userData.mounts = [];
+      for (const [x, y, z] of [[0.12, 1.12, -0.55], [-0.02, 1.12, 0.12], [1.3, 0.98, 0.02]].slice(0, tier + 1)) {
+        const g = mgMount();
+        g.scale.setScalar(0.85);
+        g.position.set(x, y, z);
+        all.add(g);
+        all.userData.mounts.push({ pivot: g.userData.pivot, muzzle: g.userData.muzzle, timer: Math.random() * 0.1 });
+      }
+      t.chassis.add(all);
       return all;
     },
     model: () => mgMount(),
@@ -421,6 +492,14 @@ export const PARTS = {
       t.turret.add(g);
       return g;
     },
+    // the missile tank: on the front deck, left of the commander
+    missile(t) {
+      const g = sightHead();
+      g.position.set(0.62, 1.0, -0.12);
+      g.scale.setScalar(0.5);
+      t.chassis.add(g);
+      return g;
+    },
     light(t) {
       const g = sightHead();
       g.position.set(-0.5, 0.48, 0);
@@ -451,6 +530,16 @@ export const PARTS = {
       { text: 'Hits harder.', apply: (s) => (s.cannonDamage *= 1.15) },
       { text: 'Hits harder again.', apply: (s) => (s.cannonDamage *= 1.15) },
     ],
+    // the missile tank: a crate strapped on the glacis, beside the louvre
+    missile(t) {
+      const g = heCrate(3);
+      g.scale.setScalar(0.55);
+      const at = onGlacis(t.chassis, 1.42, -0.05);
+      at.add(g);
+      g.position.set(0, 0.02, 0);
+      g.rotation.y = Math.PI;
+      return at;
+    },
     light(t) {
       const g = heCrate(3);
       g.scale.setScalar(0.62);
@@ -476,6 +565,63 @@ export const PARTS = {
       r.position.set(0.15, 0.08, 0.55);
       r.rotation.y = -0.35;
       g.add(r);
+      return g;
+    },
+  },
+  // A laser rangefinder: sees further, and lays the gun true, so what the
+  // shell (or missile) strikes takes more. Legendary: after every reload the
+  // view opens right out for a moment (Ranging).
+  rangefinder: {
+    type: 'utility',
+    name: 'Rangefinder',
+    text: 'See 10% further. Direct hits deal 10% more damage.',
+    icon: ['................', '..############..', '.#############-.', '.#**##****###--.', '.#**##*##*###--.', '.#**##****###--.', '.#############-.', '..############..', '.....-....-.....', '....--....--....'],
+    apply(s) {
+      s.view *= 1.1;
+      s.directHit *= 1.1;
+    },
+    tiers: [
+      { text: 'Sees further, direct hits harder.', apply: (s) => ((s.view *= 1.09), (s.directHit *= 1.09)) },
+      { text: '', perk: 'Ranging', perkText: 'After every reload the view opens out 50% for 3 s.', apply: (s) => (s.rangeBurst = true) },
+    ],
+    build(t) {
+      const g = rangefinderHead();
+      g.position.set(-0.5, 0.48, -0.05);
+      g.scale.setScalar(0.62);
+      t.turret.add(g);
+      return g;
+    },
+    light(t) {
+      const g = rangefinderHead();
+      g.position.set(-0.25, 0.47, 0.42);
+      g.scale.setScalar(0.45);
+      t.turret.add(g);
+      return g;
+    },
+    missile(t) {
+      const g = rangefinderHead();
+      g.position.set(0.86, 1.28, 0.42); // on top of its sight box
+      g.scale.setScalar(0.42);
+      t.chassis.add(g);
+      return g;
+    },
+    // on its pallet: on a tripod with its pan head
+    model() {
+      const g = new THREE.Group();
+      const legs = 0x6b5f45;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2 + 0.4;
+        const leg = put(g, cyl(0.03, 0.9, legs, { seg: 6 }), Math.cos(a) * 0.22, 0.42, Math.sin(a) * 0.22);
+        leg.rotation.set(Math.sin(a) * 0.28, 0, -Math.cos(a) * 0.28);
+      }
+      put(g, cyl(0.09, 0.08, legs, { seg: 10 }), 0, 0.88, 0);
+      put(g, box(0.2, 0.18, 0.16, 0xa8956a, { r: 0.02 }), 0, 1.0, 0); // the pan head
+      put(g, cyl(0.06, 0.05, 0x1d1f22, { axis: 'z', seg: 10 }), 0, 1.0, 0.11); // its knobs
+      put(g, cyl(0.06, 0.05, 0x1d1f22, { axis: 'z', seg: 10 }), 0, 1.0, -0.11);
+      const head = rangefinderHead();
+      head.position.y = 1.08;
+      head.rotation.y = -Math.PI * 0.72; // lenses toward the camera
+      g.add(head);
       return g;
     },
   },
@@ -582,6 +728,31 @@ function sightHead() {
   hinge.rotation.y = -1.25;
   put(hinge, box(0.04, 0.38, 0.36, DARKSAND, { r: 0.015 }), 0.02, 0, 0.18);
   g.add(hinge);
+  return g;
+}
+
+// A laser rangefinder: a speckled sand housing, two big lenses side by side
+// in its face (one blue, glowing), a small round port on its side, knobs.
+// Faces +x, sits on y 0.
+function rangefinderHead() {
+  const g = new THREE.Group();
+  const SAND = 0xb7a57a;
+  const DARKSAND = 0x8f805c;
+  put(g, box(0.3, 0.06, 0.3, DARKSAND, { r: 0.02 }), 0, 0.03, 0); // its mount
+  put(g, box(0.5, 0.36, 0.62, SAND, { r: 0.06 }), 0, 0.24, 0); // the housing
+  put(g, box(0.44, 0.06, 0.5, DARKSAND, { r: 0.02 }), -0.02, 0.43, 0); // top
+  for (const [x, y] of [[-0.18, 0.3], [-0.05, 0.18], [0.1, 0.34], [0.16, 0.2], [-0.12, 0.38], [0.02, 0.27]]) put(g, box(0.03, 0.03, 0.03, 0x7a6d4e), x, y, 0.312); // speckle
+  // the face: two lens barrels, rims, glass
+  for (const [z, col, glow] of [[-0.15, 0x4fa6ff, true], [0.15, 0x7d8a86, false]]) {
+    put(g, cyl(0.13, 0.08, DARKSAND, { axis: 'x', seg: 16 }), 0.27, 0.25, z);
+    put(g, cyl(0.1, 0.03, 0x16181b, { axis: 'x', seg: 14 }), 0.31, 0.25, z);
+    put(g, cyl(0.085, 0.02, col, { axis: 'x', seg: 14, glow }), 0.322, 0.25, z);
+  }
+  // a small round port and a knob on the side, the eyecup behind
+  put(g, cyl(0.07, 0.04, DARKSAND, { axis: 'z', seg: 12 }), 0.08, 0.27, 0.33);
+  put(g, cyl(0.045, 0.02, 0x16181b, { axis: 'z', seg: 10 }), 0.08, 0.27, 0.35);
+  put(g, cyl(0.05, 0.06, 0x1d1f22, { axis: 'z', seg: 10 }), -0.12, 0.16, -0.34);
+  put(g, box(0.06, 0.14, 0.2, 0x1d1f22, { r: 0.03 }), -0.27, 0.27, -0.12);
   return g;
 }
 
@@ -718,6 +889,7 @@ const STAT_ROWS = [
   ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
   ['ramDamage', 'Ram damage without boost', (v) => `${Math.round(v)}`, 1],
   ['view', 'View', pct, 1],
+  ['directHit', 'Direct hit damage', pct, 1],
   ['speed', 'Speed', pct, 1],
   ['boostSpeed', 'Boost speed', pct, 1],
   ['boostTime', 'Boost time', secs, 1],
