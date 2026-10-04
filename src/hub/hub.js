@@ -880,6 +880,53 @@ export function createHub({ renderer, pixel, onDeploy }) {
   me.copy(HOME);
   crew.group.rotation.y = Math.PI * 0.75;
   const crewBox = () => ({ x: me.x, z: me.z, hx: 0.25, hz: 0.25, yaw: 0 });
+
+  // the rest of the crew, the driver and the gunner: same kit as you (no
+  // outline), pottering round the quarters. Each strolls between a few
+  // spots, stops, faces what's there (the stove, the radio, the lockers,
+  // the table) and stands about for a while.
+  const face = (dx, dz) => Math.atan2(-dz, dx);
+  const MATES = [
+    { role: 'Driver', spots: [[-6.2, -8.3, face(-1, 0.2)], [-6.0, -12.5, face(-1, -0.6)], [-3.4, -10.2, face(1, 0)], [-4.8, -14.6, face(0, -1)]] },
+    { role: 'Gunner', spots: [[3.0, -13.6, face(1, 0)], [0.3, -10.2, face(-1, 0)], [1.6, -14.6, face(0, -1)], [-0.4, -8.0, face(-0.4, -1)]] },
+  ];
+  const mates = MATES.map((m, i) => {
+    const c = createCrew();
+    const [x, z, yaw] = m.spots[i];
+    c.group.position.set(x, 0, z);
+    c.group.rotation.y = yaw;
+    scene.add(c.group);
+    return { ...m, c, at: i, wait: 2 + Math.random() * 5, to: null, speed: 0 };
+  });
+  function matesFrame(dt, t) {
+    for (const m of mates) {
+      const p = m.c.group.position;
+      if (m.to) {
+        const dx = m.to[0] - p.x;
+        const dz = m.to[1] - p.z;
+        const d = Math.hypot(dx, dz);
+        m.speed = Math.min(0.42, m.speed + dt * 1.5);
+        m.c.group.rotation.y = approachAngle(m.c.group.rotation.y, face(dx, dz), dt * 8);
+        if (d < 0.08) {
+          m.to = null;
+          m.wait = 4 + Math.random() * 7;
+        } else {
+          const step = Math.min(d, WALK * m.speed * dt);
+          p.x += (dx / d) * step;
+          p.z += (dz / d) * step;
+        }
+      } else {
+        m.speed = Math.max(0, m.speed - dt * 3);
+        m.c.group.rotation.y = approachAngle(m.c.group.rotation.y, m.spots[m.at][2], dt * 4);
+        m.wait -= dt;
+        if (m.wait <= 0) {
+          m.at = (m.at + 1 + ((Math.random() * (m.spots.length - 1)) | 0)) % m.spots.length;
+          m.to = m.spots[m.at];
+        }
+      }
+      m.c.update(dt, t, m.speed, WALK);
+    }
+  }
   const roomAt = (p) => ROOMS.find((r) => p.x > r.rect[0] + 0.3 && p.x < r.rect[1] - 0.3 && p.z > r.rect[2] + 0.3 && p.z < r.rect[3] - 0.3) || null;
 
   // -------------------------------------------------------------- UI
@@ -928,8 +975,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
       return openFitting();
     } else {
       menu.innerHTML = `
-        <h2>Quarters</h2><p class="sub">Bunks, lockers, a stove going.</p>
-        <div class="zone locked"><b>Crew</b><span>Coming soon.</span></div>
+        <h2>Crew</h2><p class="sub">Bunks, lockers, a stove going. Your crew off duty.</p>
+        <div class="zone"><b>Commander</b><span>You. Picks the route and calls the shots.</span></div>
+        <div class="zone"><b>Driver</b><span>Keeps the tank moving.</span></div>
+        <div class="zone"><b>Gunner</b><span>Lays the main gun.</span></div>
+        <div class="zone locked"><b>Crew skills</b><span>Coming soon.</span></div>
         <button type="button" class="back">Back</button>`;
     }
     menu.querySelector('.back').addEventListener('click', closeRoom);
@@ -1149,7 +1199,14 @@ export function createHub({ renderer, pixel, onDeploy }) {
     keys.add(e.code);
   };
   const onKeyUp = (e) => keys.delete(e.code);
+  // in the hangar: drag anywhere off the panels to turn the tank on its lift
+  let turning = null;
   const onDown = (e) => {
+    if (open?.id === 'hangar' && !workshop.isOpen && tank) {
+      turning = { x: e.clientX, id: e.pointerId };
+      canvasEl.style.cursor = 'grabbing';
+      return;
+    }
     if (open || !news.hidden) return;
     const hit = pick(e);
     if (!hit) return;
@@ -1158,10 +1215,20 @@ export function createHub({ renderer, pixel, onDeploy }) {
     walkTo = hit.point.clone().setY(0);
   };
   const onMove = (e) => {
+    if (turning && e.pointerId === turning.id) {
+      tank.group.rotation.y += (e.clientX - turning.x) * 0.012;
+      turning.x = e.clientX;
+      return;
+    }
     if (open || e.pointerType === 'touch') return void (hover = null);
     hover = pick(e)?.object.userData.room || null;
   };
   const onBlur = () => keys.clear();
+  const onUp = (e) => {
+    if (!turning || e.pointerId !== turning.id) return;
+    turning = null;
+    canvasEl.style.cursor = CURSOR;
+  };
 
   // ----------------------------------------------------------- frame
   const input = new THREE.Vector3();
@@ -1177,6 +1244,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       window.addEventListener('blur', onBlur);
       canvasEl.addEventListener('pointerdown', onDown);
       canvasEl.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
       canvasEl.style.cursor = CURSOR;
       pixel.setActorOutlines(true);
       closeRoom();
@@ -1199,6 +1267,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       window.removeEventListener('blur', onBlur);
       canvasEl.removeEventListener('pointerdown', onDown);
       canvasEl.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
       canvasEl.style.cursor = '';
       keys.clear();
     },
@@ -1241,6 +1310,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         if (pushOut(me, crewBox, B.blocks) && walkTo && Math.random() < dt * 2) walkTo = null;
       }
       crew.update(dt, t, speed, WALK);
+      matesFrame(dt, t);
       B.update(dt, t, {});
       for (const e of B.emitters) if (e.light) e.light.intensity = e.intensity * e.level;
       for (const h of holo) {
