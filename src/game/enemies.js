@@ -3,6 +3,8 @@
 // them; their wrecks stay where they fall.
 import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
+import { createWalker } from '../models/walker.js';
+import { createBridgeGun } from '../models/bridgeGun.js';
 import { pushOut } from './collide.js';
 import { ENEMY_LAYER } from '../render/pixel.js';
 
@@ -46,6 +48,53 @@ const HOUND = {
   windup: 0.9,
   spread: 0.1,
   boltSpeed: 20,
+};
+
+// The anti-tank walker: a tall biped with one long gun. It closes to long
+// range, stops, and lines up a shot: its funnel narrows to a line and blinks
+// white faster and faster, its aim creeping after the tank, then a beam goes
+// straight down the line, through anything on it until something solid.
+// Breaking its line of sight, smoke, or a stun spoils the shot.
+const WALKER = {
+  ...DOG,
+  model: createWalker,
+  sniper: true,
+  hp: 55,
+  runSpeed: 3.4,
+  walkSpeed: 1.6,
+  range: 17,
+  tooClose: 9,
+  charge: 2.2, // seconds lining up a shot
+  track: 0.55, // how fast (rad/s) its aim creeps after the tank meanwhile
+  reload: 3.2,
+  damage: 24,
+  box: { hx: 0.6, hz: 0.4 },
+  scale: 1.2,
+  aimY: 1.5,
+  hit: [1.0, 2.1, 0.9, 1.3],
+  scrap: 8,
+};
+
+// The bridge gun: level 2's boss, a heavy anti-tank gun dug in at the far
+// end of the bridge. Doesn't move; charges like the walker but faster and
+// harder, its aim sweeping after the tank.
+const BRIDGE_GUN = {
+  ...WALKER,
+  model: createBridgeGun,
+  static: true,
+  hp: 900,
+  range: 44,
+  tooClose: 0,
+  charge: 2.4,
+  track: 0.9,
+  reload: 1.7,
+  damage: 28,
+  box: { hx: 1.9, hz: 1.9 },
+  scale: 2.2,
+  modelScale: 1,
+  aimY: 1.3,
+  hit: [3.4, 1.8, 3.4, 0.9],
+  scrap: 40,
 };
 
 // The red funnel a machine shows while winding up a burst: where the rounds
@@ -93,12 +142,21 @@ export class Enemies {
   spawnHound(x, z, opts) {
     return this.spawn(HOUND, 'hound', x, z, opts);
   }
+  spawnWalker(x, z, opts) {
+    return this.spawn(WALKER, 'walker', x, z, opts);
+  }
+  // yaw: which way the gun faces to start with
+  spawnBridgeGun(x, z, opts = {}) {
+    const e = this.spawn(BRIDGE_GUN, 'gun', x, z, opts);
+    e.model.group.rotation.y = opts.yaw ?? Math.PI;
+    return e;
+  }
 
   // noclip: ignore walls and rubble until the waypoints are done (climbing in
   // over a rubble heap from off screen)
   spawn(stats, kind, x, z, { delay = 0, via = [], noclip = false } = {}) {
-    const model = createDog();
-    model.group.scale.setScalar(stats.scale);
+    const model = (stats.model || createDog)();
+    model.group.scale.setScalar(stats.modelScale ?? stats.scale);
     model.group.position.set(x, 0, z);
     model.group.visible = delay <= 0;
     this.scene.add(model.group);
@@ -107,8 +165,9 @@ export class Enemies {
       if (o.isMesh && !o.material.transparent && !o.userData.outline) o.layers.enable(ENEMY_LAYER);
     });
     // invisible box shells and the aim ray can hit
-    const hit = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.0, 0.7), this.hitMat);
-    hit.position.y = 0.55;
+    const [hw, hh, hd, hy] = stats.hit || [1.2, 1.0, 0.7, 0.55];
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(hw, hh, hd), this.hitMat);
+    hit.position.y = hy;
     hit.userData.noDecal = true;
     model.group.add(hit);
     const e = {
@@ -175,7 +234,7 @@ export class Enemies {
   }
 
   aimPoint(e) {
-    return new THREE.Vector3(e.pos.x, 0.65 * e.stats.scale, e.pos.z);
+    return new THREE.Vector3(e.pos.x, e.stats.aimY ?? 0.65 * e.stats.scale, e.pos.z);
   }
 
   // Returns true when this killed it. blastFrom: a heavy hit that blows the
@@ -276,6 +335,7 @@ export class Enemies {
       if (!e.alive || Math.hypot(e.pos.x - at.x, e.pos.z - at.z) > radius) continue;
       e.windup = 0;
       e.burstLeft = 0;
+      e.charge = 0;
       e.fireTimer = Math.max(e.fireTimer, blind);
       e.blind = blind;
     }
@@ -428,6 +488,7 @@ export class Enemies {
         vz = tx * s + tz * 0.3;
         speed = DOG.runSpeed * 0.7;
       }
+      if (DOG.sniper && (e.charge > 0 || DOG.static)) speed = 0; // planted while it lines up a shot
       const len = Math.hypot(vx, vz) || 1;
       const before = e.pos.clone();
       if (e.stun > 0) {
@@ -480,15 +541,19 @@ export class Enemies {
 
       // the body always faces the way it walks (no sliding sideways); the
       // head and rifle turn to keep the tank in their sights
-      const facing = moved > 0.002 ? Math.atan2(-(e.pos.z - before.z), e.pos.x - before.x) : e.model.group.rotation.y;
+      const facing = moved > 0.002 && !DOG.static ? Math.atan2(-(e.pos.z - before.z), e.pos.x - before.x) : e.model.group.rotation.y;
       const g = e.model.group;
       let diff = facing - g.rotation.y;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       g.rotation.y += diff * Math.min(1, dt * 8);
       // the rifle holds on the locked line while it winds up and fires
       const locked = e.lock && (e.windup > 0 || e.burstLeft > 0);
-      let aimYaw = (locked ? Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x) : Math.atan2(-tz, tx)) - g.rotation.y;
+      let aimYaw = (DOG.sniper && e.charge > 0 ? e.lockYaw : locked ? Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x) : Math.atan2(-tz, tx)) - g.rotation.y;
       aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
+      if (DOG.sniper) {
+        this.sniperFrame(e, dt, t, ctx, dist, aimYaw);
+        continue;
+      }
 
       // shooting: in range, it locks onto where the tank is (and a little of
       // where it's heading), shows a red funnel while it winds up, then fires
@@ -547,6 +612,92 @@ export class Enemies {
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
       e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil });
     }
+  }
+
+  // The walker and the bridge gun: line up, then fire a beam.
+  sniperFrame(e, dt, t, ctx, dist, aimYaw) {
+    const S = e.stats;
+    const { tankPos } = ctx;
+    e.recoil = Math.max(0, e.recoil - dt * 3);
+    e.fireTimer -= dt;
+    if (e.blind > 0) e.blind -= dt;
+    const want = Math.atan2(-(tankPos.z - e.pos.z), tankPos.x - e.pos.x);
+    if (e.charge > 0) {
+      // its aim creeps after the tank: keep moving across the line and it misses
+      let d = want - e.lockYaw;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      e.lockYaw += THREE.MathUtils.clamp(d, -S.track * dt, S.track * dt);
+      e.lostT = e.los ? 0 : (e.lostT || 0) + dt;
+      e.charge -= dt;
+      if (e.blind > 0 || e.stun > 0 || e.lostT > 0.6) {
+        e.charge = 0; // lost it: the shot's spoiled
+        e.fireTimer = 1.2;
+      } else if (e.charge <= 0) this.fireBeam(e, ctx);
+    } else if (e.fireTimer <= 0 && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
+      e.charge = S.charge;
+      e.lockYaw = want;
+      e.lostT = 0;
+    }
+    // the funnel: wide at first, narrowing to a line, blinking white faster
+    // and faster as the shot comes
+    const k = e.charge > 0 ? 1 - e.charge / S.charge : 0;
+    e.funnelK = e.charge > 0 ? 1 : Math.max(0, e.funnelK - dt * 6);
+    e.funnel.visible = e.funnelK > 0.02;
+    if (e.funnel.visible) {
+      const from = e.model.muzzle();
+      const len = this.beamLength(e, from, ctx.colliders, S.range + 4);
+      const width = THREE.MathUtils.lerp(Math.tan(0.22) * 2 * len, 0.25, Math.min(1, k * 1.15));
+      e.funnel.position.set(from.x, (ctx.heightAt ? ctx.heightAt(from.x, from.z) : 0) + 0.06, from.z);
+      e.funnel.rotation.y = e.lockYaw;
+      e.funnel.scale.set(len, 1, width);
+      const freq = 2 + k * k * 16;
+      const white = Math.sin(t * freq * Math.PI * 2) > 0 && k > 0.15;
+      e.funnel.material.color.set(white ? 0xffffff : 0xff3b2f);
+      e.funnelEdge.material.color.set(white ? 0xffffff : 0xff2a1a);
+      e.funnel.material.opacity = e.funnelK * (0.2 + 0.3 * k);
+      e.funnelEdge.material.opacity = e.funnelK * (0.7 + 0.3 * k);
+    }
+    e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
+    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0, recoil: e.recoil, charge: k });
+  }
+  // how far a beam from the muzzle along the lock goes before something solid stops it
+  beamLength(e, from, colliders, max) {
+    losRay.set(new THREE.Vector3(from.x, Math.max(0.9, from.y), from.z), new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw)));
+    losRay.far = max;
+    const hit = colliders?.length ? losRay.intersectObjects(colliders, false)[0] : null;
+    return hit ? hit.distance : max;
+  }
+  fireBeam(e, ctx) {
+    const S = e.stats;
+    const from = e.model.muzzle();
+    const dir = new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw));
+    const len = this.beamLength(e, from, ctx.colliders, S.range + 4);
+    const end = from.clone().addScaledVector(dir, len).setY(Math.max(0.6, from.y * 0.6));
+    e.recoil = 1;
+    e.fireTimer = S.reload + Math.random() * 0.8;
+    // did it catch the tank? (its footprint against the line)
+    const tb = ctx.tankBox;
+    if (tb) {
+      const rx = tb.x - from.x;
+      const rz = tb.z - from.z;
+      const along = rx * dir.x + rz * dir.z;
+      const off = Math.abs(rx * dir.z - rz * dir.x);
+      if (along > 0 && along < len + 0.5 && off < tb.hz + 0.4) {
+        ctx.onTankHit?.(S.damage, from.clone().addScaledVector(dir, along));
+        this.combat.fx.burst(from.clone().addScaledVector(dir, along).setY(1.1), { count: 18, speed: 7, color: 0xffd9c8, life: 0.35, size: 0.08, gravity: 10 });
+      }
+    }
+    // the beam: a white-hot core in a red glow, a flash at each end
+    const c = this.combat;
+    c.glow.tracer(from, end, 0xffffff, S.static ? 0.45 : 0.3, 0.3);
+    c.glow.tracer(from, end, 0xff3b2f, S.static ? 1.1 : 0.8, 0.22);
+    c.glow.flash(from, 0xffffff, 0.3, S.static ? 2.2 : 1.4, 0.12);
+    c.glow.light(from, 0xff6a50, 40, 0.15);
+    // where it stops: a hot splash of sparks and a puff (scenery only: it's no player's shell)
+    c.glow.flash(end, 0xfff0e0, 0.2, 1.2, 0.1);
+    c.fx.burst(end, { count: 16, speed: 6, color: 0xffd9c8, life: 0.35, size: 0.07, gravity: 10 });
+    for (let i = 0; i < 4; i++) c.puffs.spawn(end, new THREE.Vector3((Math.random() - 0.5) * 2, 0.8 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x8f8b84, s0: 0.12, s1: 0.4, life: 0.6, drag: 3, lift: 0.8, fadeAt: 0.3 });
+    c.shake = Math.max(c.shake, S.static ? 0.4 : 0.2);
   }
 
   // Rounds in flight: red streaks; a round that passes through the tank's

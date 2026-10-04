@@ -283,6 +283,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return e;
     },
     spawnHound: (x, z, opts) => enemies.spawnHound(x, z, opts),
+    spawnWalker: (x, z, opts) => enemies.spawnWalker(x, z, opts),
+    spawnBridgeGun: (x, z, opts) => enemies.spawnBridgeGun(x, z, opts),
     get run() {
       return run;
     },
@@ -362,7 +364,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     // dev tools: every enemy on the field gone, no drops, no kills counted
     clearEnemies: () => enemies.retire(),
-    sectors: (names, current) => hud.setSectors(names, current),
+    sectors: (names, current, zone) => hud.setSectors(names, current, zone),
     // Walk from `from` along `dir` until the point is just outside what the
     // camera shows (whatever the view size, optics included): a spawn point
     // that is out of sight but as close as possible.
@@ -418,10 +420,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // onto the repair plate. A pick of parts pops up (or skip), then Continue
     // drives it out; it fades back to the street still rolling, out of the
     // shack's back door. gift: 'boost' rigs the drums as boosters.
-    depot(shack, { offers, gift = null, onLeave }) {
+    // offers: the parts this checkpoint can hand out (only ones not found
+    // yet are shown, at most count of them; none: a repair stop)
+    depot(shack, { offers, count = 3, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
-      offers = offers.filter((id) => !save.owned().includes(id)); // only parts not found yet
+      offers = offers.filter((id) => !save.owned().includes(id)).slice(0, count); // only parts not found yet
       run.mode = 'depot';
       run.locked = true;
       queued = 0;

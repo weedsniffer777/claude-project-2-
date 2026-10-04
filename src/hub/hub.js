@@ -20,7 +20,7 @@ import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { save } from '../game/save.js';
 import { partPicture } from '../render/partPictures.js';
-import { CAMPAIGN, clearKey } from '../game/campaign.js';
+import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -924,7 +924,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function openBriefing() {
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${z.open ? `<span class="stars">${stars(z)}</span>` : ''}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
@@ -937,11 +937,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);
     const info = brief.querySelector('.info');
     const owned = save.owned();
-    if (!z.open) {
+    if (!isOpen(z, save.cleared())) {
+      const soon = !z.id && isOpen({ ...z, id: '?' }, save.cleared());
       info.innerHTML = `
         <span class="tagline px">Level ${z.n}</span>
-        <h2>Locked</h2>
-        <p>Beat level ${z.n - 1} to unlock.</p>
+        <h2>${soon ? 'Coming soon' : 'Locked'}</h2>
+        <p>${soon ? 'This level is still being built.' : `Beat level ${z.n - 1} to unlock.`}</p>
         <div class="row"><button type="button" class="back">Back</button></div>`;
     } else {
       // Easy and Hard: each cleared on its own (a star each), each with
