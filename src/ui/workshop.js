@@ -492,6 +492,7 @@ export function createWorkshop({ renderer, cursor }) {
       root.hidden = false;
       busy = false;
       const owned = save.owned().filter((id) => PARTS[id]);
+      if (opts.tab) tab = opts.tab;
       if (opts.select && owned.includes(opts.select)) {
         sel = opts.select;
         tab = 'parts';
@@ -508,6 +509,15 @@ export function createWorkshop({ renderer, cursor }) {
     },
   };
 }
+
+// can this part evolve to its next tier now (affordable, scraps and tokens)?
+export function canEvolve(id) {
+  const lvl = levelOf(id);
+  if (!evolvesAt(lvl)) return false;
+  const c = evolveCost(lvl);
+  return save.bank() >= c.scraps && save.tokens() >= c.tokens;
+}
+export const evolveReady = () => save.owned().filter((id) => PARTS[id] && canEvolve(id));
 
 // is there a level up the player can afford, and they haven't been shown
 // the upgrades screen yet? (the hangar and its button glow)

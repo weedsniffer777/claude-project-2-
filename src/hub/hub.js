@@ -18,7 +18,7 @@ import { CURSOR } from '../game/hud.js';
 import { PARTS, attachPart } from '../game/parts.js';
 import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
-import { createWorkshop, upgradeHint } from '../ui/workshop.js';
+import { createWorkshop, upgradeHint, evolveReady, canEvolve } from '../ui/workshop.js';
 import { save } from '../game/save.js';
 import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
 import { tokenIconURL } from '../ui/icons.js';
@@ -1113,28 +1113,33 @@ export function createHub({ renderer, pixel, onDeploy }) {
       buttons: [['Back', () => closeRoom()]],
       // scraps take parts up a tier on a screen of their own
       upgradeHint: upgradeHint(),
-      onUpgrades(partId = null) {
-        fitting.hide();
-        workshop.show({
-          tankId,
-          select: partId,
-          onChange() {
-            bankEl.textContent = bankTotal();
-            fitHubTank();
-          },
-          onClose() {
-            bankEl.textContent = bankTotal();
-            tags.get('hangar').classList.toggle('alert', upgradeHint());
-            if (open?.id === 'hangar') openFitting();
-          },
-        });
-      },
+      evolveReady,
+      canEvolve,
+      onUpgradeTank: () => openWorkshop({ tab: 'tanks' }),
+      onUpgrades: (partId = null) => openWorkshop({ tab: 'parts', select: partId }),
       anchor: (id) => {
         const w = anchorWorld(tank, tankId, id);
         return w ? toScreen(w) : null;
       },
     });
     freshTanks = [];
+  }
+  // the upgrades screen, over the hangar
+  function openWorkshop(opts) {
+    fitting.hide();
+    workshop.show({
+      tankId,
+      ...opts,
+      onChange() {
+        bankEl.textContent = bankTotal();
+        fitHubTank();
+      },
+      onClose() {
+        bankEl.textContent = bankTotal();
+        tags.get('hangar').classList.toggle('alert', upgradeHint());
+        if (open?.id === 'hangar') openFitting();
+      },
+    });
   }
 
   // "New!": what the last level unlocked, once, on coming back to the base

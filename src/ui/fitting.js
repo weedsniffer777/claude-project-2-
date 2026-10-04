@@ -77,6 +77,12 @@ const CSS = `
 .fit .upbtn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px 10px; font-size: 12px; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
 .fit .upbtn:hover { filter: brightness(1.12); }
 .fit .upbtn.hint { animation: fitglow 0.9s steps(2) infinite; }
+.fit .upbtn.evolve { background: #c77dff; box-shadow: 0 3px 0 #6a2fa0, 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; }
+@keyframes fitbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); box-shadow: 0 8px 0 #6a2fa0, 0 0 0 2px #000, 0 0 16px #c77dffaa; } }
+.fit .upbtn .evtag { padding: 2px 5px; font-size: 9px; color: #fff; background: #6a2fa0; box-shadow: 0 0 0 2px #000; }
+.fit .item .evb, .fit .slot .evb { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #8a45d0; box-shadow: 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; pointer-events: none; }
+.fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
+.fit .btn.tankup small { font-size: 10px; margin-left: 4px; }
 .fit .upbtn .dot { padding: 2px 5px; font-size: 9px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
 @keyframes fitglow { 50% { box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000, 0 0 0 5px #ffe2a0, 0 0 18px #ffc24a; } }
 .fit .slot.empty { color: var(--red); background: #241314; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; min-height: 54px; justify-content: center; font-size: 13px; }
@@ -280,6 +286,7 @@ export function createFitting({ renderer, cursor }) {
         el.style.setProperty('--tc', TIERS[tier].color);
         el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
         el.querySelector('.nm .pn').textContent = PARTS[id].name;
+        if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
         el.addEventListener('pointerenter', () => !replacing && showTip(el, id));
         el.addEventListener('pointerleave', hideTip);
       } else el.innerHTML = '<span>Empty</span>';
@@ -306,6 +313,7 @@ export function createFitting({ renderer, cursor }) {
       const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
       if (only) el.classList.add('isaway');
       el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away">${only} only</span>` : ''}`;
+      if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
       el.addEventListener('click', () => (o.tanks ? openItemPop(id, el) : equip(id)));
       el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(id)));
@@ -317,9 +325,12 @@ export function createFitting({ renderer, cursor }) {
     const upb = $('.upbtn');
     upb.hidden = !o.onUpgrades;
     if (o.onUpgrades) {
-      upb.classList.toggle('hint', !!o.upgradeHint);
-      upb.innerHTML = `Upgrade parts${o.upgradeHint ? '<span class="dot">New</span>' : ''}`;
-      upb.onclick = () => (closePop(), o.onUpgrades());
+      // a part ready to evolve: the button bounces with a violet tag
+      const ev = o.evolveReady?.() || [];
+      upb.classList.toggle('hint', !!o.upgradeHint && !ev.length);
+      upb.classList.toggle('evolve', ev.length > 0);
+      upb.innerHTML = `Upgrade parts${ev.length ? '<span class="evtag">Can evolve!</span>' : o.upgradeHint ? '<span class="dot">New</span>' : ''}`;
+      upb.onclick = () => (closePop(), o.onUpgrades(ev[0] || null));
     }
     // the message box: a fresh find, or which slot to replace
     const msg = $('.msg');
@@ -348,6 +359,15 @@ export function createFitting({ renderer, cursor }) {
     // buttons
     const btns = $('.btns');
     btns.innerHTML = '';
+    // under the tank (hangar): level it up
+    if (o.onUpgradeTank) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn tankup';
+      b.innerHTML = `Upgrade tank <small>Lv ${save.tankLevel(o.tankId)}</small>`;
+      b.addEventListener('click', () => !replacing && (closePop(), o.onUpgradeTank()));
+      btns.append(b);
+    }
     for (const [label, fn, primary] of o.buttons || []) {
       const b = document.createElement('button');
       b.type = 'button';
