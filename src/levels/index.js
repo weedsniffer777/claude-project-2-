@@ -1,6 +1,7 @@
 // Level registry. The first entry is the default level.
 import { avenue } from './avenue.js';
 import { river } from './river.js';
+import { highway } from './highway.js';
 import { provingGround } from './provingGround.js';
 
-export const LEVELS = [avenue, river, provingGround];
+export const LEVELS = [avenue, river, highway, provingGround];

@@ -635,7 +635,7 @@ export class Enemies {
         const reach = Math.hypot(e.lock.x - from.x, e.lock.z - from.z) + 6;
         const time = reach / DOG.boltSpeed;
         const vel = dir.multiplyScalar(DOG.boltSpeed);
-        vel.y = (0.25 - from.y) / time; // dipping down to hit the ground past the target
+        vel.y = (tankPos.y + 0.25 - from.y) / time; // dipping down to hit the ground past the target
         this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: DOG.damage });
         this.combat.glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
         this.combat.glow.light(from, 0xff4a30, 6, 0.06);
@@ -738,7 +738,7 @@ export class Enemies {
       e.fireTimer = e.burstLeft > 0 ? S.salvoGap : S.reload + Math.random() * 1.2;
       // each rocket at where the tank is as it launches (a little scatter)
       const from = e.model.muzzle();
-      const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 0.8, 0.9, tankPos.z + (Math.random() - 0.5) * 0.8);
+      const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 0.8, tankPos.y + 0.9, tankPos.z + (Math.random() - 0.5) * 0.8);
       const to = aim.clone().sub(from);
       const time = to.length() / S.rocketSpeed;
       // past the aim point, on into the ground behind it
@@ -842,7 +842,7 @@ export class Enemies {
   // The beam is laid on the hull, not the turret top: it runs along at
   // HULL_Y, so cover as high as the hull stops it.
   beamLength(e, from, colliders, max) {
-    losRay.set(new THREE.Vector3(from.x, HULL_Y, from.z), new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw)));
+    losRay.set(new THREE.Vector3(from.x, e.pos.y + HULL_Y, from.z), new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw))); // (over the ground it stands on)
     losRay.far = max;
     const hit = colliders?.length ? losRay.intersectObjects(colliders, false)[0] : null;
     return hit ? hit.distance : max;
@@ -852,7 +852,7 @@ export class Enemies {
     const from = e.model.muzzle();
     const dir = new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw));
     const len = this.beamLength(e, from, ctx.colliders, S.range + 4);
-    const end = from.clone().addScaledVector(dir, len).setY(HULL_Y);
+    const end = from.clone().addScaledVector(dir, len).setY(e.pos.y + HULL_Y);
     e.recoil = 1;
     e.fireTimer = S.reload + Math.random() * 0.8;
     // did it catch the tank? (its footprint against the line)
@@ -864,7 +864,7 @@ export class Enemies {
       const off = Math.abs(rx * dir.z - rz * dir.x);
       if (along > 0 && along < len + 0.5 && off < tb.hz + 0.4) {
         ctx.onTankHit?.(S.damage, from.clone().addScaledVector(dir, along));
-        this.combat.fx.burst(from.clone().addScaledVector(dir, along).setY(HULL_Y), { count: 18, speed: 7, color: 0xffd9c8, life: 0.35, size: 0.08, gravity: 10 });
+        this.combat.fx.burst(from.clone().addScaledVector(dir, along).setY(e.pos.y + HULL_Y), { count: 18, speed: 7, color: 0xffd9c8, life: 0.35, size: 0.08, gravity: 10 });
       }
     }
     // the beam: a white-hot core in a red glow, a flash at each end
@@ -933,7 +933,8 @@ export class Enemies {
       this.combat.glow.tracer(tail, b.pos, 0xff2414, 0.16, 0.04);
       this.combat.glow.tracer(tail.lerp(b.pos, 0.4), b.pos, 0xffb8a0, 0.06, 0.04);
       let hit = false;
-      if (tb && b.pos.y < 1.8) {
+      const ty = ctx.tankPos?.y ?? 0; // (the tank may be up on a deck)
+      if (tb && b.pos.y < ty + 1.8 && b.pos.y > ty - 0.3) {
         const dx = b.pos.x - tb.x;
         const dz = b.pos.z - tb.z;
         const c = Math.cos(tb.yaw);

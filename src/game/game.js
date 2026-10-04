@@ -2329,6 +2329,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       stragglers(dt);
       enemyPointers();
       pickups.bounds = run.mode === 'field' ? level.bounds : null;
+      pickups.heightAt = level.heightAt;
       pickups.update(dt, t, pos, camera, collect);
       level.update(dt, t, { combat, focus: camTarget, api });
       if (run.mode === 'depot') depotFrame(dt);

@@ -169,7 +169,7 @@ export class Pickups {
           p.pos.x = hi(lo(p.pos.x, b.minX), b.maxX);
           p.pos.z = hi(lo(p.pos.z, b.minZ), b.maxZ);
         }
-        const floor = 0.35 + Math.sin(t * 4 + p.spin) * 0.08;
+        const floor = (this.heightAt ? this.heightAt(p.pos.x, p.pos.z) : 0) + 0.35 + Math.sin(t * 4 + p.spin) * 0.08; // (on a raised deck, on the deck)
         if (p.pos.y < floor) {
           p.pos.y = floor;
           p.vel.y = Math.abs(p.vel.y) * 0.35;
