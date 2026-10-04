@@ -11,6 +11,7 @@ const K = {
   tanks: 'scavenger.tanks',
   seen: 'scavenger.seen',
   tutorial: 'scavenger.tutorial',
+  tips: 'scavenger.tips',
   difficulty: 'scavenger.difficulty',
 };
 function read(key, fallback) {
@@ -60,8 +61,13 @@ export const save = {
     write(K.seen, [...save.news(), ...items]);
   },
   clearNews: () => write(K.seen, []),
-  tutorialDone: () => read(K.tutorial, false),
-  setTutorialDone: (v = true) => write(K.tutorial, v),
+  // tutorial tips already shown (each shows once)
+  tips: () => read(K.tips, []),
+  seeTip(id) {
+    const list = save.tips();
+    if (!list.includes(id)) write(K.tips, [...list, id]);
+  },
+  clearTips: () => write(K.tips, []),
   difficulty: () => read(K.difficulty, 'easy'),
   setDifficulty: (d) => write(K.difficulty, d),
   cleared: () => read(K.cleared, []),

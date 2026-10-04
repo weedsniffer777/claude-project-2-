@@ -899,11 +899,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
     } else {
       menu.innerHTML = `
         <h2>Quarters</h2><p class="sub">Bunks, lockers, a stove going.</p>
-        <div class="zone"><b>Tutorial</b><span>Play level 1 again with all the tips and lessons.</span><button type="button" class="go replay">Replay tutorial</button></div>
+        <div class="zone"><b>Tutorial</b><span>Show all the tips and lessons again, starting with level 1.</span><button type="button" class="go replay">Replay tutorial</button></div>
         <div class="zone locked"><b>Crew</b><span>Coming soon.</span></div>
         <button type="button" class="back">Back</button>`;
       menu.querySelector('.replay').addEventListener('click', () => {
-        save.setTutorialDone(false);
+        save.clearTips();
         deploy('avenue');
       });
     }

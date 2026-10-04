@@ -839,7 +839,7 @@ export function createTank() {
     const yaw = group.rotation.y;
     if (ctx.aimPoint) {
       const want = wrapAngle(Math.atan2(-(ctx.aimPoint.z - tmp.z), ctx.aimPoint.x - tmp.x) - yaw);
-      turret.rotation.y = approachAngle(turret.rotation.y, want, TURRET_SPEED * dt);
+      turret.rotation.y = approachAngle(turret.rotation.y, want, TURRET_SPEED * (ctx.turretRate || 1) * dt);
       aimError = Math.abs(wrapAngle(want - turret.rotation.y));
     }
     if (ctx.aimPoint) {

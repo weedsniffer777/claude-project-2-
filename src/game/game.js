@@ -57,6 +57,8 @@ const PIERCE_HALF = 1.0; // how close to the line a machine must be (x its scale
 // Breakthrough (the light tank's Shift): the shockwave at the end of the dash
 const SHOCK_R = 3.2;
 const SHOCK_DAMAGE = 45;
+const AIM_TIME = 4; // seconds (real time) to aim a Piercing shot before it fires itself
+const AIM_SLOW = 0.25; // game speed while aiming it
 
 export function createGame({ renderer, pixel, level: startLevel, onExit = null }) {
   injectDevKitStyles();
@@ -87,7 +89,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const fitting = createFitting({ renderer, cursor: hud.cursor });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const camTarget = new THREE.Vector3();
-  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, pickups, crushing;
+  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, pickups, crushing;
   const run = { hp: 100, time: 0, over: false, won: false };
   let stats = { ...BASE_STATS };
   const partMeshes = [];
@@ -132,14 +134,21 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       new THREE.RingGeometry(0.22, 0.34, 12),
       new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }),
     );
-    scene.add(aimLine, aimMark);
+    // Piercing shot's aim: a glowing line down the barrel to where it'll stop
+    aimBeam = new THREE.Group();
+    for (const [color, opacity] of [[0xfff6d6, 0.85], [0xffb347, 0.3]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+      m.userData.base = opacity;
+      aimBeam.add(m);
+    }
+    aimBeam.visible = false;
+    scene.add(aimLine, aimMark, aimBeam);
     tank.group.position.set(level.spawn.x, 0, level.spawn.z);
     tank.group.rotation.y = level.spawn.yaw;
     // a fresh run: the tank as it finished its last level (its saved
     // loadout), no rockets until the level hands them out
     const loadout = save.loadout(tankId).filter((id) => PARTS[id]).slice(0, def.slots);
     fitParts(loadout);
-    tutorial = !save.tutorialDone();
     Object.assign(run, {
       hp: stats.maxHp,
       time: 0,
@@ -149,13 +158,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       parts: [...loadout],
       found: [], // parts picked at checkpoints this run
       hard: save.difficulty() === 'hard',
-      tutorial,
       rockets: false,
       ability: false, // the signature ability (E), once the level hands it over
       abilityCd: 0,
-      pierceQ: 0,
+      aiming: 0, // Piercing shot: seconds left to aim it
+      dash: 0, // Breakthrough: seconds of dash left
       shield: 0, // Breakthrough: damage taken is cut while it lasts
-      dashing: false,
       mag: stats.mag,
       magT: 0,
       boost: 0,
@@ -194,9 +202,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     hud.setScrap(0);
     // a scripted level (the tutorial) hands out the main gun and the scraps
     // counter as it introduces them; anywhere else they're there from the start
-    // (and after the tutorial's been played once, all of it is there from
-    // the start too)
-    const all = !level.start || !tutorial;
+    // (once its tips have been seen, the level hands them over at the start)
+    const all = !level.start;
     run.gun = all;
     run.rockets = all;
     run.ability = all;
@@ -220,7 +227,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
     if (lastSize) game.resize(...lastSize); // optics widen the view
   }
-  let tutorial = true;
 
   // Quality: shadow-map size and how many point lights the lamps share.
   // Changing the light count recompiles shaders once, so it only happens on
@@ -256,7 +262,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     get enemiesAlive() {
       return enemies.alive.length;
     },
-    spawnDog: (x, z, opts) => enemies.spawnDog(x, z, opts),
+    // on Hard, most groups come with extra machines alongside
+    spawnDog(x, z, opts = {}) {
+      const e = enemies.spawnDog(x, z, opts);
+      if (run.hard && hardCount++ % 5 < 3) {
+        const dx = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.random());
+        const dz = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.random());
+        enemies.spawnDog(x + dx, z + dz, { ...opts, delay: (opts.delay || 0) + 0.5, via: (opts.via || []).map(([vx, vz]) => [vx + dx * 0.5, vz + dz * 0.5]) });
+      }
+      return e;
+    },
     spawnHound: (x, z, opts) => enemies.spawnHound(x, z, opts),
     get run() {
       return run;
@@ -264,17 +279,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     get mgActive() {
       return mgActive;
     },
-    // the first time through: tips, lessons, spotlights
-    get tutorial() {
-      return run.tutorial;
+    // tutorial tips: each one shows once, ever. lesson(id) is true the
+    // first time (and marks it seen); seen(id) just asks.
+    seen: (id) => save.tips().includes(id),
+    lesson(id) {
+      if (save.tips().includes(id)) return false;
+      save.seeTip(id);
+      return true;
     },
     // the tank being driven: { name, moveName, ability, abilityName, gun }
     get tank() {
       return def;
-    },
-    // a tip: shown only while the tutorial is on
-    teach(tag, html, opts) {
-      if (run.tutorial) hud.prompt(tag, html, opts);
     },
     // the signature ability (E): Piercing shot
     giveAbility() {
@@ -318,7 +333,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // frame: () => a world point the camera leans toward meanwhile (so a boss
     // spotlit off screen comes into view, not necessarily centred)
     spotlight(spec, until, { maxTime = 3, frame = null } = {}) {
-      if (!run.tutorial && !frame) return; // lessons only the first time through
       run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3), frame }; // never holds the game up for long
       hud.setSpot(spec);
     },
@@ -375,8 +389,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.gun = true;
     },
     // the scraps counter appears, glowing for a moment (no slow-down)
-    revealScraps() {
-      hud.showScrap(true, true);
+    revealScraps(highlight = true) {
+      hud.showScrap(true, highlight);
     },
     boss(e, name = 'Large quadruped') {
       run.boss = e ? { e, name } : null;
@@ -464,7 +478,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         bank(lvl.hard.scraps);
         rewards.push(['Hard clear reward', `+${lvl.hard.scraps} scraps`]);
       }
-      if (run.tutorial) save.setTutorialDone();
       pickups.collectAll(collect);
       hud.clearPrompt();
       hud.setMarker(null);
@@ -496,6 +509,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
   };
   let mgActive = false;
+  let hardCount = 0;
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
@@ -542,7 +556,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const f = c.footprint;
       const reach = small ? 0.35 : c.breakable ? 1.2 : 0.7;
       if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) {
-        if (small && c.breakable && (c.chips = (c.chips || 0) + 1) < 5) continue;
+        if (small && c.breakable && (c.chips = (c.chips || 0) + 1) < 3) continue; // a barricade or the gate takes three
         crushing.crush(c, { x: at.x - (f.x - at.x || 0.5), z: at.z - (f.z - at.z), yaw: 0 });
         if (c.scrap) pickups.spawn(new THREE.Vector3(f.x, 0.8, f.z), c.scrap, 'scrap', 1);
       }
@@ -601,9 +615,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
     queued = 0.7;
   }
-  // Shift. The battle tank's boost: the drums light and it charges. The
-  // light tank's Breakthrough: a short dash on the exhaust rockets, shielded,
-  // leaving smoke that spoils the machines' aim, ending in a shockwave.
+  // Shift: boost. The battle tank's drums swing round and light, the light
+  // tank's exhausts flare; either way it charges.
   function boost() {
     if (!run.rockets || run.over || run.mode !== 'field' || run.locked || run.boostCd > 0) return;
     run.boost = stats.boostTime;
@@ -611,24 +624,44 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.boosts++;
     combat.shake = Math.max(combat.shake, 0.2);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xffd08a, 0.2, 1.2, 0.12);
-    if (def.move === 'dash') {
-      run.dashing = true;
-      run.shield = stats.boostTime + 0.4;
-      speed = BOOST_SPEED * stats.boostSpeed; // instant
-      enemies.breakLocks(pos, 10);
-      // a wall of smoke where it was
-      for (let i = 0; i < 16; i++) {
-        const a = (i / 16) * Math.PI * 2;
-        combat.puffs.spawn(pos.clone().add(new THREE.Vector3(Math.cos(a) * 0.9, 0.4 + Math.random() * 0.5, Math.sin(a) * 0.9)), new THREE.Vector3(Math.cos(a) * 2.5, 0.4 + Math.random() * 0.6, Math.sin(a) * 2.5), {
-          color: [0xcfd0c8, 0xb9bbb3, 0xdedfd8][i % 3],
-          s0: 0.3,
-          s1: 1.0 + Math.random() * 0.5,
-          life: 1.6 + Math.random() * 0.8,
-          drag: 2.5,
-          lift: 0.3,
-          fadeAt: 0.6,
-        });
-      }
+  }
+
+  // E: the tank's signature ability.
+  function ability() {
+    if (!run.ability || run.over || run.mode !== 'field' || run.locked) return;
+    if (def.ability === 'pierce') {
+      if (run.aiming > 0) return firePierce(); // E again: fire now
+      if (run.abilityCd > 0) return;
+      run.aiming = AIM_TIME; // time slows; aim, then click (or let go) to fire
+      trigger = false;
+      queued = 0;
+    } else if (def.ability === 'breakthrough') breakthrough();
+  }
+
+  // Breakthrough (the light tank): an instant dash on full rockets,
+  // shielded, leaving a wall of smoke that spoils the machines' aim, ending
+  // in a shockwave that knocks them away.
+  function breakthrough() {
+    if (run.abilityCd > 0) return;
+    run.abilityCd = stats.breakCooldown;
+    run.abilities = (run.abilities || 0) + 1;
+    run.dash = stats.dashTime;
+    run.shield = stats.dashTime + 0.4;
+    speed = BOOST_SPEED * stats.dashSpeed; // instant
+    enemies.breakLocks(pos, 10);
+    combat.shake = Math.max(combat.shake, 0.3);
+    for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.3, 1.6, 0.14);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      combat.puffs.spawn(pos.clone().add(new THREE.Vector3(Math.cos(a) * 0.9, 0.4 + Math.random() * 0.5, Math.sin(a) * 0.9)), new THREE.Vector3(Math.cos(a) * 2.5, 0.4 + Math.random() * 0.6, Math.sin(a) * 2.5), {
+        color: [0xcfd0c8, 0xb9bbb3, 0xdedfd8][i % 3],
+        s0: 0.3,
+        s1: 1.0 + Math.random() * 0.5,
+        life: 1.6 + Math.random() * 0.8,
+        drag: 2.5,
+        lift: 0.3,
+        fadeAt: 0.6,
+      });
     }
   }
   // the end of the dash: a ring of force, machines knocked away and hurt
@@ -641,74 +674,93 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const dir = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
       combat.puffs.spawn(at.clone().addScaledVector(dir, 0.6), dir.multiplyScalar(7), { color: 0xd8d2c0, s0: 0.15, s1: 0.4, life: 0.35, drag: 5, lift: 0.2, fadeAt: 0.3 });
     }
+    combat.glow.ring(new THREE.Vector3(at.x, pos.y + 0.08, at.z), 0xffe2b0, 0.5, SHOCK_R * 1.2, 0.3);
     combat.glow.flash(at, 0xfff0c8, 0.3, SHOCK_R, 0.12);
     combat.glow.light(at, 0xffc070, 20, 0.12);
     combat.shake = Math.max(combat.shake, 0.3);
   }
 
-  // E: the signature ability. Piercing shot: the gun swings onto the aim
-  // and a round goes straight down the line through every machine on it,
-  // through junk and barricades, until something solid stops it.
-  function ability() {
-    if (def.ability !== 'pierce' || !run.ability || run.over || run.mode !== 'field' || run.locked || run.abilityCd > 0) return;
-    run.pierceQ = 0.6;
-  }
-  function tryPierce(dt) {
-    if (run.pierceQ <= 0) return;
-    run.pierceQ -= dt;
-    if (run.over) return void (run.pierceQ = 0);
-    if (hasAim && tank.aimError() > 0.05 && run.pierceQ > 0) return;
-    run.pierceQ = 0;
-    run.abilityCd = stats.pierceCooldown;
-    run.abilities = (run.abilities || 0) + 1;
-    const { position: m, direction: d } = tank.fire();
+  // Piercing shot (the battle tank). E: time slows for a few seconds while
+  // you aim (a glowing line shows where it'll go); click, press E again, or
+  // on touch let go, to fire. If you wait too long it fires by itself. The
+  // round flies down the line like a meteor, through every machine on it,
+  // through junk, barricades and the gate, until something solid stops it,
+  // and leaves a glowing trail behind.
+  function pierceLine() {
+    const { position: m, direction: d } = tank.muzzle();
     const dir = new THREE.Vector3(d.x, 0, d.z).normalize();
-    // stopped by the first solid thing (walls, buildings): not by junk,
-    // barricades or the gate, which it goes straight through
+    const from = new THREE.Vector3(m.x, Math.max(0.6, m.y), m.z);
     const soft = new Set();
     for (const c of level.crushables || []) if (!c.done && !c.armored) for (const k of c.colliders) soft.add(k);
-    const ray = new THREE.Raycaster(new THREE.Vector3(m.x, Math.max(0.6, m.y), m.z), dir, 0, PIERCE_LEN);
+    const ray = new THREE.Raycaster(from, dir, 0, PIERCE_LEN);
     const wall = ray.intersectObjects(colliders, false).find((h) => !soft.has(h.object));
-    const len = wall ? wall.distance : PIERCE_LEN;
-    const end = m.clone().addScaledVector(dir, len);
-    // every machine near the line
-    for (const e of [...enemies.alive]) {
-      const rx = e.pos.x - m.x;
-      const rz = e.pos.z - m.z;
-      const along = rx * dir.x + rz * dir.z;
-      if (along < -0.5 || along > len + 0.5) continue;
-      if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
-      const killed = enemies.damage(e, stats.pierceDamage, m.clone());
-      const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
-      hud.damage(p, stats.pierceDamage, 'big');
-      if (killed) hud.damage(p.clone().setY(p.y + 0.7), 0, 'kill');
-      combat.fx.burst(p, { count: 16, speed: 7, color: 0xffd36b, life: 0.35, size: 0.08, gravity: 10 });
+    return { from, dir, len: wall ? wall.distance : PIERCE_LEN, wall };
+  }
+  function firePierce() {
+    if (!(run.aiming > 0)) return;
+    run.aiming = 0;
+    pierceTouch = null;
+    aimBeam.visible = false;
+    run.abilityCd = stats.pierceCooldown;
+    run.abilities = (run.abilities || 0) + 1;
+    tank.fire(); // the recoil
+    const { from, dir, len, wall } = pierceLine();
+    const hit = new Set();
+    const broke = new Set();
+    // the launch: a huge flash, blades of light, a ring of smoke at the muzzle
+    combat.glow.flash(from, 0xffffff, 0.4, 2.2, 0.12);
+    combat.glow.flash(from, 0xffb347, 0.6, 3.0, 0.25);
+    combat.glow.spike(from, dir, 0xfff6d6, 4.5, 0.5, 0.14);
+    const side = new THREE.Vector3(-dir.z, 0, dir.x);
+    for (const s2 of [-1, 1]) combat.glow.spike(from, dir.clone().addScaledVector(side, s2 * 0.8).normalize(), 0xffc24a, 1.6, 0.25, 0.1);
+    combat.glow.light(from, 0xffc070, 90, 0.25);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const r = side.clone().multiplyScalar(Math.cos(a)).add(new THREE.Vector3(0, Math.sin(a), 0));
+      combat.puffs.spawn(from.clone().addScaledVector(r, 0.2), r.multiplyScalar(3.5).addScaledVector(dir, 1.5), { color: 0xd8d6cc, s0: 0.15, s1: 0.4, life: 0.5, drag: 4, lift: 0.6, fadeAt: 0.3 });
     }
-    // junk, barricades and the gate along it
-    for (const c of level.crushables || []) {
-      if (c.done || c.armored) continue;
-      const f = c.footprint;
-      for (let k = 0; k <= len; k += 0.4) {
-        const x = m.x + dir.x * k;
-        const z = m.z + dir.z * k;
-        if (Math.abs(x - f.x) < f.hx + 0.5 && Math.abs(z - f.z) < f.hz + 0.5) {
-          crushing.crush(c, { x: x - dir.x, z: z - dir.z, yaw: Math.atan2(-dir.z, dir.x) });
-          if (c.scrap) pickups.spawn(new THREE.Vector3(f.x, 0.8, f.z), c.scrap, 'scrap', 1);
-          break;
+    combat.shake = Math.max(combat.shake, 0.6);
+    run.hitstop = Math.max(run.hitstop, 0.06);
+    combat.pierceShot(from, dir, len, {
+      // as the round passes along the line from a0 to a1
+      onPass(a0, a1) {
+        for (const e of [...enemies.alive]) {
+          if (hit.has(e)) continue;
+          const rx = e.pos.x - from.x;
+          const rz = e.pos.z - from.z;
+          const along = rx * dir.x + rz * dir.z;
+          if (along < a0 - 0.6 || along > a1 + 0.6) continue;
+          if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
+          hit.add(e);
+          const killed = enemies.damage(e, stats.pierceDamage, from.clone());
+          const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
+          hud.damage(p, stats.pierceDamage, 'big');
+          if (killed) hud.damage(p.clone().setY(p.y + 0.7), 0, 'kill');
+          combat.glow.flash(p, 0xfff6d6, 0.3, 1.6, 0.1);
+          combat.fx.burst(p, { count: 22, speed: 8, color: 0xffd36b, life: 0.4, size: 0.09, gravity: 10 });
+          combat.shake = Math.max(combat.shake, 0.4);
+          run.hitstop = Math.max(run.hitstop, 0.05);
         }
-      }
-    }
-    level.onImpact?.(end, wall?.object, api);
-    // the show: a long white-hot line, a big flash, smoke down its length
-    combat.glow.tracer(m, end, 0xfff6d6, 0.32, 0.3);
-    combat.glow.tracer(m, end, 0xffb347, 0.6, 0.18);
-    combat.glow.flash(m, 0xfff6d6, 0.3, 1.6, 0.12);
-    combat.glow.spike(m, dir, 0xfff0b0, 3.5, 0.4, 0.12);
-    combat.glow.light(m, 0xffb060, 60, 0.2);
-    for (let k = 1; k < len; k += 1.2) combat.puffs.spawn(m.clone().addScaledVector(dir, k), new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.5, (Math.random() - 0.5) * 0.6), { color: 0xd8d6cc, s0: 0.12, s1: 0.35, life: 0.5 + Math.random() * 0.3, drag: 3, lift: 0.6, fadeAt: 0.3 });
-    combat.explode(end, wall?.face?.normal || null, wall?.object || null);
-    combat.shake = Math.max(combat.shake, 0.55);
-    run.hitstop = Math.max(run.hitstop, 0.1);
+        for (const c of level.crushables || []) {
+          if (c.done || c.armored || broke.has(c)) continue;
+          const f = c.footprint;
+          for (let k = a0; k <= a1; k += 0.4) {
+            const x = from.x + dir.x * k;
+            const z = from.z + dir.z * k;
+            if (Math.abs(x - f.x) < f.hx + 0.5 && Math.abs(z - f.z) < f.hz + 0.5) {
+              broke.add(c);
+              crushing.crush(c, { x: x - dir.x, z: z - dir.z, yaw: Math.atan2(-dir.z, dir.x) });
+              if (c.scrap) pickups.spawn(new THREE.Vector3(f.x, 0.8, f.z), c.scrap, 'scrap', 1);
+              break;
+            }
+          }
+        }
+      },
+      onEnd(end) {
+        level.onImpact?.(end, wall?.object, api);
+        combat.explode(end, wall?.face?.normal || null, wall?.object || null);
+      },
+    });
   }
 
   // the autocannon: holding the trigger fires a round every reload until the
@@ -779,7 +831,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.paused) return;
     if (e.code === 'Space') {
       e.preventDefault();
-      if (holdFire()) trigger = true;
+      if (run.aiming > 0) firePierce();
+      else if (holdFire()) trigger = true;
       else fire();
       return;
     }
@@ -856,7 +909,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         onMove(e); // the knob jumps straight to the thumb
       } else {
         aimAt(e.clientX, e.clientY);
-        if (holdFire()) {
+        if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
+        else if (holdFire()) {
           trigger = true; // held down: keeps firing
           aimTouch = e.pointerId;
         } else fireOnAim = true; // fire once this frame's aim ray has landed
@@ -865,16 +919,19 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
     setTouch(false);
     if (e.button !== 0) return;
-    if (holdFire()) trigger = true;
+    if (run.aiming > 0) firePierce();
+    else if (holdFire()) trigger = true;
     else fire();
   };
   let aimTouch = null;
+  let pierceTouch = null;
   const onWinUp = (e) => {
     if (e.pointerType !== 'touch' && e.button === 0) trigger = false;
   };
   const onContext = (e) => e.preventDefault();
   const onUp = (e) => {
     if (e.pointerType === 'mouse' && e.button === 0) trigger = false;
+    if (e.pointerId === pierceTouch) firePierce();
     if (e.pointerId === aimTouch) {
       trigger = false;
       aimTouch = null;
@@ -1110,6 +1167,25 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     px(12, 8, 3, 3, '#ff3b2f');
     return c;
   }
+  // Breakthrough's icon: chevrons punching forward out of a puff of smoke
+  let breakCanvas = null;
+  function breakArt() {
+    if (breakCanvas) return breakCanvas;
+    const c = (breakCanvas = document.createElement('canvas'));
+    c.width = c.height = 26;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1d1b1e';
+    g.fillRect(0, 0, 26, 26);
+    const px = (x, y, w, h, col) => ((g.fillStyle = col), g.fillRect(x, y, w, h));
+    for (const [x, y, r] of [[4, 13, 4], [7, 9, 3], [6, 17, 3]]) px(x - r, y - r, r * 2, r * 2, '#b9bbb3'); // smoke
+    for (const [x0, col] of [[8, '#ff9a3a'], [13, '#ffd08a'], [18, '#fff3c4']]) {
+      for (let i = 0; i < 6; i++) {
+        px(x0 + i, 7 + i, 3, 2, col);
+        px(x0 + i, 18 - i, 3, 2, col);
+      }
+    }
+    return c;
+  }
   // view: optional { target, dir, half } framing a close-up instead of the
   // whole model
   function snapshotCanvas(model, W = 72, H = 48, decorate = null, view = null) {
@@ -1237,6 +1313,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.hitstop -= realDt;
         dt = 0;
       } else if (run.spot) dt = realDt * SLOW_MO;
+      if (run.aiming > 0) {
+        dt = realDt * AIM_SLOW;
+        run.aiming -= realDt;
+        if (run.aiming <= 0 || run.over || run.mode !== 'field') {
+          run.aiming = 0.001;
+          if (run.over || run.mode !== 'field') {
+            run.aiming = 0;
+            aimBeam.visible = false;
+          } else firePierce(); // out of time: it fires where it points
+        }
+      }
       if (run.spot) {
         run.spot.t += realDt;
         if (run.spot.until() || run.spot.t > run.spot.maxTime || run.over) {
@@ -1268,7 +1355,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (keys.has('KeyA') || keys.has('ArrowLeft')) input.sub(INPUT_RIGHT);
         if (stick.id !== null) input.addScaledVector(INPUT_RIGHT, stick.x).addScaledVector(INPUT_FORWARD, -stick.y);
       }
-      const boosting = run.boost > 0;
+      const boosting = run.boost > 0 || run.dash > 0;
       let want = 0;
       let accel = ACCEL;
       let throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
@@ -1291,16 +1378,20 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (input.lengthSq() > 0.02) {
         input.normalize();
         const heading = Math.atan2(-input.z, input.x);
-        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * (boosting ? (run.dashing ? 0.15 : 0.45) : 1) * dt);
+        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * (boosting ? (run.dash > 0 ? 0.15 : 0.45) : 1) * dt);
         const off = Math.abs(wrapAngle(heading - tank.group.rotation.y));
         want = MAX_SPEED * stats.speed * throttle * Math.max(0, Math.cos(off));
       }
-      if (boosting) {
+      if (run.boost > 0) {
         run.boost -= dt;
         want = BOOST_SPEED * stats.boostSpeed;
         accel = 60;
-        if (run.dashing && run.boost <= 0) {
-          run.dashing = false;
+      }
+      if (run.dash > 0) {
+        run.dash -= dt;
+        want = BOOST_SPEED * stats.dashSpeed;
+        accel = 200;
+        if (run.dash <= 0) {
           speed = Math.min(speed, MAX_SPEED * stats.speed); // straight back to driving speed
           shockwave();
         }
@@ -1438,7 +1529,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
       mgActive = !!mgTarget;
 
-      tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed });
+      tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.aiming > 0 ? 1 / AIM_SLOW : 1 }); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
       for (const e of tank.events) {
         if (e.type !== 'mg' || !mgTarget?.alive || Math.random() > MG_ACCURACY) continue;
@@ -1451,7 +1542,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (stats.twinMg) twinMg(dt, t, mgTarget);
       tryFire(dt);
       autoFire(dt);
-      tryPierce(dt);
       combat.handleTankEvents(tank);
       combat.update(dt);
       pickups.update(dt, t, pos, camera, collect);
@@ -1460,7 +1550,20 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       assignLamps();
 
       // aim line and landing mark
-      const showAim = hasAim && !run.over && run.mode === 'field' && run.gun;
+      aimBeam.visible = run.aiming > 0;
+      if (aimBeam.visible) {
+        const L = pierceLine();
+        const mid = L.from.clone().addScaledVector(L.dir, L.len / 2);
+        const pulse = 0.75 + 0.25 * Math.sin(t * 18);
+        aimBeam.children.forEach((m, i) => {
+          m.position.copy(mid);
+          m.lookAt(L.from.clone().addScaledVector(L.dir, L.len));
+          const w = i ? 0.42 : 0.1;
+          m.scale.set(w, w, L.len);
+          m.material.opacity = m.userData.base * pulse;
+        });
+      }
+      const showAim = hasAim && !run.over && run.mode === 'field' && run.gun && !(run.aiming > 0);
       aimLine.visible = aimMark.visible = showAim;
       if (showAim) {
         const { position: m, direction: d, breech } = tank.muzzle();
@@ -1487,13 +1590,15 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.showReticle(!!client && !run.over && run.mode === 'field');
       if (client) {
         const reloading = stats.mag && run.magT > 0;
-        hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload, stats.mag ? { n: run.mag, max: stats.mag, reloading } : null);
+        if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME), null); // the ring counts down the aim
+        else hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload, stats.mag ? { n: run.mag, max: stats.mag, reloading } : null);
       }
       if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
-      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / stats.pierceCooldown, left: run.abilityCd, lit: run.pierceQ > 0, art: pierceArt() } : null, 1);
+      const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
+      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.dash > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);

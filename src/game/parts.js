@@ -29,6 +29,10 @@ export const BASE_STATS = {
   magReload: 0,
   pierceDamage: 140,
   pierceCooldown: 12,
+  // Breakthrough: a dash (seconds, x the boost speed) and its recharge
+  dashTime: 0.32,
+  dashSpeed: 1.5,
+  breakCooldown: 8,
   afterburner: false,
 };
 
