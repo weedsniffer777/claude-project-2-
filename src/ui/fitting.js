@@ -398,7 +398,7 @@ export function createFitting({ renderer, cursor }) {
       root.append(pop);
       const r = box.getBoundingClientRect();
       pop.style.left = `${Math.round(r.left)}px`;
-      pop.style.top = `${Math.round(r.bottom + 10)}px`;
+      pop.style.top = `${Math.round(r.bottom + 22)}px`;
     });
   }
 

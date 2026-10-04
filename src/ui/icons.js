@@ -29,34 +29,27 @@ function seg(x, y, ax, ay, bx, by) {
 }
 
 // ---------------------------------------------------------------- token
+// a flat violet hexagon (a simple shape, like the scraps' diamond), a
+// lighter facet up its top left, and a white up arrow badge off its top
+// right corner
+const hex = (x, y, cx, cy, r) => {
+  const dx = Math.abs(x - cx);
+  const dy = Math.abs(y - cy);
+  return dx <= r * 0.866 && dy <= r - dx * 0.577 ? 1 : 0; // pointy-top hexagon
+};
 function tokenAt(x, y) {
-  const face = ell(x, y, 16, 14.5, 12.5, 11.5);
-  const edge = ell(x, y, 16, 17.5, 12.5, 11.5);
-  const inFace = face <= 1;
-  const inEdge = edge <= 1 || (Math.abs(x - 16) <= 12.5 && y >= 14.5 && y <= 17.5);
-  // the up arrow (and its shadow, one pixel down and right)
-  const arrow = (ax, ay) => {
-    if (ay >= 6 && ay <= 13.5) {
-      const half = ((ay - 6) / 7.5) * 6.2;
-      if (Math.abs(ax - 16) <= half) return true;
-    }
-    return ay > 13.5 && ay <= 21.5 && Math.abs(ax - 16) <= 2.6;
-  };
-  if (inFace) {
-    if (face <= 0.62) {
-      if (arrow(x, y)) return x - y > 2.5 ? '#f3e2ff' : '#ffffff';
-      if (arrow(x - 1, y - 1)) return '#6a2fa8';
-      if (x + y < 21 && face > 0.3) return '#e0b4ff'; // the shine, top left
-      return '#c77dff';
-    }
-    if (face <= 0.8) return x + y < 26 ? '#d9a3ff' : '#9a52e0'; // the raised rim
-    return '#7a38c0';
+  const C = [13, 17];
+  // the arrow badge, outlined
+  const ax = x - 23.5;
+  const ay = y - 8;
+  const arrow = (u, v) => (v >= -6 && v <= -0.5 && Math.abs(u) <= (v + 6) * 0.95) || (v > -0.5 && v <= 5 && Math.abs(u) <= 1.6);
+  if (arrow(ax, ay)) return '#ffffff';
+  if (arrow(ax - 1, ay - 1) || arrow(ax + 1, ay) || arrow(ax - 1, ay) || arrow(ax, ay + 1) || arrow(ax, ay - 1)) return '#1a0a2a';
+  if (hex(x, y, C[0], C[1], 12)) {
+    if (!hex(x, y, C[0], C[1], 10)) return '#1a0a2a';
+    if (!hex(x, y, C[0], C[1], 8.2)) return y < C[1] && x < C[0] + 3 ? '#e2b8ff' : '#8a45d0';
+    return x + y < C[0] + C[1] ? '#d29aff' : '#b468f2';
   }
-  if (inEdge) return y > 20 || x > 22 ? '#4a1d78' : '#5f2894'; // the coin's thickness
-  // a dark outline round it all
-  if (ell(x, y, 16, 14.5, 13.5, 12.5) <= 1 || ell(x, y, 16, 17.5, 13.5, 12.5) <= 1) return '#1a0a2a';
-  // a glint
-  if ((Math.round(x - 0.5) === 5 && Math.abs(y - 4.5) < 2) || (Math.round(y - 0.5) === 4 && Math.abs(x - 5.5) < 2)) return '#ffffff';
   return null;
 }
 const tokenCache = new Map();
@@ -68,14 +61,16 @@ let tokenUrl = null;
 export const tokenIconURL = () => (tokenUrl ??= tokenCanvas(2).toDataURL());
 
 // ------------------------------------------------------------ artillery
+// a group of three, all on the same slant: two landed either side, the
+// third still coming down between them
 const BLASTS = [
-  { x: 11, y: 17, r: 5.2, ring: [7.5, 3] },
-  { x: 24, y: 14, r: 4.2, ring: [6, 2.4] },
+  { x: 8.5, y: 17, r: 4.8, ring: [6.5, 2.7] },
+  { x: 23.5, y: 17, r: 4.8, ring: [6.5, 2.7] },
 ];
 const TRAILS = [
-  { a: [1, 0], b: [10, 12.5] },
-  { a: [15, 0], b: [23, 10.5] },
-  { a: [27, 0], b: [30.5, 5.5], head: true }, // one still coming in
+  { a: [1, 1], b: [7.4, 12.4] },
+  { a: [16, 1], b: [22.4, 12.4] },
+  { a: [9.5, 1], b: [15.5, 9.5], head: true },
 ];
 function artilleryAt(x, y) {
   // explosions: spiky blooms, white-hot cores
@@ -90,7 +85,7 @@ function artilleryAt(x, y) {
     if (d <= r * 0.85) return '#ffb347';
     if (d <= r) return '#e8602a';
   }
-  // the incoming shell's head
+  // the incoming shell's head, and its ring on the ground waiting
   const h = TRAILS[2];
   if (Math.hypot(x - h.b[0], y - h.b[1]) <= 1.3) return '#ffffff';
   // smoke trails, fading out up the sky
@@ -98,8 +93,8 @@ function artilleryAt(x, y) {
     const s = seg(x, y, ...t.a, ...t.b);
     if (s.d <= 0.55 + s.k * 0.6) return s.k > 0.75 ? '#fff0c8' : s.k > 0.4 ? '#c9c2b4' : '#7d776d';
   }
-  // the red impact rings on the ground
-  for (const b of BLASTS) {
+  // the red impact rings on the ground (one for the shell still coming)
+  for (const b of [...BLASTS, { x: 16, y: 19.5, ring: [3.6, 1.6] }]) {
     const e = ell(x, y, b.x, b.y + 2, b.ring[0], b.ring[1]);
     if (e <= 1 && e >= 0.55) return '#ff3b2f';
     if (e < 0.55) return '#5a1a16';

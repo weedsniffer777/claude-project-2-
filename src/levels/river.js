@@ -597,7 +597,7 @@ function buildRiver(scene) {
     B.block(cx, cz, len * 0.25, 0.25, yaw);
     B.hitBox(cx, 0.45, cz, len * 0.5, 0.9, 0.4, yaw);
   }
-  B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement
+  const gunBlock = B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement (gone once it's destroyed)
   sandbags(151, 2.5, 5, Math.PI / 2);
 
   // the far bank: the street runs on between blocks, a heap of rubble or two
@@ -789,6 +789,8 @@ function buildRiver(scene) {
     switch (S.step) {
       case 0:
         if (!S.boss.alive) {
+          const gi = B.blocks.indexOf(gunBlock);
+          if (gi >= 0) B.blocks.splice(gi, 1); // the wreck's flattened: drive straight over it
           api.prompt('Bridge gun destroyed', 'The way is open. <b>Drive across!</b>', { go: true, seconds: 5 });
           setBounds(api, { maxX: MAP.x1 - 4 });
           api.arrow(new THREE.Vector3(END_X + 2, 0.6, 0), 'Exit');

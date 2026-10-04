@@ -74,6 +74,7 @@ const CSS = `
 .base-brief .node.open { background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #ffb347aa; }
 .base-brief .node.locked { background: #3a3b3f; color: #8a8a8e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; }
 .base-brief .node.sel { outline: 3px solid #f1e9d8; outline-offset: 3px; }
+.base-brief .node.open.sel { background: #6be08a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #6be08aaa; }
 .base-brief .info { width: min(300px, 32vw); padding: 16px 18px 18px; display: grid; gap: 10px; align-self: center; }
 .base-brief .info .tagline { font-size: 11px; color: #ff6a5a; }
 .base-brief .info p { margin: 0; font-size: 13px; color: #d8d0c0; }
@@ -114,7 +115,7 @@ const CSS = `
 .base-brief .rewards span.cash { display: grid; place-items: center; width: 116px; height: 40px; font: 400 13px/1 'Silkscreen', monospace; color: var(--amber); }
 .base-brief .rewards span.cash.got { color: #6d655a; }
 .base-brief .rewards span.tok { color: #d9a8ff; }
-.base-brief .rewards span.equip { width: 66px; height: 54px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+.base-brief .rewards span.equip { width: 66px; height: 50px; background: none; box-shadow: none; } /* (the icon is its own cut-corner tile) */
 .base-brief .rewards span.res { display: flex; align-items: center; justify-content: center; gap: 7px; width: 104px; height: 34px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; }
 .base-brief .rewards span.res.scr { color: var(--amber); }
 .base-brief .rewards span.res.tok { color: #d9a8ff; }
@@ -126,7 +127,8 @@ const CSS = `
 .base-brief .node .stars .star { width: 11px; height: 11px; background: #5a5456; }
 .base-brief .node .stars .star.easy.got { background: var(--amber); }
 .base-brief .node .stars .star.hard.got { background: #ff3b2f; }
-.base-brief .node .hardtag { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); padding: 4px 7px 5px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; animation: basecall 1.2s steps(2) infinite; pointer-events: none; }
+.base-brief .node .hardtag { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); padding: 4px 7px 5px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; animation: hardbob 1.2s steps(2) infinite; pointer-events: none; }
+@keyframes hardbob { 0%, 100% { transform: translateX(-50%); } 50% { transform: translateX(-50%) translateY(-4px); } }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
@@ -1215,12 +1217,15 @@ export function createHub({ renderer, pixel, onDeploy }) {
     if (r) return clickRoom(r);
     walkTo = hit.point.clone().setY(0);
   };
+  // (on the window: the drag keeps turning it when the pointer passes over
+  // the panels)
+  const onTurn = (e) => {
+    if (!turning || e.pointerId !== turning.id) return;
+    tank.group.rotation.y += (e.clientX - turning.x) * 0.012;
+    turning.x = e.clientX;
+  };
   const onMove = (e) => {
-    if (turning && e.pointerId === turning.id) {
-      tank.group.rotation.y += (e.clientX - turning.x) * 0.012;
-      turning.x = e.clientX;
-      return;
-    }
+    if (turning) return;
     if (open || e.pointerType === 'touch') return void (hover = null);
     hover = pick(e)?.object.userData.room || null;
   };
@@ -1245,6 +1250,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       window.addEventListener('blur', onBlur);
       canvasEl.addEventListener('pointerdown', onDown);
       canvasEl.addEventListener('pointermove', onMove);
+      window.addEventListener('pointermove', onTurn);
       window.addEventListener('pointerup', onUp);
       canvasEl.style.cursor = CURSOR;
       pixel.setActorOutlines(true);
@@ -1269,6 +1275,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       canvasEl.removeEventListener('pointerdown', onDown);
       canvasEl.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointermove', onTurn);
       canvasEl.style.cursor = '';
       keys.clear();
     },
