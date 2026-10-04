@@ -14,6 +14,7 @@ const K = {
   tips: 'scavenger.tips',
   tiers: 'scavenger.tiers',
   partLevels: 'scavenger.partLevels',
+  stars: 'scavenger.stars',
   tankLevels: 'scavenger.tankLevels',
   tokens: 'scavenger.tokens',
   equipment: 'scavenger.equipment.',
@@ -87,6 +88,11 @@ export const save = {
   partLevel: (id) => save.partLevels()[id] || 1,
   setPartLevel(id, n) {
     write(K.partLevels, { ...save.partLevels(), [id]: n });
+  },
+  // improvements found for a part (a star each, by its icon)
+  stars: (id) => read(K.stars, {})[id] || 0,
+  addStar(id) {
+    write(K.stars, { ...read(K.stars, {}), [id]: save.stars(id) + 1 });
   },
   // the tier, from the level
   tiers: () => Object.fromEntries(Object.entries(save.partLevels()).map(([id, l]) => [id, Math.floor((l - 1) / 10)])),

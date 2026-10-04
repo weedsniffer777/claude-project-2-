@@ -59,6 +59,30 @@ const ERA_EDGE = 0x3a3626;
 // type: what the part's for (the hangar sorts and filters by it): weapons,
 // armor, movement, utility
 export const PART_TYPES = { weapons: 'Weapons', armor: 'Armour', movement: 'Movement', utility: 'Utility' };
+// One high-explosive round, lying along local +x (the hangar's rounds: a
+// brass case, a copper driving band, a pointed olive projectile) with a
+// red HE band near its nose.
+function heRound(parent, x, y, z) {
+  put(parent, cyl(0.075, 0.46, 0xb08a3e, { axis: 'x', seg: 10 }), x, y, z);
+  put(parent, cyl(0.08, 0.03, 0x8a6a2e, { axis: 'x', seg: 10 }), x - 0.23, y, z); // rim
+  put(parent, cyl(0.068, 0.04, 0xa0603a, { axis: 'x', seg: 10 }), x + 0.25, y, z); // driving band
+  put(parent, cyl(0.066, 0.16, 0x4a5240, { axis: 'x', seg: 10 }), x + 0.35, y, z);
+  put(parent, cyl(0.067, 0.04, 0xc42a20, { axis: 'x', seg: 10 }), x + 0.4, y, z); // the HE band
+  put(parent, cyl(0.064, 0.16, 0x4a5240, { axis: 'x', seg: 10, radiusEnd: 0.012 }), x + 0.51, y, z); // the nose
+}
+// an open olive ammo box of them, noses out, its lid propped up behind
+function heCrate(n = 4) {
+  const g = new THREE.Group();
+  const W = 0.18 * n + 0.1;
+  put(g, box(0.7, 0.2, W, 0x4f5a3a, { r: 0.02 }), 0, 0.1, 0);
+  put(g, box(0.71, 0.03, W + 0.01, 0x3b4430, { r: 0.01 }), 0, 0.2, 0);
+  put(g, box(0.25, 0.03, 0.01, 0xc9b98a), -0.1, 0.11, W / 2 + 0.005); // a stencilled band
+  for (let k = 0; k < n; k++) heRound(g, -0.2, 0.26, -W / 2 + 0.14 + k * 0.18);
+  const lid = put(g, box(0.7, 0.03, W, 0x46502f, { r: 0.01 }), -0.42, 0.42, 0);
+  lid.rotation.z = 1.2;
+  return g;
+}
+
 export const PARTS = {
   dozer: {
     type: 'armor',
@@ -382,7 +406,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'See further still; machine guns reach further.', apply: (s) => ((s.view *= 1.08), (s.mgRange += 2)) },
-      { text: '', perk: 'Spotter', perkText: 'Every 5 s the 2 farthest enemies in sight are marked: +30% damage to them for 5 s. Light tank: 3 marked.', apply: (s) => (s.spotter = 2) },
+      { text: '', perk: 'Spotter', perkText: 'Every 5 s the 2 farthest enemies in sight are marked: +30% damage to them for 5 s.', apply: (s) => (s.spotter = 2) },
     ],
     build(t) {
       const g = sightHead();
@@ -421,17 +445,30 @@ export const PARTS = {
       { text: 'More damage per shot again.', apply: (s) => (s.cannonDamage += s.mag ? 4 : 15) },
     ],
     light(t) {
-      const g = new THREE.Group();
-      put(g, box(0.42, 0.2, 0.3, 0x6b5a3e, { r: 0.02 }), 1.0, 0.9, 0.1);
-      put(g, box(0.43, 0.05, 0.31, 0xc99a2e, { r: 0.01 }), 1.0, 0.94, 0.1);
+      const g = heCrate(3);
+      g.scale.setScalar(0.62);
+      g.position.set(1.0, 0.8, 0.1);
       t.chassis.add(g);
       return g;
     },
     build(t) {
-      const g = new THREE.Group();
-      put(g, box(0.62, 0.3, 0.42, 0x6b5a3e, { r: 0.03 }), -1.25, 1.2, 0.45);
-      put(g, box(0.63, 0.06, 0.43, 0xc99a2e, { r: 0.01 }), -1.25, 1.24, 0.45);
+      const g = heCrate(4);
+      g.scale.setScalar(0.85);
+      g.position.set(-1.25, 1.05, 0.45);
       t.chassis.add(g);
+      return g;
+    },
+    model() {
+      const g = new THREE.Group();
+      const c = heCrate(4);
+      c.rotation.y = -0.5;
+      g.add(c);
+      // one more round lying in front of it
+      const r = new THREE.Group();
+      heRound(r, 0, 0, 0);
+      r.position.set(0.15, 0.08, 0.55);
+      r.rotation.y = -0.35;
+      g.add(r);
       return g;
     },
   },
@@ -626,7 +663,6 @@ export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null
   applyTankLevel(s, tankLevel ?? save.tankLevel(tank));
   for (const id of parts) applyPart(s, id, levels?.[id] ?? levelOf(id));
   // the light tank's affinity for spotting: one more mark
-  if (s.spotter && tank === 'light') s.spotter += 1;
   return s;
 }
 
@@ -670,6 +706,25 @@ export function partEffects(id, tank = 'battle', lvl = levelOf(id), from = null)
   }
   return rows;
 }
+// Improvements: a part you already own, found again, gives it free levels
+// (+IMPROVE, stopping at the next evolve: that still takes tokens). null:
+// it can't go higher without evolving.
+export const IMPROVE = 2;
+export function improveTo(id) {
+  const l = levelOf(id);
+  if (l >= MAX_LEVEL || evolvesAt(l)) return null;
+  return Math.min(l + IMPROVE, Math.ceil(l / 10) * 10, MAX_LEVEL);
+}
+// its card: the level change and what it adds, green and red
+export function improvementHtml(id, tank) {
+  const from = levelOf(id);
+  const to = improveTo(id);
+  if (!to) return '';
+  const rows = partEffects(id, tank, to, from)
+    .map((r) => `<div class="fx-row"><span>${r.label}</span><b class="${r.good ? 'good' : 'bad'}">${r.delta}</b></div>`)
+    .join('');
+  return `<div class="fx-row"><span>Level</span><b class="good">${from} → ${to}</b></div>${rows}`;
+}
 // the Legendary perk (if the part has one): { name, text }
 export function partPerk(id) {
   const t = PARTS[id].tiers?.[TIERS.length - 2];
@@ -690,6 +745,8 @@ export const EFFECT_CSS = `
 .fx-row b { font: 400 11px/1.3 'Silkscreen', monospace; font-weight: 400; white-space: nowrap; }
 .fx-row b.good { color: #6be08a; }
 .fx-row b.bad { color: #ff7a6a; }
+.fx-how { margin-bottom: 4px; font: 400 12px/1.3 'Pixelify Sans', monospace; color: #b9b0a0; }
+.fx-head { margin-bottom: 4px; font: 400 11px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
 .fx-perk { margin-top: 4px; padding: 5px 7px; font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #2a2210; box-shadow: 0 0 0 2px #000, 0 0 0 3px #ffc24a; text-transform: none; }
 .fx-perk b { display: block; font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #ffc24a; font-weight: 400; }
 `;

@@ -19,7 +19,7 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml } from './parts.js';
+import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml } from './parts.js';
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
@@ -192,6 +192,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       ability: false, // the signature ability (E), once the level hands it over
       abilityCd: 0,
       equipCd: 0, // the equipment's (Q) recharge
+      msl: null, // guided missiles locking on / going
       arty: 0, // designating an artillery strike: seconds left to pick the spot
       aiming: 0, // Piercing shot: seconds left to aim it
       dash: 0, // Dash (light tank's Shift): seconds left
@@ -461,7 +462,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     depot(shack, { offers, count = 3, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
-      offers = offers.filter((id) => !save.owned().includes(id)).slice(0, count); // only parts not found yet
+      // parts not found yet first; then ones you own, as improvements
+      // (free levels), if they can still go up
+      const have = save.owned();
+      offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id))].slice(0, count);
       hud.banner('Checkpoint reached');
       run.checkpoint = shack; // where an Easy revive puts you back
       run.mode = 'depot';
@@ -831,7 +835,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.group.rotation.y = 0;
     speed = 0;
     enemies.retire();
-    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, magT: 0, mag: stats.mag });
+    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, magT: 0, mag: stats.mag });
     reload = 1;
     hud.setHull(run.hp, stats.maxHp);
     camTarget.set(pos.x + 0.6, 0.8, pos.z);
@@ -978,80 +982,133 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!id || !run.gun || run.over || run.mode !== 'field' || run.locked) return;
     if (run.arty > 0) return void (run.arty = 0); // Q again: call it off
     if (run.equipCd > 0 || run.aiming > 0) return;
-    // picking the spot (artillery) or the target (ATGM)
+    // the guided missiles: no picking, they lock on by themselves
+    if (id === 'atgm') return lockMissiles();
+    // picking the spot
     run.armed = id;
     run.arty = DESIGNATE[id] || 6;
     trigger = false;
   }
-  const DESIGNATE = { artillery: 8, atgm: 6 }; // seconds to pick before it's called off
+  const DESIGNATE = { artillery: 8 }; // seconds to pick before it's called off
   // the click while designating: the strike on the spot, or the missile at
   // the locked machine (no lock: nothing happens, keep pointing)
   function useEquipment() {
     if (!hasAim) return;
-    if (run.armed === 'atgm') {
-      const t = lockTarget();
-      if (t) launchMissile(t);
-    } else callStrike(aimPoint.clone());
+    callStrike(aimPoint.clone());
   }
-  const lockTarget = () => (hovered?.alive && !(hovered.delay > 0) ? hovered : null);
 
-  // The ATGM: off the turret roof, a kick up, then it lights and flies
-  // straight at the machine (following it if it moves) on a smoke trail.
+  // The guided missiles (Q): they lock on to up to three machines in view
+  // by themselves (nearest first; fewer machines: some get two), a red
+  // MSL LOCK box over each, then three fire off the turret one after
+  // another, white-hot on bright trails, and each lands with a big blast.
   const missiles = [];
-  function launchMissile(e) {
+  const mslAim = (e) => new THREE.Vector3(e.pos.x, e.pos.y + (e.stats.flying || e.stats.fly ? 0 : 0.8 * (e.stats.scale || 1)), e.pos.z);
+  function lockMissiles() {
     const E = EQUIPMENT.atgm;
-    run.arty = 0;
+    const ndc = new THREE.Vector3();
+    const inView = enemies.alive
+      .filter((e) => {
+        ndc.copy(e.pos).project(camera);
+        return Math.abs(ndc.x) < 0.95 && Math.abs(ndc.y) < 0.95 && e.pos.distanceTo(pos) < E.range;
+      })
+      .sort((a, b) => a.pos.distanceTo(pos) - b.pos.distanceTo(pos))
+      .slice(0, E.missiles);
+    if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'No targets');
     run.equipCd = E.cooldown;
-    const from = pos.clone().add(new THREE.Vector3(0, 2.0, 0));
+    const targets = [];
+    for (let i = 0; i < E.missiles; i++) targets.push(inView[i % inView.length]);
+    run.msl = { targets, t: E.lockTime, fired: 0, gap: 0 };
+  }
+  function launchMissile(e, k) {
+    const E = EQUIPMENT.atgm;
+    // off the turret roof, left, right, centre
+    const side = new THREE.Vector3(-Math.sin(tank.group.rotation.y), 0, -Math.cos(tank.group.rotation.y));
+    const from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
     const m = new THREE.Group();
-    m.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.9), new THREE.MeshBasicMaterial({ color: 0x5f6b48 })));
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.18), new THREE.MeshBasicMaterial({ color: 0xd8d2c4 }));
-    nose.position.z = 0.5;
-    m.add(nose);
-    for (const r of [0, Math.PI / 2]) {
-      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.16), new THREE.MeshBasicMaterial({ color: 0x3a4430 }));
-      fin.position.z = -0.35;
-      fin.rotation.z = r;
-      m.add(fin);
-    }
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
-    flame.position.z = -0.52;
-    m.add(flame);
+    const add = (geo, color, z, o = {}) => {
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, ...o }));
+      mesh.position.z = z;
+      m.add(mesh);
+      return mesh;
+    };
+    add(new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8).rotateX(Math.PI / 2), 0xd8dde2, 0);
+    add(new THREE.ConeGeometry(0.1, 0.26, 8).rotateX(Math.PI / 2), 0xff3b2f, 0.53);
+    for (const r of [0, Math.PI / 2]) add(new THREE.BoxGeometry(0.46, 0.03, 0.18), 0x5f6b48, -0.3).rotation.z = r;
+    // the motor: a white-hot core and a big soft glow round it
+    add(new THREE.SphereGeometry(0.13, 8, 6), 0xffffff, -0.48);
+    const glow = add(new THREE.SphereGeometry(0.45, 10, 8), 0xffb347, -0.55, { transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
+    const plume = add(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, -0.95, { transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
     m.position.copy(from);
     scene.add(m);
-    const dir = new THREE.Vector3(e.pos.x - from.x, 0.6, e.pos.z - from.z).normalize();
-    missiles.push({ m, e, vel: dir.multiplyScalar(6), t: 0, last: from.clone(), aim: null });
-    combat.glow.flash(from, 0xfff0c8, 0.2, 1.4, 0.1);
-    for (let i = 0; i < 6; i++) combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random(), (Math.random() - 0.5) * 3), { color: 0xc9c2b4, s0: 0.2, s1: 0.7, life: 0.8, drag: 3, lift: 0.4, fadeAt: 0.3 });
-    hud.setLock(null);
+    const dir = new THREE.Vector3(e.pos.x - from.x, 0, e.pos.z - from.z).normalize();
+    dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
+    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(9), t: 0, last: from.clone(), aim: mslAim(e) });
+    // the launch: a hard white flash, a back-blast of smoke, a kick
+    combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
+    combat.glow.flash(from, 0xffb347, 0.5, 2.6, 0.22);
+    combat.glow.light(from, 0xffc070, 70, 0.2);
+    combat.glow.spike(from, dir.clone().negate(), 0xffe6b0, 2.2, 0.35, 0.12);
+    for (let i = 0; i < 8; i++) combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 4, 0.6 + Math.random(), (Math.random() - 0.5) * 4), { color: 0xd8d6cc, s0: 0.2, s1: 0.8, life: 0.9, drag: 3, lift: 0.4, fadeAt: 0.3 });
+    combat.shake = Math.max(combat.shake, 0.3);
   }
   function missileFrame(dt) {
     const E = EQUIPMENT.atgm;
+    // locking on, then firing them off one by one
+    const st = run.msl;
+    if (st) {
+      st.t -= dt;
+      if (st.t <= 0) {
+        st.gap -= dt;
+        if (st.gap <= 0 && st.fired < st.targets.length) {
+          const e = st.targets[st.fired];
+          launchMissile(e.alive ? e : st.targets.find((x) => x.alive) || e, st.fired);
+          st.fired++;
+          st.gap = E.salvoGap;
+        }
+        if (st.fired >= st.targets.length) run.msl = null;
+      }
+    }
     for (let i = missiles.length - 1; i >= 0; i--) {
       const ms = missiles[i];
       ms.t += dt;
       // where it's going: the machine (or, if that's gone, where it was)
-      if (ms.e.alive) ms.aim = new THREE.Vector3(ms.e.pos.x, 0.8 * (ms.e.stats.scale || 1), ms.e.pos.z);
-      const aim = ms.aim || ms.m.position.clone().addScaledVector(ms.vel, 1);
-      const to = aim.clone().sub(ms.m.position);
+      if (ms.e.alive) ms.aim = mslAim(ms.e);
+      const to = ms.aim.clone().sub(ms.m.position);
       const d = to.length();
-      const speed = Math.min(E.speed, 6 + ms.t * 60);
-      // straight at it, after a quick turn out of the launch kick
-      ms.vel.lerp(to.normalize().multiplyScalar(speed), Math.min(1, dt * (ms.t < 0.15 ? 2 : 14)));
+      const speed = Math.min(E.speed, 9 + ms.t * 70);
+      // up and out of the launch, then a hard turn straight at it
+      ms.vel.lerp(to.normalize().multiplyScalar(speed), Math.min(1, dt * (ms.t < 0.2 ? 2.5 : 12)));
       ms.m.position.addScaledVector(ms.vel, dt);
       ms.m.lookAt(ms.m.position.clone().add(ms.vel));
-      combat.glow.tracer(ms.last, ms.m.position, 0xffd9a0, 0.1, 0.12);
-      if (Math.random() < 0.8) combat.puffs.spawn(ms.m.position.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.2, (Math.random() - 0.5) * 0.3), { color: 0xc9c2b4, s0: 0.12, s1: 0.45, life: 0.7, drag: 2, lift: 0.2, fadeAt: 0.2 });
+      const f = 0.8 + Math.random() * 0.4;
+      ms.glow.scale.setScalar(f);
+      ms.plume.scale.set(1, 1, 0.7 + Math.random() * 0.6);
+      combat.glow.tracer(ms.last, ms.m.position, 0xffc070, 0.22, 0.18);
+      combat.glow.tracer(ms.last, ms.m.position, 0xffffff, 0.08, 0.08);
+      combat.puffs.spawn(ms.m.position.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4), { color: 0xd0cabe, s0: 0.16, s1: 0.6, life: 0.8, drag: 2, lift: 0.2, fadeAt: 0.2 });
       ms.last = ms.m.position.clone();
-      if (d < 0.9 || ms.t > 4 || ms.m.position.y < 0.15) {
+      const ground = level.heightAt ? level.heightAt(ms.m.position.x, ms.m.position.z) : 0;
+      if (d < 0.9 || ms.t > 4 || (ms.t > 0.3 && ms.m.position.y < ground + 0.15)) {
         ms.m.removeFromParent();
         missiles.splice(i, 1);
         const at = ms.m.position.clone();
+        const g = new THREE.Vector3(at.x, ground + 0.06, at.z);
+        // the hit: a white flash, a fireball, a ring out to the blast's edge, sparks
         combat.explode(at);
-        combat.shake = Math.max(combat.shake, 0.3);
+        combat.glow.flash(at, 0xffffff, 0.6, 3.2, 0.12);
+        combat.glow.flash(at, 0xff8a3a, 1.0, 4.2, 0.3);
+        combat.glow.ring(g, 0xffd59a, 0.4, E.blast * 1.1, 0.35);
+        combat.glow.light(at, 0xffa060, 120, 0.35);
+        combat.fx.burst(at.clone().setY(at.y + 0.4), { count: 34, speed: 10, color: 0xffd36b, life: 0.5, size: 0.09, gravity: 14 });
+        for (let k = 0; k < 7; k++) combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 2, (Math.random() - 0.5) * 5), { color: 0x6f6a62, s0: 0.4, s1: 1.5, life: 1.4, drag: 2.5, lift: 0.6, fadeAt: 0.3 });
+        combat.shake = Math.max(combat.shake, 0.45);
         onImpact(at, null, false, { radius: E.blast, damage: E.damage });
       }
     }
+    // the lock boxes: over every machine a missile is on its way to (or
+    // about to be)
+    const locked = new Set([...(st && run.msl ? st.targets.slice(st.fired) : []), ...missiles.map((ms) => ms.e)].filter((e) => e.alive));
+    hud.setLocks([...locked].map((e) => ({ pos: e.pos.clone().setY(mslAim(e).y + 0.3), label: 'MSL LOCK', locked: !!(st && st.t > 0) })));
   }
   function callStrike(at) {
     const E = EQUIPMENT.artillery;
@@ -1613,7 +1670,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function showPicker() {
     const st = run.depot;
     hud.showPicker(
-      st.offers.map((id) => ({ id, ...PARTS[id], lines: effectsHtml(id, tankId) })),
+      st.offers.map((id) =>
+        save.owned().includes(id)
+          ? { id, ...PARTS[id], name: `${PARTS[id].name} improvement`, text: `Your ${PARTS[id].name} gains levels, and a star.`, improve: true, lines: improvementHtml(id, tankId) }
+          : { id, ...PARTS[id], lines: effectsHtml(id, tankId) },
+      ),
       (id) => pick(id),
       null, // no skip: a part is always worth taking (it goes to storage)
       // hovering a card swings the camera over to that part's pallet
@@ -1631,6 +1692,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!st || st.step !== 'pick') return;
     st.focus = null;
     hud.showPicker(null);
+    if (save.owned().includes(id)) {
+      // an improvement: free levels and a star
+      const to = improveTo(id);
+      if (to) save.setPartLevel(id, to);
+      save.addStar(id);
+      if (run.parts.includes(id)) fitParts(run.parts);
+    }
     save.own(id);
     if (!run.found.includes(id)) run.found.push(id);
     st.found = id;
@@ -2145,6 +2213,21 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // ride up onto sidewalks and other raised ground
       const groundY = level.heightAt ? level.heightAt(pos.x, pos.z) : 0;
       pos.y += (groundY - pos.y) * (1 - Math.exp(-dt * 14));
+      // and lean with the ground under it: nose up a ramp, rolling on a camber
+      if (level.heightAt) {
+        const g = tank.group;
+        g.rotation.order = 'YXZ'; // (yaw first: rotation.y stays the heading)
+        const yw = g.rotation.y;
+        const fx = Math.cos(yw);
+        const fz = -Math.sin(yw);
+        const L = 1.3;
+        const W = 0.9;
+        const pitch = Math.atan2(level.heightAt(pos.x + fx * L, pos.z + fz * L) - level.heightAt(pos.x - fx * L, pos.z - fz * L), 2 * L);
+        const roll = -Math.atan2(level.heightAt(pos.x - fz * W, pos.z + fx * W) - level.heightAt(pos.x + fz * W, pos.z - fx * W), 2 * W);
+        const k = 1 - Math.exp(-dt * 10);
+        g.rotation.z += (THREE.MathUtils.clamp(pitch, -0.5, 0.5) - g.rotation.z) * k;
+        g.rotation.x += (THREE.MathUtils.clamp(roll, -0.3, 0.3) - g.rotation.x) * k;
+      }
       const vel = new THREE.Vector3((pos.x - bx) / Math.max(dt, 1e-4), 0, (pos.z - bz) / Math.max(dt, 1e-4));
 
       // rocket ram and dozer blade: machines in the way take a beating
@@ -2288,13 +2371,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       // the strike's ring follows the aim while it's being called in
       artyRing.visible = run.arty > 0 && run.armed === 'artillery' && hasAim && !run.over;
-      // the ATGM's lock box: on the machine under the pointer, else
-      // following the pointer asking for one
-      if (run.arty > 0 && run.armed === 'atgm' && !run.over) {
-        const t = lockTarget();
-        if (t) hud.setLock(new THREE.Vector3(t.pos.x, 1.0 * (t.stats.scale || 1), t.pos.z), 'Locked', true);
-        else hud.setLock(hasAim ? aimPoint : null, 'Pick a target');
-      } else hud.setLock(null);
       if (artyRing.visible) {
         artyRing.position.set(aimPoint.x, (level.heightAt ? level.heightAt(aimPoint.x, aimPoint.z) : 0) + 0.05, aimPoint.z);
         artyRing.scale.setScalar(EQUIPMENT.artillery.radius + EQUIPMENT.artillery.blast * 0.5);
@@ -2389,7 +2465,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

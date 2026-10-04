@@ -12,7 +12,12 @@ import * as THREE from 'three';
 import { PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
-import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
+import { EQUIPMENT, equipmentIcon, equipmentPlain } from '../game/equipment.js';
+// a part's improvement stars (found again at a checkpoint), by its icon
+const starBadge = (id) => {
+  const n = save.stars(id);
+  return n ? `<span class="stb">★${n > 1 ? n : ''}</span>` : '';
+};
 import { save } from '../game/save.js';
 import { snapshotCanvas } from '../render/snapshot.js';
 
@@ -84,6 +89,8 @@ const CSS = `
 .fit .upbtn.evolve { background: #c77dff; box-shadow: 0 3px 0 #6a2fa0, 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; }
 @keyframes fitbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); box-shadow: 0 8px 0 #6a2fa0, 0 0 0 2px #000, 0 0 16px #c77dffaa; } }
 .fit .upbtn .evtag { padding: 2px 5px; font-size: 9px; color: #fff; background: #6a2fa0; box-shadow: 0 0 0 2px #000; }
+.fit .stb { position: absolute; left: -6px; bottom: -6px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
+.fit .hd .stb { position: static; display: inline-block; margin-left: 6px; }
 .fit .item .evb, .fit .slot .evb { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #8a45d0; box-shadow: 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; pointer-events: none; }
 .fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
 .fit .btn.tankup small { font-size: 10px; margin-left: 4px; }
@@ -190,7 +197,7 @@ export function createFitting({ renderer, cursor }) {
   root.style.setProperty('--cursor', cursor);
   root.innerHTML = `
     <svg></svg>
-    <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Change it in the hangar.</span></div></div>
+    <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Cannot change in battle.</span></div></div>
     <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><div class="storehead"><span class="label">Storage</span><select class="sortby" title="Sort"><option value="rarity">By rarity</option><option value="name">By name</option><option value="type">By type</option></select><select class="filterby" title="Filter"></select></div><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
@@ -311,7 +318,7 @@ export function createFitting({ renderer, cursor }) {
         const tier = tierOf(id);
         el.dataset.tier = tier;
         el.style.setProperty('--tc', TIERS[tier].color);
-        el.innerHTML = `<img alt="" src="${pic(id)}"><span class="nm"><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
+        el.innerHTML = `<img alt="" src="${pic(id)}">${starBadge(id)}<span class="nm"><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span><span class="fx">${shortFx(id, tier)}</span></span>`;
         el.querySelector('.nm .pn').textContent = PARTS[id].name;
         if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
         el.addEventListener('pointerenter', () => !replacing && showTip(el, id));
@@ -365,7 +372,7 @@ export function createFitting({ renderer, cursor }) {
       const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
       if (only) el.classList.add('isaway');
       if (only) el.classList.add('notfor');
-      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
+      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
       if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
       el.addEventListener('click', () => {
@@ -449,7 +456,7 @@ export function createFitting({ renderer, cursor }) {
     box.innerHTML = item ? `<img class="eqi" alt="" src="${equipmentIcon(id, 48, 36)}"><span></span>` : `<span class="none">${owned.length ? 'Empty' : 'None yet. Found in later levels.'}</span>`;
     if (item) {
       box.querySelector('span').textContent = item.name;
-      box.title = item.text;
+      box.title = equipmentPlain(id);
     }
     const slot = $('.equip .slotbox');
     slot.innerHTML = '';
@@ -541,7 +548,7 @@ export function createFitting({ renderer, cursor }) {
     const d = document.createElement('div');
     d.className = 'info';
     d.style.setProperty('--tc', TIERS[tier].color);
-    d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
+    d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}${starBadge(id)}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
     d.querySelector('.pn').textContent = PARTS[id].name;
     d.querySelector('p').textContent = PARTS[id].text;
     // in the hangar: straight to this part on the upgrades screen

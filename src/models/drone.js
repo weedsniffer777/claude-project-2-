@@ -41,7 +41,7 @@ export function createDrone() {
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.01, 18), new THREE.MeshBasicMaterial({ color: 0xb9b3a8, transparent: true, opacity: 0.22, depthWrite: false }));
     disc.userData.outline = true;
     rotor.add(disc);
-    put(rotor, box(0.46, 0.012, 0.04, C.dark, { r: 0.005 }), 0, 0.01, 0);
+    put(rotor, box(0.46, 0.012, 0.04, C.dark, { r: 0.005 }), 0, 0.01, 0).userData.noOutline = true;
     rotors.push(rotor);
   }
   // the rocket pods under each side, three tubes each, glowing as it charges
@@ -58,6 +58,10 @@ export function createDrone() {
     for (const x of [-0.18, 0.18]) put(body, box(0.03, 0.14, 0.03, C.dark, { r: 0.01 }), x, -0.24, s * 0.18);
   }
   for (const g of podGlow) g.visible = false;
+  // its shadow on the ground below (so you can tell how high it is)
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 14).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+  shadow.userData.outline = true; // (left out of flashes and outlines)
+  group.add(shadow);
 
   group.traverse((m) => {
     if (m.isMesh && !m.material.transparent && m !== eye && !podGlow.includes(m)) m.castShadow = true;
@@ -70,13 +74,19 @@ export function createDrone() {
   let spin = 0;
 
   // ctx: { speed (0..1), tilt (radians, into the move), aimYaw (relative),
-  // charge (0..1: lining up a salvo) }
+  // charge (0..1: lining up a salvo), height (above the ground) }
   function update(dt, t, ctx = {}) {
+    if (ctx.height != null) {
+      const s = group.scale.y || 1;
+      shadow.position.y = (-ctx.height + 0.05) / s;
+      shadow.material.opacity = Math.max(0.08, 0.32 - ctx.height * 0.03);
+    }
     if (deadT >= 0) {
       // it tumbles down out of the air and lies there
       deadT += dt;
       const k = Math.min(1, deadT / 0.7);
-      group.position.y = Math.max(0.15, deadY - deadY * k * k);
+      group.position.y = deadY - (deadY - floorY) * k * k;
+      shadow.visible = false;
       body.rotation.z = -k * 1.2;
       body.rotation.x = k * 0.6;
       for (const r of rotors) r.rotation.y += dt * 20 * (1 - k);
@@ -109,7 +119,7 @@ export function createDrone() {
     if (flash <= 0) {
       const white = glowMat(0xb9b3a8);
       group.traverse((m) => {
-        if (!m.isMesh || m === eye || podGlow.includes(m) || m.material.transparent || m.userData.outline) return;
+        if (!m.isMesh || m === eye || podGlow.includes(m) || m.material.transparent || m.material.visible === false || m.userData.outline) return;
         flashMats.set(m, m.material);
         m.material = white;
       });
@@ -120,7 +130,7 @@ export function createDrone() {
   const outlineMat = new THREE.MeshBasicMaterial({ color: 0xf1e9d8, side: THREE.BackSide });
   const outlines = [];
   body.traverse((m) => {
-    if (!m.isMesh || m === eye || podGlow.includes(m) || m.material.transparent || m.userData.outline) return;
+    if (!m.isMesh || m === eye || podGlow.includes(m) || m.material.transparent || m.material.visible === false || m.userData.outline || m.userData.noOutline) return;
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
     const size = m.geometry.boundingBox.getSize(new THREE.Vector3());
     const o = new THREE.Mesh(m.geometry, outlineMat);
@@ -134,7 +144,10 @@ export function createDrone() {
     for (const { o } of outlines) o.visible = on && deadT < 0;
   }
 
-  function kill() {
+  let floorY = 0.15;
+  // floor: the ground height under it (it falls to there)
+  function kill(floor = 0) {
+    floorY = floor + 0.15;
     setOutline(false);
     for (const { o } of outlines) o.removeFromParent();
     if (flash > 0) {

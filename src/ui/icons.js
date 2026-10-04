@@ -107,26 +107,55 @@ export function artilleryCanvas(scale = 2) {
   return artyCache.get(scale);
 }
 
-// ----------------------------------------------------------------- ATGM
-// a missile streaking right on a smoke trail into a lock box round its
-// target
-function atgmAt(x, y) {
-  // the lock box: four cyan corner brackets round the target
-  const bx = [20, 30];
-  const by = [4, 16];
+// ------------------------------------------------------- guided missile
+// a missile flying right, symmetrical (pointed nose, a fin pair top and
+// bottom at the tail, a mid band), a flame out the back, and a small red
+// lock box round a plain round target ahead of it
+const MY = 12;
+function missileBody(x, y) {
+  const dy = Math.abs(y - MY);
+  // the nose cone: narrows to a point
+  if (x >= 18 && x < 22 && dy < 1.6 - (x - 18) * 0.38) return x > 20.5 ? '#ff3b2f' : '#d8dde2';
+  // the body
+  if (x >= 7 && x < 18 && dy < 1.6) {
+    if (x >= 12 && x < 13.2) return '#ffb347'; // the band
+    return dy < 0.6 ? '#c9cfd5' : '#8a9097';
+  }
+  // tail fins, swept back, the same top and bottom
+  if (x >= 6 && x < 11 && dy >= 1.6 && dy < 1.6 + (x - 6) * 0.7 && dy < 4.2) return '#5f6b48';
+  // mid fins, small
+  if (x >= 15 && x < 17 && dy >= 1.6 && dy < 2.6) return '#5f6b48';
+  return null;
+}
+function flame(x, y) {
+  const dy = Math.abs(y - MY);
+  if (x >= 7) return null;
+  const k = (7 - x) / 6; // 0 at the nozzle, 1 at the tip
+  if (dy < 0.7 * (1 - k) + 0.1 && x > 3.5) return '#ffffff';
+  if (dy < 1.4 * (1 - k * 0.7) && x > 2.2) return '#ffe066';
+  if (dy < 1.7 * (1 - k * 0.5) && x > 0.5) return '#ff7a2a';
+  return null;
+}
+function lockTarget(x, y) {
+  // the target: a dark disc with a lighter ring
+  const r = Math.hypot(x - 27, y - MY);
+  if (r < 1.3) return '#ff3b2f';
+  if (r < 2.4) return '#3a3436';
+  if (r < 3.1) return '#8a8580';
+  // the lock box: red corner brackets
+  const bx = [23, 31];
+  const by = [8, 16];
   const onEdge = (v, a, b) => Math.abs(v - a) < 0.6 || Math.abs(v - b) < 0.6;
   const inSpan = (v, a, b) => v >= a - 0.6 && v <= b + 0.6;
-  const nearCorner = (v, a, b) => v - a < 3 || b - v < 3;
-  if (inSpan(x, ...bx) && inSpan(y, ...by) && ((onEdge(x, ...bx) && nearCorner(y, ...by)) || (onEdge(y, ...by) && nearCorner(x, ...bx)))) return '#5fe6ff';
-  // the target inside it: a dark machine silhouette
-  if (x > 22 && x < 28 && y > 8 && y < 14) return y < 9.5 ? '#ff3b2f' : '#3a2a2a';
-  // the missile: body, nose, fins
-  const my = 11;
-  if (y > my - 1 && y < my + 1 && x > 9 && x < 17) return x > 15 ? '#f1e9d8' : '#8a9097';
-  if ((x > 9 && x < 11.5 && Math.abs(y - my) < 2.6) ) return '#5f6b48';
-  // its flame and smoke trail, back down the line
-  if (Math.abs(y - my) < 0.9 && x > 6.5 && x <= 9) return x > 8 ? '#ffffff' : '#ffb347';
-  if (x <= 6.5 && x > 0 && Math.abs(y - my - Math.sin(x * 0.9) * 0.4) < 0.8 + (6.5 - x) * 0.12) return x > 3.5 ? '#c9c2b4' : '#7d776d';
+  const nearCorner = (v, a, b) => v - a < 2.5 || b - v < 2.5;
+  if (inSpan(x, ...bx) && inSpan(y, ...by) && ((onEdge(x, ...bx) && nearCorner(y, ...by)) || (onEdge(y, ...by) && nearCorner(x, ...bx)))) return '#ff3b2f';
+  return null;
+}
+function atgmAt(x, y) {
+  const c = missileBody(x, y) || flame(x, y) || lockTarget(x, y);
+  if (c) return c;
+  // a black edge round the missile so it reads on the tile
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (missileBody(x + dx, y + dy)) return '#000000';
   return null;
 }
 const atgmCache = new Map();

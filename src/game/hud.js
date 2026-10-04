@@ -9,6 +9,7 @@ import { fixPixelifyH } from '../ui/fontFix.js';
 import { tokenIconURL } from '../ui/icons.js';
 
 const CSS = `
+.hud-card.improve .name .up { display: inline-block; margin-right: 6px; padding: 1px 4px; font-style: normal; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .hud button, .hud .hud-card { cursor: var(--cursor); }
 .hud { cursor: inherit; --go: #6be08a; --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
   position: fixed; inset: 0; pointer-events: none; z-index: 10; color: var(--ink);
@@ -162,11 +163,11 @@ const CSS = `
 .hud-dmg.chain { color: var(--amber); font-size: 20px; }
 .hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
-.hud-lock { position: absolute; left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; }
-.hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid #5fe6ff; clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
+.hud-lock { position: absolute; left: 0; top: 0; width: 56px; height: 56px; margin: -28px 0 0 -28px; filter: drop-shadow(0 0 4px #ff3b2f88); }
+.hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid #ff3b2f; clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
 .hud-lock.on::before { animation: hudlock 0.35s steps(2) infinite; }
 @keyframes hudlock { 50% { transform: scale(0.88); } }
-.hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: #5fe6ff; white-space: nowrap; text-shadow: 2px 2px #000; }
+.hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: #ff3b2f; white-space: nowrap; text-shadow: 2px 2px #000; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
 .hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
@@ -396,8 +397,9 @@ export function createHud() {
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
-  let lockAt = null;
   const lockEl = $('.hud-lock');
+  const lockEls = [lockEl];
+  const lockAts = [];
   // The drive stick: fixed in the bottom-left corner, drawn as pixel art
   // (one canvas pixel = 6 screen pixels).
   const stickEl = $('.hud-stick');
@@ -590,12 +592,26 @@ export function createHud() {
       prompt.hidden = true;
       promptTimer = 0;
     },
-    // the ATGM's lock box: on a machine (locked) or following the pointer
+    // the guided missiles' lock boxes: [{ pos, label, locked }] (locked:
+    // still locking on, the box pulsing)
+    setLocks(list = []) {
+      while (lockEls.length < list.length) {
+        const el = lockEl.cloneNode(true);
+        lockEl.after(el);
+        lockEls.push(el);
+      }
+      lockEls.forEach((el, i) => {
+        const l = list[i];
+        el.hidden = !l;
+        lockAts[i] = l ? l.pos : null;
+        if (!l) return;
+        el.classList.toggle('on', !!l.locked);
+        const sp = el.querySelector('span');
+        if (sp.textContent !== l.label) sp.textContent = l.label;
+      });
+    },
     setLock(worldPos, label = '', locked = false) {
-      lockAt = worldPos ? worldPos.clone() : null;
-      lockEl.hidden = !lockAt;
-      lockEl.classList.toggle('on', locked);
-      lockEl.querySelector('span').textContent = label;
+      this.setLocks(worldPos ? [{ pos: worldPos, label, locked }] : []);
     },
     setMarker(worldPos, label = '') {
       markerAt = worldPos ? worldPos.clone() : null;
@@ -735,9 +751,10 @@ export function createHud() {
       for (const c of list || []) {
         const el = document.createElement('button');
         el.type = 'button';
-        el.className = 'hud-card panel';
+        el.className = `hud-card panel${c.improve ? ' improve' : ''}`;
         el.innerHTML = '<span class="name"></span><span class="what"></span><span class="fx"></span><span class="take">Pick</span>';
         el.querySelector('.name').textContent = c.name;
+        if (c.improve) el.querySelector('.name').insertAdjacentHTML('afterbegin', '<i class="up">▲</i>');
         el.querySelector('.what').textContent = c.text;
         el.querySelector('.fx').innerHTML = c.lines || ''; // the numbers (built from the part's own stats)
         el.addEventListener('click', () => onPick(c.id));
@@ -914,10 +931,11 @@ export function createHud() {
           arrow.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
         }
       }
-      if (lockAt) {
-        const [lx, ly] = toScreen(lockAt, camera, rect);
-        lockEl.style.transform = `translate(${Math.round(lx)}px, ${Math.round(ly)}px)`;
-      }
+      lockAts.forEach((at, i) => {
+        if (!at) return;
+        const [lx, ly] = toScreen(at, camera, rect);
+        lockEls[i].style.transform = `translate(${Math.round(lx)}px, ${Math.round(ly)}px)`;
+      });
       if (markerAt) {
         const [x, y] = toScreen(markerAt, camera, rect);
         marker.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
@@ -957,8 +975,7 @@ export function createHud() {
       prompt.hidden = true;
       marker.hidden = true;
       markerAt = null;
-      lockEl.hidden = true;
-      lockAt = null;
+      this.setLocks([]);
       arrow.hidden = true;
       arrowAt = null;
       this.setObjective('');

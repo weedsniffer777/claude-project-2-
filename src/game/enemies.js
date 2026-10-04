@@ -109,6 +109,56 @@ const BRIDGE_GUN = {
 // pods glow, then it looses a salvo of slow rockets one after another at
 // where the tank was. Side-step and they miss; catch it while it hangs
 // there and it's an easy kill. Then it darts off somewhere else.
+// A drone's rocket, nose along +x: a grey body with fins, a red seeker
+// eye in its nose throwing a thin red beam ahead, and the motor's flame
+// (white-hot core, orange plume) out the back.
+const ROCKET_MATS = {
+  body: new THREE.MeshBasicMaterial({ color: 0x6f747a }),
+  fin: new THREE.MeshBasicMaterial({ color: 0x3a3f36 }),
+  seeker: new THREE.MeshBasicMaterial({ color: 0xff2a1f }),
+  beam: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }),
+  core: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  plume: new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
+  halo: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }),
+};
+const ROCKET_GEO = {
+  body: new THREE.CylinderGeometry(0.055, 0.055, 0.36, 8).rotateZ(Math.PI / 2),
+  nose: new THREE.ConeGeometry(0.055, 0.1, 8).rotateZ(-Math.PI / 2),
+  fin: new THREE.BoxGeometry(0.1, 0.2, 0.015),
+  seeker: new THREE.SphereGeometry(0.032, 6, 4),
+  halo: new THREE.SphereGeometry(0.09, 8, 6),
+  beam: new THREE.CylinderGeometry(0.008, 0.008, 1.6, 4).rotateZ(Math.PI / 2),
+  core: new THREE.SphereGeometry(0.05, 6, 4),
+  plume: new THREE.ConeGeometry(0.07, 0.4, 8).rotateZ(Math.PI / 2),
+};
+function droneRocket() {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y = 0, z = 0) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  add(ROCKET_GEO.body, ROCKET_MATS.body, 0);
+  add(ROCKET_GEO.nose, ROCKET_MATS.body, 0.23);
+  add(ROCKET_GEO.fin, ROCKET_MATS.fin, -0.14);
+  add(ROCKET_GEO.fin, ROCKET_MATS.fin, -0.14).rotation.x = Math.PI / 2;
+  add(ROCKET_GEO.seeker, ROCKET_MATS.seeker, 0.28);
+  add(ROCKET_GEO.halo, ROCKET_MATS.halo, 0.28);
+  add(ROCKET_GEO.beam, ROCKET_MATS.beam, 0.28 + 0.8);
+  add(ROCKET_GEO.core, ROCKET_MATS.core, -0.2);
+  const plume = add(ROCKET_GEO.plume, ROCKET_MATS.plume, -0.38);
+  // the flame flickers: scaled about its base at the nozzle
+  const flame = new THREE.Group();
+  flame.position.x = -0.2;
+  plume.position.x = -0.18;
+  flame.add(plume);
+  g.add(flame);
+  g.userData.flame = flame;
+  g.scale.setScalar(1.4);
+  return g;
+}
+
 const DRONE = {
   ...DOG,
   model: createDrone,
@@ -116,7 +166,7 @@ const DRONE = {
   hp: 32,
   runSpeed: 7.5,
   walkSpeed: 3,
-  fly: 2.6, // height it flies at
+  fly: 3.4, // height it flies at (over the ground, or the tank's, whichever's higher)
   range: 15, // how far it'll fire from
   orbit: [9, 13], // how far from the tank it darts about
   windup: 0.7, // hanging still, pods glowing, before the salvo
@@ -180,7 +230,7 @@ export class Enemies {
   }
   spawnDrone(x, z, opts) {
     const e = this.spawn(DRONE, 'drone', x, z, opts);
-    e.pos.y = DRONE.fly + 3; // dropping in from higher up
+    e.pos.y = DRONE.fly + 6; // dropping in from higher up
     return e;
   }
   spawnWalker(x, z, opts) {
@@ -298,7 +348,7 @@ export class Enemies {
     e.burstLeft = 0;
     e.windup = 0;
     e.model.group.traverse((o) => o.layers.disable(ENEMY_LAYER)); // wrecks lose the outline
-    e.model.kill();
+    e.model.kill(e.ground ?? 0);
     e.hit.removeFromParent();
     this.killed++;
     this.combat.machineDeath(new THREE.Vector3(e.pos.x, 0.6 * e.stats.scale, e.pos.z));
@@ -716,9 +766,15 @@ export class Enemies {
       e.kb.multiplyScalar(Math.exp(-dt * 6));
       if (e.kb.lengthSq() < 0.01) e.kb = null;
     }
-    // up at its flying height (it drops in from above)
-    const fly = ground + S.fly;
-    e.pos.y += (fly - e.pos.y) * Math.min(1, dt * 3);
+    // up at its flying height (it drops in from above): over the ground
+    // under it, and never below the tank's (a tank up on a highway deck has
+    // them climbing up to it, never hanging underneath)
+    let floor = ground;
+    for (const [dx, dz] of [[1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5]]) floor = Math.max(floor, ctx.heightAt ? ctx.heightAt(e.pos.x + dx, e.pos.z + dz) : 0);
+    const fly = Math.max(floor, tankPos.y) + S.fly;
+    const rate = fly > e.pos.y ? 2.2 : 1.4;
+    e.pos.y += (fly - e.pos.y) * Math.min(1, dt * rate);
+    e.ground = ground;
     // the shot: in range and in sight, it stops, glows, then fires
     if (e.windup <= 0 && e.burstLeft <= 0 && e.fireTimer <= 0 && !e.via.length && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
       e.windup = S.windup;
@@ -743,14 +799,7 @@ export class Enemies {
       const time = to.length() / S.rocketSpeed;
       // past the aim point, on into the ground behind it
       const vel = to.multiplyScalar(1 / time);
-      const mesh = new THREE.Group();
-      mesh.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: 0x3a3f36 })));
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.07), new THREE.MeshBasicMaterial({ color: 0xff3b2f }));
-      head.position.x = 0.2;
-      mesh.add(head);
-      const burn = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.09), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
-      burn.position.x = -0.22;
-      mesh.add(burn);
+      const mesh = droneRocket();
       mesh.position.copy(from);
       this.scene.add(mesh);
       this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time * 1.6, damage: S.damage, rocket: mesh });
@@ -784,7 +833,7 @@ export class Enemies {
     aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
     e.speed = moving / S.runSpeed;
     const charge = e.windup > 0 ? 1 - e.windup / S.windup : e.burstLeft > 0 ? 1 : 0;
-    e.model.update(dt, t, { speed: e.speed, tilt: Math.min(0.35, moving * 0.05), aimYaw, charge });
+    e.model.update(dt, t, { speed: e.speed, tilt: Math.min(0.35, moving * 0.05), aimYaw, charge, height: e.pos.y - ground });
   }
 
   // The walker and the bridge gun: line up, then fire a beam.
@@ -919,19 +968,25 @@ export class Enemies {
         }
       }
       if (b.rocket) {
-        // a rocket: its body pointing along its flight, a smoke trail
+        // a rocket: its body pointing along its flight, the motor's flame
+        // flickering, a smoke trail behind
         b.rocket.position.copy(b.pos);
         b.rocket.lookAt(b.pos.clone().add(b.vel));
         b.rocket.rotateY(-Math.PI / 2); // (its length runs along x)
-        if (Math.random() < 0.7) this.combat.puffs.spawn(b.pos.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), { color: 0xa9a399, s0: 0.1, s1: 0.35, life: 0.6, drag: 2, lift: 0.2, fadeAt: 0.2 });
-        this.combat.glow.tracer(b.pos.clone().addScaledVector(b.vel, -0.03), b.pos, 0xff7a3a, 0.08, 0.05);
+        const fl = b.rocket.userData.flame;
+        fl.scale.set(0.7 + Math.random() * 0.6, 1, 1);
+        const back = b.pos.clone().addScaledVector(b.vel, -0.045);
+        this.combat.puffs.spawn(back, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), { color: 0xb8b2a6, s0: 0.12, s1: 0.45, life: 0.7, drag: 2, lift: 0.2, fadeAt: 0.2 });
+        this.combat.glow.tracer(back, b.pos.clone().addScaledVector(b.vel, -0.02), 0xffb347, 0.12, 0.06);
       }
       // a long bright streak with a hot core, so a round in flight is easy to
       // see (and to dodge)
-      const tail = b.pos.clone().addScaledVector(b.vel, -0.055);
-      if (b.pos.distanceToSquared(b.origin) < 0.055 * 0.055 * b.vel.lengthSq()) tail.copy(b.origin);
-      this.combat.glow.tracer(tail, b.pos, 0xff2414, 0.16, 0.04);
-      this.combat.glow.tracer(tail.lerp(b.pos, 0.4), b.pos, 0xffb8a0, 0.06, 0.04);
+      if (!b.rocket) {
+        const tail = b.pos.clone().addScaledVector(b.vel, -0.055);
+        if (b.pos.distanceToSquared(b.origin) < 0.055 * 0.055 * b.vel.lengthSq()) tail.copy(b.origin);
+        this.combat.glow.tracer(tail, b.pos, 0xff2414, 0.16, 0.04);
+        this.combat.glow.tracer(tail.lerp(b.pos, 0.4), b.pos, 0xffb8a0, 0.06, 0.04);
+      }
       let hit = false;
       const ty = ctx.tankPos?.y ?? 0; // (the tank may be up on a deck)
       if (tb && b.pos.y < ty + 1.8 && b.pos.y > ty - 0.3) {
@@ -947,8 +1002,8 @@ export class Enemies {
         ctx.onTankHit?.(b.damage, b.pos);
         b.hitTank = true;
         this.endBolt(i, ctx);
-      } else if (b.life <= 0 || b.pos.y <= 0.05) {
-        this.combat.fx.burst(b.pos.clone().setY(0.08), { count: 3, speed: 2.5, color: 0x8d8b86, glow: false, life: 0.3, size: 0.06, gravity: 9 });
+      } else if (b.life <= 0 || b.pos.y <= (ctx.heightAt ? ctx.heightAt(b.pos.x, b.pos.z) : 0) + 0.05) {
+        this.combat.fx.burst(b.pos.clone(), { count: 3, speed: 2.5, color: 0x8d8b86, glow: false, life: 0.3, size: 0.06, gravity: 9 });
         this.endBolt(i, ctx);
       }
     }

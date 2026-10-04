@@ -8,7 +8,9 @@ import { artilleryCanvas, atgmCanvas } from '../ui/icons.js';
 export const EQUIPMENT = {
   artillery: {
     name: 'Artillery strike',
-    text: 'Press Q and pick a spot: shells come screaming in and six land there, 70 damage each. Recharges in 15 s.',
+    text: 'Press Q, then click a spot: a barrage of shells lands there.',
+    // the numbers: [label, value, good]
+    rows: [['Damage', '6 × 70', true], ['Area', 'Wide', true], ['Hits', 'Through cover', true], ['Delay', '1.5 s', false], ['Recharge', '15 s', false]],
     cooldown: 15,
     delay: 1.5, // seconds from the call to the first shell
     shells: 6,
@@ -18,14 +20,32 @@ export const EQUIPMENT = {
     art: () => artilleryCanvas(2), // red impact rings, shells streaking in, explosions
   },
   atgm: {
-    name: 'ATGM',
-    text: 'An anti-tank guided missile. Press Q, point at an enemy to lock on, click: the missile flies straight at it, 140 damage. Recharges in 5 s.',
-    cooldown: 5,
-    damage: 140,
-    blast: 1.6,
-    speed: 26, // top speed, units/s
+    name: 'Guided missile',
+    text: 'Press Q: it locks on to up to three enemies in view by itself and fires a missile at each.',
+    rows: [['Damage', '3 × 90', true], ['Blast', 'Big', true], ['Aim', 'Locks on by itself', true], ['Recharge', '12 s', false], ['Range', 'Enemies in view', false]],
+    cooldown: 12,
+    missiles: 3,
+    lockTime: 0.55, // seconds locking on before the first fires
+    salvoGap: 0.16,
+    range: 26,
+    damage: 90,
+    blast: 3.0,
+    speed: 30, // top speed, units/s
     art: () => atgmCanvas(2), // a missile on its smoke trail into a lock box
   },
+};
+
+// the description as HTML: how it works, then green and red rows
+export function equipmentHtml(id) {
+  const e = EQUIPMENT[id];
+  if (!e) return '';
+  const rows = (e.rows || []).map(([l, v, good]) => `<div class="fx-row"><span>${l}</span><b class="${good ? 'good' : 'bad'}">${good ? '+' : '−'} ${v}</b></div>`).join('');
+  return `<div class="fx-how">${e.text}</div>${rows}`;
+}
+// ... as plain text (a title attribute)
+export const equipmentPlain = (id) => {
+  const e = EQUIPMENT[id];
+  return e ? [e.text, ...(e.rows || []).map(([l, v, good]) => `${good ? '+' : '−'} ${l}: ${v}`)].join('\n') : '';
 };
 
 const pics = new Map();

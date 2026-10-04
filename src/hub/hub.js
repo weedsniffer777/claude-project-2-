@@ -15,12 +15,12 @@ import { createCrew } from '../models/crew.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
-import { PARTS, attachPart } from '../game/parts.js';
+import { PARTS, attachPart, effectsHtml, improvementHtml, improveTo } from '../game/parts.js';
 import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { createWorkshop, upgradeHint, evolveReady, canEvolve } from '../ui/workshop.js';
 import { save } from '../game/save.js';
-import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
+import { EQUIPMENT, equipmentIcon, equipmentHtml } from '../game/equipment.js';
 import { tokenIconURL } from '../ui/icons.js';
 import { partPicture } from '../render/partPictures.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
@@ -92,13 +92,17 @@ const CSS = `
 .base-brief .steps i { width: 14px; height: 2px; background: #6d655a; }
 .base-brief .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
 .base-brief .rewards { display: flex; flex-wrap: wrap; gap: 8px; }
-.base-brief .rewards span { position: relative; width: 54px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.base-brief .rewards > span { position: relative; width: 54px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .base-brief .rewards img { width: 100%; height: 100%; image-rendering: pixelated; }
-.base-brief .rewards span.got img { filter: brightness(0.45) saturate(0.4); }
-.base-brief .rewards span:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-brief .rewards > span.got img { filter: brightness(0.45) saturate(0.4); }
+.base-brief .rewards > span:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-brief .rewards .tip, .base-brief .node .hardtag .rw .tip { display: none; position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 190px; padding: 7px 9px; z-index: 4; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; text-align: left; pointer-events: none; text-transform: none; white-space: normal; }
+.eqfx { width: min(300px, 80vw); margin: 0 auto; text-align: left; }
+.base-brief .rewards > span:hover > .tip, .base-brief .node .hardtag .rw:hover > .tip { display: block; }
+.base-brief .rewards > span.imp::after { content: '▲'; position: absolute; right: -4px; top: -6px; font: 400 10px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 .base-brief .rewards span[data-tip]:hover::before { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 190px; padding: 7px 9px; z-index: 3;
   font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
-.base-brief .rewards span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
+.base-brief .rewards > span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
 @media (max-width: 760px) {
   .base-brief { flex-direction: column; gap: 14px; padding: 56px 16px 16px; overflow-y: auto; justify-content: flex-start; }
@@ -147,8 +151,6 @@ const CSS = `
 .base-brief .node .hardtag .rw { position: relative; display: block; width: 60px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 10px #ffc24a99; }
 .base-brief .node .hardtag .rw img { width: 100%; height: 100%; image-rendering: pixelated; }
 .base-brief .node .hardtag em { margin-top: 3px; padding: 2px 5px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
-.base-brief .node .hardtag .rw:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); width: 200px; padding: 7px 9px; z-index: 4;
-  font: 400 12px/1.3 'Pixelify Sans', monospace; text-transform: none; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a; white-space: normal; text-align: left; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
@@ -1043,9 +1045,20 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const hardTag = (z) => {
     const id = z.first?.hard?.part;
     if (!id || !PARTS[id]) return '<span class="hardtag">Hard mode</span>';
-    const tip = `${PARTS[id].name}: ${PARTS[id].text}`.replace(/"/g, '&quot;');
-    return `<span class="hardtag rich">Hard mode<small>First clear:</small><span class="rw" data-tip="${tip}"><img alt="" src="${partIcon(id)}"></span><em>Legendary</em></span>`;
+    return `<span class="hardtag rich">Hard mode<small>First clear:</small><span class="rw"><img alt="" src="${partIcon(id)}"><div class="tip">${partTip(id)}</div></span><em>Legendary</em></span>`;
   };
+  // a part's hover box: its name, then what it does in green and red (a
+  // part you own: what finding it again would add)
+  const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  function partTip(id) {
+    const p = PARTS[id];
+    const tank = p.only || save.tank();
+    if (save.owned().includes(id)) {
+      const up = improveTo(id);
+      return `<div class="fx-head">▲ ${esc(p.name)} improvement</div>${up ? improvementHtml(id, tank) : '<div class="fx-how">Maxed for now: evolve it to improve it further.</div>'}`;
+    }
+    return `<div class="fx-head">${esc(p.name)}</div>${effectsHtml(id, tank, p.startLevel || 1)}`;
+  }
   // beaten on Easy but not yet on Hard: a red "Hard mode" box over it
   const hardNext = (z) => z.id && save.cleared().includes(clearKey(z.id, 'easy')) && !save.cleared().includes(clearKey(z.id, 'hard'));
   // a level's two stars on the map: Easy cleared (amber), Hard (red)
@@ -1072,13 +1085,13 @@ export function createHub({ renderer, pixel, onDeploy }) {
       if (hardLocked && save.difficulty() === 'hard') save.setDifficulty('easy');
       const diff = save.difficulty() === 'hard' ? 'hard' : 'easy';
       const first = z.first?.[diff];
-      const tile = (got, cls, inner, tip) => `<span class="${cls}${got ? ' got' : ''}" data-tip="${tip}${got ? ' (got it)' : ''}">${inner}</span>`;
+      const tile = (got, cls, inner, tip) => `<span class="${cls}${got ? ' got' : ''}">${inner}<div class="tip">${tip}${got ? '<div class="fx-how">(got it)</div>' : ''}</div></span>`;
       let firstTile = '';
-      if (first?.tank) firstTile += tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `${TANKS[first.tank].name}: ${tankDef(first.tank).blurb}`);
-      if (first?.equipment) firstTile += tile(done(diff), 'equip', `<img alt="${EQUIPMENT[first.equipment].name}" src="${equipmentIcon(first.equipment)}">`, `${EQUIPMENT[first.equipment].name} (equipment): ${EQUIPMENT[first.equipment].text}`);
-      if (first?.part) firstTile += tile(done(diff), 'legpart', `<img alt="${PARTS[first.part].name}" src="${partIcon(first.part)}"><em>Legendary</em>`, `${PARTS[first.part].name}: ${PARTS[first.part].text}`);
-      if (first?.scraps) firstTile += tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
-      if (first?.tokens) firstTile += tile(done(diff), 'cash tok', `+${first.tokens} tokens`, `${first.tokens} upgrade tokens: spend them to evolve parts to Epic and Legendary`);
+      if (first?.tank) firstTile += tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `<div class="fx-head">${esc(TANKS[first.tank].name)}</div><div class="fx-how">${esc(tankDef(first.tank).blurb)}</div>`);
+      if (first?.equipment) firstTile += tile(done(diff), 'equip', `<img alt="${EQUIPMENT[first.equipment].name}" src="${equipmentIcon(first.equipment)}">`, `<div class="fx-head">${esc(EQUIPMENT[first.equipment].name)}</div>${equipmentHtml(first.equipment)}`);
+      if (first?.part) firstTile += tile(done(diff), 'legpart', `<img alt="${PARTS[first.part].name}" src="${partIcon(first.part)}"><em>Legendary</em>`, `<div class="fx-head">${esc(PARTS[first.part].name)}</div>${effectsHtml(first.part, PARTS[first.part].only || save.tank(), PARTS[first.part].startLevel || 1)}`);
+      if (first?.scraps) firstTile += tile(done(diff), 'cash', `+${first.scraps} scraps`, '<div class="fx-how">Currency used for upgrades and purchases.</div>');
+      if (first?.tokens) firstTile += tile(done(diff), 'cash tok', `+${first.tokens} tokens`, '<div class="fx-how">Needed for promoting parts, tanks and drones.</div>');
       const tab = (d, name, txt) => {
         const locked = d === 'hard' && hardLocked;
         const st = locked ? '<i class="lock"></i>Beat Easy to unlock' : `<i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}`;
@@ -1092,9 +1105,9 @@ export function createHub({ renderer, pixel, onDeploy }) {
         ${done('easy') && !done('hard') && diff === 'easy' ? '<span class="callout">Beat it on Hard for extra rewards!</span>' : ''}
         ${firstTile ? `<span class="label">First clear reward${diff === 'hard' ? ' (Hard)' : ''}</span><div class="rewards">${firstTile}</div>` : ''}
         <span class="label">Possible parts</span>
-        <div class="rewards">${z.rewards.map((id) => tile(owned.includes(id), '', `<img alt="${PARTS[id].name}" src="${partIcon(id)}">`, `${PARTS[id].name}: ${PARTS[id].text}`)).join('')}</div>
+        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'imp' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"><div class="tip">${partTip(id)}</div></span>`).join('')}</div>
         <span class="label">Possible resources</span>
-        <div class="rewards res"><span class="res scr" data-tip="Scraps: amber shards and blue crystals (worth 5) from every enemy"><i></i>Scraps</span><span class="res tok" data-tip="Upgrade tokens: rare drops, more from bigger enemies. Spend them to evolve parts"><i></i>Tokens</span></div>
+        <div class="rewards res"><span class="res scr"><i></i>Scraps<div class="tip"><div class="fx-head">Scraps</div><div class="fx-how">Currency used for upgrades and purchases.</div></div></span><span class="res tok"><i></i>Tokens<div class="tip"><div class="fx-head">Tokens</div><div class="fx-how">Needed for promoting parts, tanks and drones.</div></div></span></div>
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
       for (const b of info.querySelectorAll('.dtab:not(.locked)'))
         b.addEventListener('click', () => {
@@ -1207,7 +1220,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <p class="hint">Equipment goes in its own slot and is used with <b>Q</b>. Swap it in the hangar.</p>
       <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
     news.querySelector('h2').textContent = `${g.name} unlocked`;
-    news.querySelector('p').textContent = g.text;
+    news.querySelector('p').outerHTML = `<div class="eqfx">${equipmentHtml(id)}</div>`;
     news.querySelector('.go').addEventListener('click', () => {
       news.hidden = true;
       clickRoom(ROOMS.find((r) => r.id === 'hangar'));
