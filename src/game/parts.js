@@ -441,19 +441,27 @@ export const PARTS = {
       s.cannonDamage *= 0.45;
       s.magReload += 1.5;
     },
-    // the barrels round the gun, a feed chute and an ammo drum on the turret
+    // the barrels round the gun, and a tracking radar on the gun mount
     light(t) {
       const g = vulcanBarrels();
       g.position.set(0.5, 0, 0);
       (t.gunPivot || t.turret).add(g);
-      // the ammo drum sits on the gun mount, left of the gun's base, its
-      // feed chute running into the breech
-      const drum = new THREE.Group();
-      put(drum, cyl(0.11, 0.16, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
-      put(drum, cyl(0.115, 0.025, 0x3a4430, { seg: 12 }), 0, 0, -0.08).rotation.x = Math.PI / 2;
-      put(drum, box(0.12, 0.05, 0.06, 0x2b2d30, { r: 0.01 }), 0.12, 0.02, 0.06); // the feed chute into the gun
-      drum.position.set(-0.55, 0.02, -0.2); // on the mount, left of the gun's base
-      g.add(drum);
+      // a tracking radar on the gun mount, left of the gun's base, like
+      // the anti-aircraft Vulcans: a dish on a short post, a feed horn in
+      // front of it, sweeping slowly side to side
+      const radar = new THREE.Group();
+      put(radar, cyl(0.025, 0.24, 0x2b2d30, { seg: 6 }), 0, 0.12, 0); // the post
+      const head = new THREE.Group();
+      head.position.y = 0.26;
+      radar.add(head);
+      const dish = put(head, cyl(0.17, 0.05, 0x5f6b48, { seg: 14, radiusEnd: 0.07 }), 0.03, 0, 0); // shallow cone, wide face forward
+      dish.rotation.z = -Math.PI / 2;
+      put(head, cyl(0.15, 0.012, 0x3a4430, { seg: 14 }), 0.06, 0, 0).rotation.z = Math.PI / 2; // its rim
+      put(head, cyl(0.012, 0.16, 0x2b2d30, { seg: 5 }), 0.13, 0, 0).rotation.z = Math.PI / 2; // the feed horn's arm
+      put(head, box(0.04, 0.04, 0.04, 0x2b2d30, { r: 0.01 }), 0.21, 0, 0);
+      radar.position.set(-0.6, 0.06, -0.24);
+      dish.onBeforeRender = () => (head.rotation.y = Math.sin(performance.now() / 700) * 0.6);
+      g.add(radar);
       return g;
     },
     build(t) {
