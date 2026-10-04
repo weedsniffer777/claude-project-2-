@@ -616,6 +616,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let hardCount = 0;
   let speedK = 0; // eased 0..1 while boosting (camera and speed lines)
   let deathK = 0; // eased 0..1 while the tank goes up
+  let salvoK = 0; // eased 0..1 while a missile salvo's out (the view pulled back)
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
@@ -1066,8 +1067,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.abilityCd > 0 || run.msl || run.over || run.mode !== 'field') return;
     const E = EQUIPMENT.atgm;
     const N = 8;
+    // the whole zoomed-out view: what's on screen once it pulls back
+    const reach = ((camera.top - camera.bottom) / 2) * (stats.salvoZoom || 1) * 1.35;
     const foes = enemies.alive
-      .filter((e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < E.range * stats.view)
+      .filter((e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach)
       .sort((a, b) => b.hp - a.hp)
       .slice(0, N);
     const targets = foes.map((e) => ({ e }));
@@ -1082,7 +1085,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       targets.push({ point: p });
     }
     run.abilityCd = stats.salvoCooldown;
-    run.msl = { salvo: true, targets, t: E.lockTime, fired: 0, gap: 0, damage: stats.cannonDamage * 1.1, blast: stats.splash * 1.15 };
+    run.msl = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 1.6, blast: stats.splash * 1.15 };
   }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
@@ -1520,7 +1523,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function reloadMag() {
     if (stats.mag && run.magT <= 0 && run.mag < stats.mag) run.magT = stats.magReload;
   }
-  const holdFire = () => def.gun === 'autocannon';
+  const holdFire = () => def.gun === 'autocannon' || def.gun === 'missile';
   function tryFire(dt) {
     if (queued <= 0) return;
     queued -= dt;
@@ -1962,6 +1965,33 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const pic = snapshotCanvas(tk.group, W, H, decorate, { target, dir: new THREE.Vector3(0.12, 0.3, 1), half, aspectFit: true });
     boostPics.set(key, pic);
     return pic;
+  }
+  // Retreat's icon: a white arrow pointing back
+  let retreatCanvas = null;
+  function retreatArt() {
+    if (retreatCanvas) return retreatCanvas;
+    const c = (retreatCanvas = document.createElement('canvas'));
+    c.width = c.height = 26;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1d1b1e';
+    g.fillRect(0, 0, 26, 26);
+    g.fillStyle = '#000';
+    const arrow = (dx, dy, col) => {
+      g.fillStyle = col;
+      g.beginPath();
+      g.moveTo(4 + dx, 13 + dy);
+      g.lineTo(12 + dx, 5 + dy);
+      g.lineTo(12 + dx, 10 + dy);
+      g.lineTo(22 + dx, 10 + dy);
+      g.lineTo(22 + dx, 16 + dy);
+      g.lineTo(12 + dx, 16 + dy);
+      g.lineTo(12 + dx, 21 + dy);
+      g.closePath();
+      g.fill();
+    };
+    arrow(1, 1, '#000');
+    arrow(0, 0, '#ffffff');
+    return c;
   }
   // Piercing shot's icon: a white-hot trail rising from bottom left to top
   // right, rings of shock along it, the round at its head
@@ -2476,7 +2506,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       speedK += ((boosting ? 1 : 0) - speedK) * (1 - Math.exp(-realDt * (boosting ? 8 : 4)));
       run.punch = Math.max(0, (run.punch || 0) - realDt * 3);
       deathK += ((run.dying ? 1 : 0) - deathK) * (1 - Math.exp(-realDt * 2));
-      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch); // and leaning in on the wreck
+      // the missile tank's salvo: the view pulls right out (everything in
+      // it gets locked) until the last missile's gone off
+      const scanning = !!run.msl?.salvo || missiles.some((ms) => ms.top);
+      salvoK += ((scanning ? 1 : 0) - salvoK) * (1 - Math.exp(-realDt * (scanning ? 5 : 2)));
+      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch) / (1 + ((stats.salvoZoom || 1) - 1) * salvoK); // and leaning in on the wreck
       if (Math.abs(camera.zoom - zoom) > 1e-4) {
         camera.zoom = zoom;
         camera.updateProjectionMatrix();
@@ -2611,10 +2645,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
       if (!run.gun || !live) hud.setAmmo(null);
-      else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });
+      else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null, kind: def.gun === 'missile' ? 'missile' : null });
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
-      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
+      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt() : boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
       const eq = equipId();
       hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);

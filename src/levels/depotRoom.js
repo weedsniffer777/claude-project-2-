@@ -297,8 +297,9 @@ export function buildDepotRoom(scene) {
   }
   for (const x of [23.5, 24.8]) {
     B.chunk(1.1, 2.8, 0.5, 0x4f5a55, x, 1.4, -8.5);
-    for (let k = 0; k < 4; k++) B.piece(1.0, 0.05, 0.5, 0x3a3c3f, x, 0.5 + k * 0.7, -8.4);
-    for (let k = 0; k < 6; k++) B.piece(0.25, 0.22, 0.3, [0x6b5a3e, 0x56606a, 0x7a7f62][k % 3], x - 0.35 + (k % 3) * 0.35, 0.65 + Math.floor(k / 3) * 0.7, -8.4);
+    // (shelves stand proud of the rack's face, boxes sit forward of it: no shared faces)
+    for (let k = 0; k < 4; k++) B.piece(1.0, 0.05, 0.56, 0x3a3c3f, x, 0.5 + k * 0.7, -8.36);
+    for (let k = 0; k < 6; k++) B.piece(0.25, 0.22, 0.3, [0x6b5a3e, 0x56606a, 0x7a7f62][k % 3], x - 0.35 + (k % 3) * 0.35, 0.65 + Math.floor(k / 3) * 0.7, -8.22);
   }
   B.block(24.15, -8.5, 1.3, 0.3);
   // scrap heaps in the corners, tires, a burning barrel by the way in

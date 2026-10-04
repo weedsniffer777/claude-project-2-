@@ -433,7 +433,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const crate = (x, y, z, s = 0.8, color = 0x7a5f3e, yaw = 0) => {
     const g = new THREE.Group();
     put(g, box(s, s * 0.8, s, color, { r: 0.02 }), 0, s * 0.4, 0);
-    for (const dz of [-1, 1]) put(g, box(s + 0.02, 0.06, 0.06, 0x5c472e, { r: 0.01 }), 0, s * 0.4, dz * (s / 2 - 0.03));
+    for (const dz of [-1, 1]) put(g, box(s + 0.04, 0.07, 0.06, 0x5c472e, { r: 0.01 }), 0, s * 0.4, dz * (s / 2 + 0.01)); // (straps stand proud of the faces)
     g.position.set(x, y, z);
     g.rotation.y = yaw;
     return B.add(g);

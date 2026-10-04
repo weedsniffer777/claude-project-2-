@@ -255,9 +255,14 @@ export function createMissileTank() {
     const lv = onSlope(1.45, 0.42);
     put(lv, box(0.62, 0.02, 0.5, C.dark), 0, 0.01, 0);
     for (let k = 0; k < 8; k++) put(lv, box(0.03, 0.03, 0.48, C.greenDark), -0.27 + k * 0.077, 0.025, 0);
-    const dh = onSlope(1.05, -0.42);
-    put(dh, cyl(0.18, 0.05, C.green, { seg: 14 }), 0, 0.025, 0);
-    for (const dz of [-0.12, 0, 0.12]) put(dh, box(0.06, 0.06, 0.08, C.dark, { r: 0.01 }), 0.18, 0.04, dz);
+    // the driver's hatch: a square plate with a hinge, set flush on the
+    // slope, and a block of three periscopes ahead of it
+    const dh = onSlope(1.0, -0.42);
+    put(dh, box(0.36, 0.04, 0.34, C.greenDark, { r: 0.012 }), 0, 0.025, 0);
+    put(dh, box(0.3, 0.02, 0.28, C.green, { r: 0.01 }), 0, 0.05, 0);
+    put(dh, box(0.04, 0.05, 0.3, C.dark, { r: 0.01 }), -0.17, 0.05, 0); // the hinge
+    put(dh, box(0.1, 0.06, 0.32, C.greenDark, { r: 0.012 }), 0.26, 0.035, 0);
+    for (const dz of [-0.1, 0, 0.1]) put(dh, box(0.02, 0.035, 0.07, C.glass), 0.315, 0.04, dz);
     // a raised strake across the glacis, as on the real one
     const st = onSlope(1.7, 0);
     put(st, box(0.06, 0.04, UPPER_HALF * 2 - 0.1, C.greenDark, { r: 0.01 }), 0, 0.02, 0);
@@ -292,11 +297,17 @@ export function createMissileTank() {
   const cup = new THREE.Group();
   cup.position.set(0.45, DECK_Y, 0.38);
   chassis.add(cup);
-  put(cup, cyl(0.24, 0.12, C.green, { seg: 16 }), 0, 0.06, 0);
-  put(cup, cyl(0.2, 0.04, C.greenDark, { seg: 16 }), 0, 0.14, 0);
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * TAU;
-    put(cup, box(0.05, 0.05, 0.06, C.dark, { r: 0.01 }), Math.cos(a) * 0.22, 0.1, Math.sin(a) * 0.22).rotation.y = -a;
+  // a low collar, the hatch ring, the lid swung open behind, four
+  // periscopes round the front of the ring
+  put(cup, cyl(0.25, 0.1, C.greenDark, { seg: 16 }), 0, 0.05, 0);
+  put(cup, cyl(0.21, 0.05, C.green, { seg: 16 }), 0, 0.125, 0);
+  put(cup, cyl(0.15, 0.02, 0x15160f, { seg: 14 }), 0, 0.15, 0); // the open hatch
+  const lid = put(cup, cyl(0.17, 0.035, C.green, { seg: 14 }), -0.24, 0.26, 0);
+  lid.rotation.z = 1.25;
+  for (const a of [-0.9, -0.3, 0.3, 0.9]) {
+    const pz = put(cup, box(0.07, 0.06, 0.06, C.greenDark, { r: 0.01 }), Math.cos(a) * 0.22, 0.13, Math.sin(a) * 0.22);
+    pz.rotation.y = -a;
+    put(cup, box(0.01, 0.03, 0.045, C.glass), Math.cos(a) * 0.258, 0.13, Math.sin(a) * 0.258).rotation.y = -a;
   }
   // the hooded sight box ahead of it, like the photos' angular head
   const sh = put(chassis, camoBox(0.34, 0.28, 0.3, 50), 0.82, DECK_Y + 0.14, 0.42);
@@ -370,6 +381,7 @@ export function createMissileTank() {
   turret.add(gunPivot);
   slotGroups.gun.push(gunPivot);
   const mouths = [];
+  const caps = []; // the canisters' covers: blown off by the missile, back on after a reload
   {
     // two packs of four (2 x 2) side by side on the cradle, a gap between
     const { len, cw, gap } = POD;
@@ -385,16 +397,31 @@ export function createMissileTank() {
           const z = zc - packW / 2 + cw / 2 + c * (cw + gap);
           put(gunPivot, camoBox(len, cw, cw, 70 + r * 4 + c + side * 9, 0.015), 0, y, z);
           for (const ex of [-1, 1]) put(gunPivot, box(0.05, cw + 0.02, cw + 0.02, C.greenDark, { r: 0.01 }), ex * (len / 2 - 0.02), y, z);
-          put(gunPivot, box(0.02, cw * 0.6, cw * 0.6, C.dark, { r: 0.01 }), len / 2 + 0.006, y, z);
-          for (const rx of [-0.25, 0.1]) put(gunPivot, box(0.03, cw + 0.015, cw + 0.015, C.greenDark, { r: 0.008 }), rx, y, z);
+          // the open end: thin walls round a dark bore (seen once its cover's gone)
+          put(gunPivot, box(0.02, cw - 0.05, cw - 0.05, 0x111210), len / 2 + 0.006, y, z);
+          // its cover: a thin olive cap with a raised cross and a boss
+          const cap = new THREE.Group();
+          cap.position.set(len / 2 + 0.03, y, z);
+          put(cap, box(0.03, cw - 0.01, cw - 0.01, C.green, { r: 0.008 }), 0, 0, 0);
+          put(cap, box(0.015, cw - 0.06, 0.03, C.greenDark), 0.02, 0, 0);
+          put(cap, box(0.015, 0.03, cw - 0.06, C.greenDark), 0.02, 0, 0);
+          put(cap, cyl(0.035, 0.02, C.tan, { axis: 'x', seg: 8 }), 0.03, 0, 0);
+          gunPivot.add(cap);
+          caps.push({ g: cap, home: cap.position.clone(), on: true, t: 0, vel: new THREE.Vector3(), spin: new THREE.Vector3() });
           const m = new THREE.Object3D();
           m.position.set(len / 2 + 0.05, y, z);
           gunPivot.add(m);
           mouths.push(m);
         }
       }
-      // each pack's frame
-      for (const s2 of [-1, 1]) put(gunPivot, box(len * 0.95, 2 * cw + gap + 0.06, 0.04, C.dark, { r: 0.01 }), 0, y0 + (cw + gap) / 2, zc + s2 * (packW / 2 + 0.02));
+      // each pack's straps: rings wrapped round all four canisters at a
+      // quarter and three quarters of their length
+      const ph = 2 * cw + gap;
+      const pyc = y0 + (cw + gap) / 2;
+      for (const rx of [-len / 4, len / 4]) {
+        for (const sy of [-1, 1]) put(gunPivot, box(0.07, 0.035, packW + 0.07, 0x6d7076, { r: 0.008 }), rx, pyc + sy * (ph / 2 + 0.0175), zc);
+        for (const s2 of [-1, 1]) put(gunPivot, box(0.07, ph + 0.07, 0.035, 0x6d7076, { r: 0.008 }), rx, pyc, zc + s2 * (packW / 2 + 0.0175));
+      }
     }
   }
   // order: top row first, alternating sides, so it ripples across
@@ -522,7 +549,18 @@ export function createMissileTank() {
     raise = 1.2;
     spring.vPitch -= 0.25;
     group.updateWorldMatrix(true, true);
-    const m = mouths[order[next++ % order.length]];
+    const i = order[next++ % order.length];
+    const m = mouths[i];
+    // the cover blows off ahead of the missile, tumbling away
+    const cp = caps[i];
+    if (cp?.on && group.parent) {
+      cp.on = false;
+      cp.t = 0;
+      const fwd = new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld);
+      group.parent.attach(cp.g);
+      cp.vel.copy(fwd).multiplyScalar(5 + Math.random() * 2).add(new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 2, (Math.random() - 0.5) * 2));
+      cp.spin.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18);
+    }
     return {
       position: m.getWorldPosition(new THREE.Vector3()),
       direction: new THREE.Vector3(1, 0, 0).transformDirection(gunPivot.matrixWorld),
@@ -553,6 +591,33 @@ export function createMissileTank() {
     const wantE = raise > 0 || ctx.trigger ? POD_MAX : POD_REST;
     podElev += THREE.MathUtils.clamp(wantE - podElev, -POD_SPEED * dt, POD_SPEED * dt);
     recoil = Math.max(0, recoil - dt * 6);
+    // blown-off covers tumble away and fade; after a reload's time a new one's on
+    for (const cp of caps) {
+      if (cp.on) continue;
+      cp.t += dt;
+      if (cp.t < 1.4) {
+        cp.vel.y -= 14 * dt;
+        cp.g.position.addScaledVector(cp.vel, dt);
+        cp.g.rotation.x += cp.spin.x * dt;
+        cp.g.rotation.y += cp.spin.y * dt;
+        cp.g.rotation.z += cp.spin.z * dt;
+        if (cp.g.position.y < 0.05) {
+          cp.g.position.y = 0.05;
+          cp.vel.multiplyScalar(0.3);
+          cp.vel.y = Math.abs(cp.vel.y) * 0.3;
+          cp.spin.multiplyScalar(0.5);
+        }
+      } else if (cp.g.parent !== gunPivot) {
+        gunPivot.add(cp.g);
+        cp.g.visible = false;
+        cp.g.position.copy(cp.home);
+        cp.g.rotation.set(0, 0, 0);
+      }
+      if (cp.t > 3.2) {
+        cp.on = true;
+        cp.g.visible = true;
+      }
+    }
     gunPivot.rotation.z = podElev;
     gunPivot.position.x = PIVOT.x - recoil * 0.05;
 

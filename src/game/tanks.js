@@ -71,10 +71,14 @@ export const TANKS = {
     moveName: 'Retreat',
     ability: 'salvo',
     abilityName: 'Missile salvo',
-    blurb: 'A launcher on a long, low hull. Each shot is a missile that homes on the enemy under your aim. Retreat rockets it straight back out of trouble; Missile salvo fires eight at once.',
+    blurb: 'Recon and long range: it sees further than the others. Eight homing missiles to a pack. Retreat rockets it straight back out of trouble; Missile salvo pulls the view out and fires eight at once.',
     unlockText: 'Beat level 4 to unlock',
     // reload: seconds between missiles; cannonDamage / splash: each missile's hit
-    stats: { maxHp: 85, speed: 1.08, reload: 1.5, cannonDamage: 70, splash: 2.2, boostCooldown: 4 },
+    // a recon / sniper tank: it sees further (+25% view), and its salvo pulls
+    // the view back further still (salvoZoom, growing with the tank's level)
+    // a missile every reload (about the autocannon's pace), eight in the
+    // pack, then a long reload
+    stats: { maxHp: 85, speed: 1.08, view: 1.25, reload: 0.55, mag: 8, magReload: 5.6, cannonDamage: 34, splash: 1.8, boostCooldown: 4, salvoZoom: 1.25 },
     box: { cx: 0.05, hx: 2.15, hz: 1.02 },
     pic: { target: [-0.2, 1.05, 0], half: 1.7 },
     anchors: {

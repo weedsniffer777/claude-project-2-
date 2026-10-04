@@ -264,7 +264,7 @@ export function bus(B, x, z, yaw) {
   put(body, box(1.4, 0.1, 0.9, DARK, { r: 0.05 }), 0.8, 2.44, 0.2); // the hole
   for (let i = 0; i < 8; i++) {
     const s = rand() < 0.5 ? -1 : 1;
-    put(body, box(0.08 + rand() * 0.1, 0.4 + rand() * 0.8, 0.02, RUST, { r: 0 }), -2.8 + rand() * 5.6, 1.0 + rand() * 0.4, s * (W / 2 + 0.04));
+    put(body, box(0.08 + rand() * 0.1, 0.3 + rand() * 0.35, 0.02, RUST, { r: 0 }), -2.6 + rand() * 1.6 + (i % 3) * 1.8, 0.85 + rand() * 0.15, s * (W / 2 + 0.012)); // (on the lower body, clear of the windows and doors)
   }
   // wheels: bare rims sitting low, a shred of tyre left on one
   for (const wx of [-1.9, 2.0]) {

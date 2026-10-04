@@ -658,6 +658,7 @@ export function applyTankLevel(s, lvl) {
   s.mgDamage *= 1 + 0.01 * k;
   s.speed *= 1 + 0.003 * k;
   s.breakShield = 0.25 + (0.25 * k) / (TANK_MAX - 1); // the ability gets better with the tank
+  if (s.salvoZoom) s.salvoZoom = 1.25 + (0.25 * k) / (TANK_MAX - 1); // the missile tank's salvo sees further: +25% to +50%
 }
 
 const INT_KEYS = new Set(['mag', 'extraMgs']);

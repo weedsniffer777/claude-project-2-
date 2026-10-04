@@ -11,6 +11,18 @@ const SHELLS = {
   small: { rows: ['.t.', 'ttt', 'bbb', 'hcc', 'hcc', 'hcc', 'rrr'], gap: 1, scale: 2 },
   big: { rows: ['..t..', '.ttt.', 'ttttt', 'ttttt', 'bbbbb', 'hcccc', 'hcccc', 'hcccc', 'hcccc', 'hcccc', 'hcccc', 'hcccc', 'rrrrr'], gap: 2, scale: 2 },
 };
+// The missile tank's: a white missile with a red nose, a grey band, tiny
+// fins at the tail (r nose, w body, g band, f fins, d nozzle)
+const MISSILES = {
+  small: { rows: ['.r.', 'rrr', 'www', 'wgw', 'www', 'fwf', 'ddd'], gap: 1, scale: 2 },
+  big: { rows: ['..r..', '.rrr.', '.rrr.', '.www.', '.wgw.', '.www.', '.www.', '.wgw.', '.www.', 'f.w.f', 'fwwwf', '.ddd.'], gap: 2, scale: 2 },
+};
+const MINK = {
+  lit: { r: '#ff3b2f', w: '#ecebe6', g: '#9a9da2', f: '#6d7076', d: '#3a3c3f' },
+  low: { r: '#ff3b2f', w: '#ffb0a8', g: '#c2706a', f: '#8a4a44', d: '#3a3c3f' },
+  empty: { r: '#2b2729', w: '#2b2729', g: '#2b2729', f: '#2b2729', d: '#2b2729' },
+  flash: { r: '#ffffff', w: '#ffffff', g: '#ffffff', f: '#ffffff', d: '#ffffff' },
+};
 const INK = {
   lit: { t: '#d8d2c4', b: '#8a5a1c', h: '#ffe2a0', c: '#ffb347', r: '#c97f2a' },
   low: { t: '#d8d2c4', b: '#7a1a14', h: '#ff9a8a', c: '#ff4a3a', r: '#a8241c' },
@@ -21,9 +33,12 @@ const FLASH_MS = 140;
 
 // size: 'small' (under the reticle) or 'big' (the HP panel)
 export function createAmmoStrip(size = 'big') {
-  const S = SHELLS[size];
-  const W = S.rows[0].length;
-  const H = S.rows.length;
+  // the sprite: shells, or (the missile tank) missiles; set() picks
+  let S = SHELLS[size];
+  let W = S.rows[0].length;
+  let H = S.rows.length;
+  let ink = INK;
+  let kind = null;
   injectCss();
   // a wrapper: the shells, or (a big magazine with more than ten left) the
   // count as a number
@@ -47,7 +62,7 @@ export function createAmmoStrip(size = 'big') {
     S.rows.forEach((row, y) =>
       [...row].forEach((ch, x) => {
         if (ch === '.') return;
-        g.fillStyle = inkFor(y)[ch];
+        g.fillStyle = (inkFor(y) || ink.empty)[ch];
         g.fillRect(x0 + x + 0, y + 1, 1, 1);
       }),
     );
@@ -55,7 +70,16 @@ export function createAmmoStrip(size = 'big') {
 
   // n: rounds left, max: magazine size, load: 0..1 while reloading (null
   // otherwise). A single-shot gun: max 1, n 1 when ready.
-  function set({ n, max, load = null }) {
+  function set({ n, max, load = null, kind: k = null }) {
+    if (k !== kind) {
+      kind = k;
+      S = k === 'missile' ? MISSILES[size] : SHELLS[size];
+      ink = k === 'missile' ? MINK : INK;
+      W = S.rows[0].length;
+      H = S.rows.length;
+      key = '';
+      lastMax = -1;
+    }
     // more than ten rounds left: a number (reloading, the bar shows below)
     const big = max > 10;
     const asNumber = big && load == null && n > 10;
@@ -101,13 +125,13 @@ export function createAmmoStrip(size = 'big') {
     g.clearRect(0, 0, w, h);
     for (let i = 0; i < max; i++) {
       const x0 = 1 + i * (W + S.gap);
-      if (flashUntil[i] > now) shell(x0, () => INK.flash);
-      else if (i < lit) shell(x0, () => (low ? INK.low : INK.lit));
+      if (flashUntil[i] > now) shell(x0, () => ink.flash);
+      else if (i < lit) shell(x0, () => (low ? ink.low : ink.lit));
       else if (i === lit && part > 0) {
         // filling from the base up, white-hot like the one that's just gone in
         const fillRow = H - Math.round(part * H);
-        shell(x0, (y) => (y >= fillRow ? INK.flash : INK.empty));
-      } else shell(x0, () => INK.empty);
+        shell(x0, (y) => (y >= fillRow ? ink.flash : ink.empty));
+      } else shell(x0, () => ink.empty);
     }
   }
   return { el, set };
