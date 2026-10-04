@@ -3,35 +3,22 @@
 // pixel icons on a cyan tile with cut corners (parts are pictures of the
 // part in a square frame), so the two never get mixed up.
 
+import { artilleryCanvas } from '../ui/icons.js';
+
 export const EQUIPMENT = {
   artillery: {
     name: 'Artillery strike',
-    text: 'Press Q and pick a spot: 1.5 s later six shells land there, 70 damage each. Recharges in 30 s.',
-    cooldown: 30,
+    text: 'Press Q and pick a spot: shells come screaming in and six land there, 70 damage each. Recharges in 15 s.',
+    cooldown: 15,
     delay: 1.5, // seconds from the call to the first shell
     shells: 6,
-    radius: 3.4, // where the shells fall around the spot
-    blast: 2.6, // each shell's splash
+    radius: 3.6, // where the shells fall around the spot
+    blast: 3.3, // each shell's splash
     damage: 70,
-    // 16x12 pixel art: shells coming down on a target ring
-    icon: [
-      '..#.......#.....',
-      '.#+#.....#+#....',
-      '.#+#.....#+#....',
-      '.###.....###....',
-      '..-.......-.....',
-      '....------......',
-      '...-......-.....',
-      '..-...**...-....',
-      '..-..****..-....',
-      '..-...**...-....',
-      '...-......-.....',
-      '....------......',
-    ],
+    art: () => artilleryCanvas(2), // red impact rings, shells streaking in, explosions
   },
 };
 
-const INK = { '#': '#f1e9d8', '+': '#ffb347', '-': '#5fe6ff', '*': '#ffffff' };
 const pics = new Map();
 const canvases = new Map();
 // the icon on its tile, as a data URL
@@ -40,7 +27,22 @@ export function equipmentIcon(id, W = 64, H = 48) {
   if (!pics.has(key)) pics.set(key, equipmentCanvas(id, W, H).toDataURL());
   return pics.get(key);
 }
-// ... and as a canvas (the HUD button draws it)
+// the art alone, no tile (the HUD button has its own frame)
+const squares = new Map();
+export function equipmentArt(id) {
+  const art = EQUIPMENT[id]?.art?.();
+  if (!art) return null;
+  // squared up (the buttons draw it in a square), centred
+  if (!squares.has(id)) {
+    const n = Math.max(art.width, art.height);
+    const c = document.createElement('canvas');
+    c.width = c.height = n;
+    c.getContext('2d').drawImage(art, (n - art.width) / 2, (n - art.height) / 2);
+    squares.set(id, c);
+  }
+  return squares.get(id);
+}
+// ... and on its tile, as a canvas
 export function equipmentCanvas(id, W = 64, H = 48) {
   const key = `${id}|${W}|${H}`;
   if (canvases.has(key)) return canvases.get(key);
@@ -66,17 +68,15 @@ export function equipmentCanvas(id, W = 64, H = 48) {
   };
   tile(0, '#5fe6ff');
   tile(2, '#10262b');
-  const rows = EQUIPMENT[id]?.icon || [];
-  const px = Math.max(1, Math.floor(Math.min((W - 8) / 16, (H - 8) / 12)));
-  const ox = Math.round((W - 16 * px) / 2);
-  const oy = Math.round((H - rows.length * px) / 2);
-  rows.forEach((row, y) =>
-    [...row].forEach((ch, x) => {
-      if (!INK[ch]) return;
-      g.fillStyle = INK[ch];
-      g.fillRect(ox + x * px, oy + y * px, px, px);
-    }),
-  );
+  const art = EQUIPMENT[id]?.art?.();
+  if (art) {
+    // fitted inside the tile, whole pixels
+    const k = Math.min((W - 6) / art.width, (H - 6) / art.height);
+    const w = art.width * k;
+    const h = art.height * k;
+    g.imageSmoothingEnabled = false;
+    g.drawImage(art, Math.round((W - w) / 2), Math.round((H - h) / 2), w, h);
+  }
   canvases.set(key, c);
   return c;
 }

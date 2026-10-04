@@ -21,6 +21,7 @@ import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { createWorkshop, upgradeHint } from '../ui/workshop.js';
 import { save } from '../game/save.js';
 import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
+import { tokenIconURL } from '../ui/icons.js';
 import { partPicture } from '../render/partPictures.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
 
@@ -118,7 +119,7 @@ const CSS = `
 .base-brief .rewards span.res.scr { color: var(--amber); }
 .base-brief .rewards span.res.tok { color: #d9a8ff; }
 .base-brief .rewards span.res.scr i { width: 9px; height: 13px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: 12px 0 0 #5fb8ff; }
-.base-brief .rewards span.res.tok i { width: 12px; height: 12px; border-radius: 50%; background: #c77dff; box-shadow: inset -2px -2px 0 #8a3fc4; }
+.base-brief .rewards span.res.tok i { width: 18px; height: 18px; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .base-brief .rewards span.tank img { object-fit: contain; }
 .base-brief .note { font-size: 12px; color: #b9b0a0; }
 .base-brief .node .stars { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%); display: flex; gap: 2px; }

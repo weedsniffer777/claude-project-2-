@@ -23,7 +23,7 @@ import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml } from './parts.js
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
-import { EQUIPMENT, equipmentCanvas } from './equipment.js';
+import { EQUIPMENT, equipmentArt } from './equipment.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -874,10 +874,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       marker.rotation.x = -Math.PI / 2;
       marker.position.set(p.x, p.y + 0.06, p.z);
       scene.add(marker);
-      strikes.push({ at: p, t: E.delay + i * 0.22 + Math.random() * 0.1, total: E.delay + i * 0.22, marker });
+      // each comes in from high up behind, on its own line
+      const from = p.clone().add(new THREE.Vector3(-9 - Math.random() * 4, 22 + Math.random() * 4, 4 + (Math.random() - 0.5) * 6));
+      strikes.push({ at: p, from, t: E.delay + i * 0.22 + Math.random() * 0.1, total: E.delay + i * 0.22, marker, shell: null, last: null });
     }
     hud.damage(at.clone().setY(2), 0, 'chain', 'Incoming!');
   }
+  const SHELL_FLIGHT = 0.55; // seconds a shell is seen flying in
   function strikeFrame(dt, t) {
     const E = EQUIPMENT.artillery;
     for (let i = strikes.length - 1; i >= 0; i--) {
@@ -887,18 +890,38 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const r = E.blast * (0.4 + 0.9 * k);
       s.marker.scale.setScalar(r);
       s.marker.material.opacity = 0.5 + 0.5 * (Math.sin(t * (14 + (1 - k) * 30)) > 0 ? 1 : 0.3);
-      // the last moment: a streak coming down
-      if (s.t < 0.18 && !s.streak) {
-        s.streak = true;
-        combat.glow.tracer(s.at.clone().add(new THREE.Vector3(-4, 14, 3)), s.at.clone().setY(s.at.y + 0.3), 0xfff0c8, 0.5, 0.2);
+      // the shell itself: it flies the last stretch you can see, a bright
+      // head on a smoke trail, dipping as it comes
+      if (s.t < SHELL_FLIGHT) {
+        if (!s.shell) {
+          s.shell = new THREE.Group();
+          s.shell.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.7), new THREE.MeshBasicMaterial({ color: 0xfff0c8 })));
+          const glow = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.55, depthWrite: false }));
+          s.shell.add(glow);
+          scene.add(s.shell);
+        }
+        const k = 1 - Math.max(0, s.t) / SHELL_FLIGHT;
+        const p = s.from.clone().lerp(s.at, k);
+        p.y += Math.sin(k * Math.PI) * 2.5; // a little arc
+        if (s.last) {
+          s.shell.lookAt(s.shell.position.clone().add(p.clone().sub(s.last)));
+          // the trail: smoke puffs and a hot streak behind it
+          combat.glow.tracer(s.last, p, 0xffd9a0, 0.18, 0.12);
+          combat.puffs.spawn(p, new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.3, (Math.random() - 0.5) * 0.4), { color: 0xb8b2a6, s0: 0.18, s1: 0.6, life: 0.9, drag: 2, lift: 0.3, fadeAt: 0.2 });
+        }
+        s.shell.position.copy(p);
+        s.last = p;
       }
       if (s.t <= 0) {
         s.marker.removeFromParent();
         s.marker.geometry.dispose();
+        s.shell?.removeFromParent();
         strikes.splice(i, 1);
         const at = s.at.clone().setY(s.at.y + 0.2);
         combat.explode(at);
-        combat.shake = Math.max(combat.shake, 0.45);
+        combat.fx.burst(at.clone().setY(at.y + 0.6), { count: 26, speed: 9, color: 0xffd36b, life: 0.5, size: 0.09, gravity: 14 });
+        for (let k = 0; k < 6; k++) combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 2, (Math.random() - 0.5) * 5), { color: 0x6f6a62, s0: 0.4, s1: 1.4, life: 1.4, drag: 2.5, lift: 0.6, fadeAt: 0.3 });
+        combat.shake = Math.max(combat.shake, 0.5);
         onImpact(at, null, false, { radius: E.blast, damage: E.damage });
       }
     }
@@ -2132,7 +2155,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, art: equipmentCanvas(eq, 26, 26) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

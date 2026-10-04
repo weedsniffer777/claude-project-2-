@@ -340,11 +340,19 @@ function buildRiver(scene) {
     B.lump(x, y + 2.62, z, 2.4, 0.1, 1.0, 0xd0d3d8, yaw);
     return m;
   }
-  function jersey(x, z, yaw = 0) {
-    const j = put(B.root, box(1.6, 0.9, 0.7, 0x9a978f, { r: 0.06 }), x, heightAt(x, z) + 0.45, z);
+  function jersey(x, z, yaw = 0, h = 0.9, w = 1.6) {
+    const j = put(B.root, box(w, h, 0.7, 0x9a978f, { r: 0.06 }), x, heightAt(x, z) + h / 2, z);
     j.rotation.y = yaw;
     B.solid(j);
-    B.block(x, z, 0.8, 0.35, yaw);
+    B.block(x, z, w / 2, 0.35, yaw);
+    return j;
+  }
+  // a tall concrete block, broadside to the far end of the bridge: real
+  // cover from the bridge gun's beam (it fires at hull height)
+  function blockCover(x, z, yaw = Math.PI / 2) {
+    const j = jersey(x, z, yaw, 1.35, 2.3);
+    put(B.root, box(2.1, 0.08, 0.5, 0x86837c, { r: 0.02 }), x, 1.39, z).rotation.y = yaw; // its worn top
+    B.lump(x, 1.42, z, 0.6, 0.06, 0.25, 0xd0d3d8, yaw);
     return j;
   }
 
@@ -574,12 +582,12 @@ function buildRiver(scene) {
   // cover across the deck: a dead tram, wrecks, barriers, sandbags
   P.tram(B, 140, -4.8, 0.05, { tilt: -0.04, burn: 0.9 });
   wreck(127, 3.5, 0.4, { kind: 'sedan', paint: BURNT_PAINT[1] });
-  wreck(151, 4.5, -0.3, { kind: 'van', paint: 0x6b7458 });
   wreck(163, -4.5, 0.6, { kind: 'hatch', paint: BURNT_PAINT[3], flipped: true });
-  for (const [x, z, yaw] of [[122, -5, 0.2], [133, 1.5, 1.4], [134.8, 2.2, 1.3], [147, -1.5, 0.1], [156, -6, 0.5], [158, 1, 1.6], [163, 4.6, -0.3], [164.5, 5.3, -0.4], [180, -5.5, 0.4]]) jersey(x, z, yaw);
+  for (const [x, z, yaw] of [[131, 2, 1.5], [147, -1.5, 1.62], [156, 4.5, 1.45], [166, -5.2, 1.55]]) blockCover(x, z, yaw);
+  jersey(180, -5.5, 0.4);
   function sandbags(x, z, len, yaw) {
     for (let i = 0; i < len; i++) {
-      for (let k = 0; k < 2; k++) {
+      for (let k = 0; k < 4; k++) {
         const bag = put(B.root, box(0.5, 0.22, 0.32, 0x8a7b5c, { r: 0.08 }), x + Math.cos(yaw) * (i * 0.5 + k * 0.25), 0.11 + k * 0.22, z - Math.sin(yaw) * (i * 0.5 + k * 0.25));
         bag.rotation.y = yaw;
       }
@@ -587,11 +595,10 @@ function buildRiver(scene) {
     const cx = x + Math.cos(yaw) * len * 0.25;
     const cz = z - Math.sin(yaw) * len * 0.25;
     B.block(cx, cz, len * 0.25, 0.25, yaw);
-    B.hitBox(cx, 0.25, cz, len * 0.5, 0.5, 0.4);
+    B.hitBox(cx, 0.45, cz, len * 0.5, 0.9, 0.4, yaw);
   }
   B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement
-  sandbags(143, 3.5, 5, Math.PI / 2);
-  sandbags(160, -2.5, 4, Math.PI / 2);
+  sandbags(151, 2.5, 5, Math.PI / 2);
 
   // the far bank: the street runs on between blocks, a heap of rubble or two
   building({ x0: RIVER.x1 + 3.5, x1: 210, floors: 9, panel: PANELS[2], accent: ACCENTS[1], holes: 3, sideFacade: 'west' });

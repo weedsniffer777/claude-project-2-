@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
 import { EFFECT_CSS } from './parts.js';
 import { fixPixelifyH } from '../ui/fontFix.js';
+import { tokenIconURL } from '../ui/icons.js';
 
 const CSS = `
 .hud button, .hud .hud-card { cursor: var(--cursor); }
@@ -73,7 +74,7 @@ const CSS = `
 .hud-scrap.pop { animation: hudpop 0.18s steps(2); }
 .hud-token { padding: 6px 12px; font-size: 14px; display: flex; gap: 8px; align-items: center; color: #d9a8ff; }
 .hud-token b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
-.hud-token i { width: 13px; height: 13px; border-radius: 50%; background: #c77dff; box-shadow: inset -2px -2px 0 #8a3fc4, inset 2px 2px 0 #ecd2ff; }
+.hud-token i { width: 20px; height: 20px; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .hud-token.pop { animation: hudpop 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px #c77dff, 0 0 18px 4px #c77dff88; }
 .hud-scrap.intro { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber), 0 0 18px 4px #ffb34788; }
 @keyframes hudpop { 50% { transform: scale(1.15); } }
@@ -101,11 +102,6 @@ const CSS = `
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 84px; height: 84px; margin: -42px 0 0 -42px; }
 .hud:not(.touch) .hud-ability canvas { width: 84px; height: 84px; }
-/* the equipment button: smaller, a cyan edge with cut corners */
-.hud-ability.equip, .hud:not(.touch) .hud-ability.equip { width: 68px; height: 68px; margin: -34px 0 0 -34px; }
-.hud-ability.equip canvas, .hud:not(.touch) .hud-ability.equip canvas { width: 68px; height: 68px; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
-.hud-ability.equip.ready canvas { filter: drop-shadow(0 0 4px #bff6ff) drop-shadow(0 0 10px #5fe6ffaa); }
-.hud-ability.equip.ready::before { background: #5fe6ff; }
 /* on a computer the bottom of the screen is the tank's panel: HP in the
    bottom left, the ability buttons bottom right */
 .hud:not(.touch) .hud-hull { position: fixed; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); min-width: 300px; padding: 10px 14px 12px; }
@@ -331,7 +327,7 @@ export function createHud() {
     </div>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
-    <div class="hud-ability three equip" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Q</kbd></div>
+    <div class="hud-ability three" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Q</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -423,10 +419,10 @@ export function createHud() {
     const c = abilityCenter();
     return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
   };
-  // the equipment (Q), smaller, beside them
+  // the equipment (Q), beside them
   const ability3Center = () => {
     const c = ability2Center();
-    return touchMode ? { x: c.x - 104, y: c.y + 14 } : { x: c.x - 96, y: c.y + 8 };
+    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
   };
   const abilities = [
     { el: $('.hud-ability.one'), key: '', center: abilityCenter },

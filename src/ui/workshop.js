@@ -13,6 +13,7 @@ import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { tankPicture } from './fitting.js';
 import { save } from '../game/save.js';
+import { tokenIconURL } from './icons.js';
 
 const CSS = `
 .ws { position: fixed; inset: 0; z-index: 13; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 560px); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 26px; justify-content: center; align-content: center;
@@ -28,7 +29,7 @@ const CSS = `
 .ws .bank i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .ws .bank b { font-weight: 400; color: #f1e9d8; font-variant-numeric: tabular-nums; }
 .ws .bank.tk { color: #d9a8ff; }
-.ws .bank.tk i { width: 13px; height: 13px; border-radius: 50%; clip-path: none; background: var(--tok); box-shadow: inset -2px -2px 0 #8a3fc4; }
+.ws .bank.tk i { width: 20px; height: 20px; clip-path: none; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .ws .bank.spend { animation: wsSpend 0.5s steps(4); }
 @keyframes wsSpend { 30% { transform: scale(1.15); color: #ff7a6a; } }
 .ws .top .back { margin-left: auto; padding: 9px 16px 10px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
@@ -90,7 +91,7 @@ const CSS = `
 .ws .go .cost { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 13px; background: #111; color: var(--amber); }
 .ws .go .cost i { width: 8px; height: 12px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .ws .go .cost.tk { color: #d9a8ff; }
-.ws .go .cost.tk i { width: 11px; height: 11px; border-radius: 50%; clip-path: none; background: var(--tok); }
+.ws .go .cost.tk i { width: 16px; height: 16px; clip-path: none; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .ws .go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
 .ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: default; animation: none; }
 .ws .go.maxed { color: #111; background: #ffc24a; box-shadow: 0 5px 0 #8a5a1c, 0 0 0 2px #000; }

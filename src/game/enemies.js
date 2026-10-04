@@ -55,6 +55,8 @@ const HOUND = {
 // white faster and faster, its aim creeping after the tank, then a beam goes
 // straight down the line, through anything on it until something solid.
 // Breaking its line of sight, smoke, or a stun spoils the shot.
+const HULL_Y = 0.7; // where an anti-tank beam is laid: on the tank's hull
+
 const WALKER = {
   ...DOG,
   model: createWalker,
@@ -72,6 +74,7 @@ const WALKER = {
   box: { hx: 0.6, hz: 0.4 },
   scale: 1.2,
   aimY: 1.5,
+  muzzleY: 1.9,
   hit: [1.0, 2.1, 0.9, 1.3],
   scrap: 8,
 };
@@ -95,6 +98,7 @@ const BRIDGE_GUN = {
   scale: 2.2,
   modelScale: 1,
   aimY: 1.3,
+  muzzleY: 2.4,
   hit: [3.4, 1.8, 3.4, 0.9],
   scrap: 40,
 };
@@ -663,11 +667,15 @@ export class Enemies {
       e.funnelEdge.material.opacity = e.funnelK * (0.7 + 0.3 * k);
     }
     e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
-    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0, recoil: e.recoil, charge: k });
+    // the barrel dips to lay on the hull
+    const pitch = -Math.atan2(Math.max(0, (S.muzzleY || 1.8) - HULL_Y), Math.max(4, dist));
+    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k });
   }
   // how far a beam from the muzzle along the lock goes before something solid stops it
+  // The beam is laid on the hull, not the turret top: it runs along at
+  // HULL_Y, so cover as high as the hull stops it.
   beamLength(e, from, colliders, max) {
-    losRay.set(new THREE.Vector3(from.x, Math.max(0.9, from.y), from.z), new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw)));
+    losRay.set(new THREE.Vector3(from.x, HULL_Y, from.z), new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw)));
     losRay.far = max;
     const hit = colliders?.length ? losRay.intersectObjects(colliders, false)[0] : null;
     return hit ? hit.distance : max;
@@ -677,7 +685,7 @@ export class Enemies {
     const from = e.model.muzzle();
     const dir = new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw));
     const len = this.beamLength(e, from, ctx.colliders, S.range + 4);
-    const end = from.clone().addScaledVector(dir, len).setY(Math.max(0.6, from.y * 0.6));
+    const end = from.clone().addScaledVector(dir, len).setY(HULL_Y);
     e.recoil = 1;
     e.fireTimer = S.reload + Math.random() * 0.8;
     // did it catch the tank? (its footprint against the line)
@@ -689,7 +697,7 @@ export class Enemies {
       const off = Math.abs(rx * dir.z - rz * dir.x);
       if (along > 0 && along < len + 0.5 && off < tb.hz + 0.4) {
         ctx.onTankHit?.(S.damage, from.clone().addScaledVector(dir, along));
-        this.combat.fx.burst(from.clone().addScaledVector(dir, along).setY(1.1), { count: 18, speed: 7, color: 0xffd9c8, life: 0.35, size: 0.08, gravity: 10 });
+        this.combat.fx.burst(from.clone().addScaledVector(dir, along).setY(HULL_Y), { count: 18, speed: 7, color: 0xffd9c8, life: 0.35, size: 0.08, gravity: 10 });
       }
     }
     // the beam: a white-hot core in a red glow, a flash at each end

@@ -5,6 +5,7 @@
 // while. An instanced mesh per shape (plus a soft halo each). They never
 // settle outside the area the tank can drive in (bounds).
 import * as THREE from 'three';
+import { tokenCanvas } from '../ui/icons.js';
 
 const MAX = 120;
 const GRAVITY = 16;
@@ -15,9 +16,19 @@ export const SCRAP_COLOR = 0xffb347;
 export const BIG_SCRAP_COLOR = 0x5fb8ff;
 export const REPAIR_COLOR = 0x4fdc6a;
 export const TOKEN_COLOR = 0xc77dff;
-const COLORS = { scrap: SCRAP_COLOR, bigscrap: BIG_SCRAP_COLOR, repair: 0xffffff, token: TOKEN_COLOR };
+const COLORS = { scrap: SCRAP_COLOR, bigscrap: BIG_SCRAP_COLOR, repair: 0xffffff, token: 0xffffff };
 const HALO = { scrap: SCRAP_COLOR, bigscrap: BIG_SCRAP_COLOR, repair: REPAIR_COLOR, token: TOKEN_COLOR };
 const SIZE = { scrap: 0.17, bigscrap: 0.3, repair: 0.24, token: 0.24 };
+
+// the token coin's faces: the token icon (a violet coin, an up arrow)
+let faceMat = null;
+function coinFace() {
+  if (faceMat) return faceMat;
+  const t = new THREE.CanvasTexture(tokenCanvas(1));
+  t.magFilter = t.minFilter = THREE.NearestFilter;
+  faceMat = new THREE.MeshBasicMaterial({ map: t, transparent: true, alphaTest: 0.5 });
+  return faceMat;
+}
 
 // the medkit: a green box, a white cross on every face
 let kitTex = null;
@@ -59,12 +70,12 @@ function haloTexture() {
 export class Pickups {
   constructor(scene) {
     // a mesh per shape: shards and crystals, medkits, tokens (coins)
-    const coin = new THREE.CylinderGeometry(1, 1, 0.35, 10);
+    const coin = new THREE.CylinderGeometry(1, 1, 0.35, 16);
     coin.rotateX(Math.PI / 2);
     this.meshes = {
       shard: new THREE.InstancedMesh(new THREE.OctahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX),
       kit: new THREE.InstancedMesh(new THREE.BoxGeometry(1.3, 0.9, 1.3), new THREE.MeshBasicMaterial({ map: medkitTexture() }), MAX),
-      coin: new THREE.InstancedMesh(coin, new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX),
+      coin: new THREE.InstancedMesh(coin, [new THREE.MeshBasicMaterial({ color: 0x6a2fa8 }), coinFace(), coinFace()], MAX),
     };
     for (const m of Object.values(this.meshes)) {
       m.frustumCulled = false;
