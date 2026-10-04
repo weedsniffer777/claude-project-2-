@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { tankDef } from './tanks.js';
+import { save } from './save.js';
 
 export const BASE_STATS = {
   maxHp: 100,
@@ -27,7 +28,7 @@ export const BASE_STATS = {
   speed: 1, // x the base driving speed
   mag: 0, // autocannon: rounds per magazine (0: a single-shot gun)
   magReload: 0,
-  pierceDamage: 140,
+  pierceDamage: 180,
   pierceCooldown: 12,
   // the light tank's Dash (Shift): seconds, x the boost speed
   dashTime: 0.55,
@@ -37,6 +38,12 @@ export const BASE_STATS = {
   breakSpeed: 1.0,
   breakCooldown: 8,
   afterburner: false,
+  extraMgs: 0, // extra roof machine guns (Second gun), each picking its own target
+  spotter: 0, // Legendary Wider view: enemies marked every few seconds (how many)
+  hotLoader: false, // Legendary Fast reload: a kill reloads the main gun
+  reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
+  dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
+  boostRefund: 0, // Legendary Improved boost: seconds of recharge back per kill while boosting
 };
 
 const RUST = 0x6d5a48;
@@ -57,6 +64,10 @@ export const PARTS = {
       s.ramDamage = 45;
       s.crushHeavy = true;
     },
+    tiers: [
+      { text: 'Rams hit much harder.', apply: (s) => (s.ramDamage = 70) },
+      { text: 'Plough: rammed enemies are thrown back and stunned.', perk: true, apply: (s) => (s.dozerStun = 1.5) },
+    ],
     build(t) {
       const g = new THREE.Group();
       const blade = put(g, box(0.16, 0.7, 2.5, RUST, { r: 0.03 }), 2.3, 0.42, 0);
@@ -89,6 +100,16 @@ export const PARTS = {
         s.magReload *= 0.6;
       } else s.reload *= 0.6;
     },
+    tiers: [
+      {
+        text: 'Reloads faster still.',
+        apply: (s) => {
+          if (s.mag) s.magReload *= 0.8;
+          else s.reload *= 0.8;
+        },
+      },
+      { text: 'Hot loader: a kill reloads the main gun at once (an autocannon: +3 rounds).', perk: true, apply: (s) => (s.hotLoader = true) },
+    ],
     // an ammo can strapped on the turret's left bin
     light(t) {
       const g = new THREE.Group();
@@ -141,6 +162,10 @@ export const PARTS = {
     apply(s) {
       s.armor *= 0.7;
     },
+    tiers: [
+      { text: 'Take 38% less damage.', apply: (s) => (s.armor *= 0.62 / 0.7) },
+      { text: 'Reactive burst: every 8 seconds the next hit is blocked completely, and the brick blasts enemies nearby.', perk: true, apply: (s) => (s.reactive = true) },
+    ],
     build(t) {
       // a T-72 style conversion: shingled rows of bricks over the whole
       // upper glacis, skirt plates with bricks over the front of the tracks,
@@ -258,27 +283,32 @@ export const PARTS = {
     icon: ['................', '.....------.....', '.....-####-.....', '#########-#.....', '.....-####-.....', '.....------.....', '#########-#.....', '.....-####-.....', '.....------.....', '................'],
     apply(s) {
       s.twinMg = true;
+      s.extraMgs = Math.max(s.extraMgs, 1);
     },
-    // a pintle mount on the commander's cupola; the game turns its pivot
-    build(t) {
-      const g = new THREE.Group();
+    tiers: [
+      { text: 'One more machine gun: three in all.', apply: (s) => (s.extraMgs = 2) },
+      { text: 'Another: four machine guns, each on its own target.', apply: (s) => (s.extraMgs = 3) },
+    ],
+    // pintle mounts on the turret roof, one per extra gun (more with each
+    // tier); the game turns their pivots
+    build(t, tier = 0) {
+      const all = new THREE.Group();
       const at = t.commanderTop || new THREE.Vector3(-0.15, 0.45, -0.42);
-      g.position.copy(at);
-      put(g, cyl(0.2, 0.04, DARK, { seg: 14 }), 0, -0.08, 0); // ring
-      put(g, cyl(0.035, 0.18, STEEL, { seg: 8 }), 0, 0.02, 0); // pintle
-      const pivot = new THREE.Group();
-      pivot.position.y = 0.14;
-      g.add(pivot);
-      put(pivot, box(0.38, 0.11, 0.11, DARK, { r: 0.025 }), 0.02, 0, 0);
-      put(pivot, cyl(0.03, 0.7, DARK, { axis: 'x', seg: 8 }), 0.5, 0.01, 0);
-      put(pivot, cyl(0.045, 0.1, DARK, { axis: 'x', seg: 8 }), 0.82, 0.01, 0);
-      put(pivot, box(0.16, 0.12, 0.08, OLIVE, { r: 0.015 }), 0.02, -0.03, -0.1);
-      put(pivot, box(0.14, 0.2, 0.03, OLIVE, { r: 0.01 }), 0.12, 0.08, 0); // gun shield
-      g.userData.pivot = pivot;
-      g.userData.muzzle = new THREE.Vector3(0.9, 0.01, 0);
-      t.turret.add(g);
-      return g;
+      const light = t.kind === 'light';
+      const spots = light
+        ? [[0, 0, 0], [-0.42, 0, -0.5], [-0.62, 0, 0.12]]
+        : [[0, 0, 0], [0, 0, 0.84], [-0.62, -0.06, 0.42]];
+      all.userData.mounts = [];
+      for (const [dx, dy, dz] of spots.slice(0, tier + 1)) {
+        const g = mgMount();
+        g.position.copy(at).add(new THREE.Vector3(dx, dy, dz));
+        all.add(g);
+        all.userData.mounts.push({ pivot: g.userData.pivot, muzzle: g.userData.muzzle, timer: Math.random() * 0.1 });
+      }
+      t.turret.add(all);
+      return all;
     },
+    model: () => mgMount(),
   },
   afterburner: {
     name: 'Improved boost',
@@ -291,6 +321,10 @@ export const PARTS = {
       s.boostCooldown += 2;
       s.afterburner = true;
     },
+    tiers: [
+      { text: 'Boost faster and longer still.', apply: (s) => ((s.boostSpeed *= 1.1), (s.boostTime *= 1.15)) },
+      { text: 'Afterburn: every kill while boosting takes 2 seconds off the recharge.', perk: true, apply: (s) => (s.boostRefund = 2) },
+    ],
     build(t) {
       // nothing new to see until it fires: the flame burns blue and pink
       const g = new THREE.Group();
@@ -335,6 +369,10 @@ export const PARTS = {
       s.view *= 1.14;
       s.mgRange += 2;
     },
+    tiers: [
+      { text: 'See further still; machine guns reach further.', apply: (s) => ((s.view *= 1.08), (s.mgRange += 2)) },
+      { text: 'Spotter: every 5 seconds the farthest enemies in sight are marked and take 30% more damage. Light tank: one more mark.', perk: true, apply: (s) => (s.spotter = 2) },
+    ],
     build(t) {
       const g = sightHead();
       g.position.set(0.15, 0.52, 0.3);
@@ -366,6 +404,10 @@ export const PARTS = {
       s.splash *= 1.5;
       s.cannonDamage += s.mag ? 5 : 20;
     },
+    tiers: [
+      { text: 'A bigger blast.', apply: (s) => (s.splash *= 1.2) },
+      { text: 'Heavy charge: more damage per shot again.', perk: true, apply: (s) => (s.cannonDamage += s.mag ? 4 : 15) },
+    ],
     light(t) {
       const g = new THREE.Group();
       put(g, box(0.42, 0.2, 0.3, 0x6b5a3e, { r: 0.02 }), 1.0, 0.9, 0.1);
@@ -382,6 +424,25 @@ export const PARTS = {
     },
   },
 };
+
+// A roof machine gun on a pintle (Second gun's mounts): ring, pintle, and
+// a pivot carrying the gun, its shield and ammo box; the game turns it.
+function mgMount() {
+  const g = new THREE.Group();
+  put(g, cyl(0.2, 0.04, DARK, { seg: 14 }), 0, -0.08, 0); // ring
+  put(g, cyl(0.035, 0.18, STEEL, { seg: 8 }), 0, 0.02, 0); // pintle
+  const pivot = new THREE.Group();
+  pivot.position.y = 0.14;
+  g.add(pivot);
+  put(pivot, box(0.38, 0.11, 0.11, DARK, { r: 0.025 }), 0.02, 0, 0);
+  put(pivot, cyl(0.03, 0.7, DARK, { axis: 'x', seg: 8 }), 0.5, 0.01, 0);
+  put(pivot, cyl(0.045, 0.1, DARK, { axis: 'x', seg: 8 }), 0.82, 0.01, 0);
+  put(pivot, box(0.16, 0.12, 0.08, OLIVE, { r: 0.015 }), 0.02, -0.03, -0.1);
+  put(pivot, box(0.14, 0.2, 0.03, OLIVE, { r: 0.01 }), 0.12, 0.08, 0); // gun shield
+  g.userData.pivot = pivot;
+  g.userData.muzzle = new THREE.Vector3(0.9, 0.01, 0);
+  return g;
+}
 
 // An armoured sight head: a boxy housing, a big blue main lens and two
 // small ones in a recessed face, an armoured shutter swung open to the side.
@@ -410,15 +471,34 @@ function sightHead() {
 // Mark a freshly built part for the player's team outline.
 export function attachPart(tank, id) {
   const p = PARTS[id];
-  const g = tank.kind === 'light' && p.light ? p.light(tank) : p.build(tank);
+  const tier = tierOf(id);
+  const g = tank.kind === 'light' && p.light ? p.light(tank, tier) : p.build(tank, tier);
   for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
   g.userData.part = id;
   return g;
 }
 
-export function statsFor(parts, tank = 'battle') {
+// Tiers: every part is found Rare; scraps in the hangar take it to Epic
+// (an improvement of its own) then Legendary (a perk that changes how it
+// plays). A part's tier goes with it to whichever tank carries it.
+export const TIERS = [
+  { name: 'Rare', color: '#5fa8e8' },
+  { name: 'Epic', color: '#b884f0' },
+  { name: 'Legendary', color: '#ffc24a' },
+];
+export const TIER_COST = [0, 300, 900]; // scraps to reach each tier
+export const tierOf = (id) => Math.min(TIERS.length - 1, save.tiers()[id] || 0);
+
+export function statsFor(parts, tank = 'battle', tiers = null) {
   const s = { ...BASE_STATS, ...tankDef(tank).stats };
-  for (const id of parts) PARTS[id].apply(s);
+  for (const id of parts) {
+    const p = PARTS[id];
+    p.apply(s);
+    const tier = tiers ? tiers[id] || 0 : tierOf(id);
+    for (let k = 0; k < tier; k++) p.tiers?.[k]?.apply(s);
+  }
+  // the light tank's affinity for spotting: one more mark
+  if (s.spotter && tank === 'light') s.spotter += 1;
   return s;
 }
 

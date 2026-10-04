@@ -182,7 +182,7 @@ export class Enemies {
   // machine apart instead of dropping it.
   damage(e, amount, blastFrom = null) {
     if (!e.alive) return false;
-    if (e.markT > 0) amount *= this.markBonus || 1.25; // spotted (Spotter): takes extra
+    if (e.markT > 0) amount *= 1.3; // spotted (Spotter): takes extra
     e.hp -= amount;
     e.model.hitFlash();
     if (e.hp > 0) return false;
@@ -192,6 +192,8 @@ export class Enemies {
 
   kill(e, blastFrom = null) {
     e.alive = false;
+    e.markMesh?.removeFromParent();
+    e.markMesh = null;
     e.funnel.visible = false;
     e.burstLeft = 0;
     e.windup = 0;
@@ -441,6 +443,17 @@ export class Enemies {
         if (e.kb.lengthSq() < 0.01) e.kb = null;
       }
       if (e.markT > 0) e.markT -= dt;
+      // the Spotter's mark: a white diamond spinning over it
+      if (e.markT > 0 && !e.markMesh) {
+        e.markMesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.22), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }));
+        this.scene.add(e.markMesh);
+      }
+      if (e.markMesh) {
+        e.markMesh.visible = e.markT > 0;
+        e.markMesh.position.set(e.pos.x, 2.2 * e.stats.scale + Math.sin(t * 4) * 0.08, e.pos.z);
+        e.markMesh.rotation.y = t * 3;
+        e.markMesh.material.opacity = Math.min(1, e.markT * 2);
+      }
       // keep out of walls, wrecks and each other
       if (!(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
       for (const o of this.list) {
@@ -598,6 +611,7 @@ export class Enemies {
       if (!e.alive) continue;
       e.model.group.removeFromParent();
       e.funnel.removeFromParent();
+      e.markMesh?.removeFromParent();
     }
     this.list = this.list.filter((e) => !e.alive);
     this.bolts = [];
@@ -607,6 +621,7 @@ export class Enemies {
     for (const e of this.list) {
       e.model.group.removeFromParent();
       e.funnel.removeFromParent();
+      e.markMesh?.removeFromParent();
     }
     this.bolts = [];
     for (const p of this.parts) p.m.removeFromParent();

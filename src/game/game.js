@@ -173,6 +173,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       brk: 0, // Breakthrough: seconds of charge left
       shield: 0, // Breakthrough: damage taken is cut while it lasts
       mag: stats.mag,
+      spotT: 1,
+      reactT: 0,
       magT: 0,
       boost: 0,
       boostCd: 0,
@@ -539,6 +541,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
   function onKill(e, blasted) {
+    // Hot loader: a kill reloads the main gun
+    if (stats.hotLoader) {
+      if (stats.mag) {
+        if (run.magT > 0) {
+          run.magT = 0;
+          run.mag = Math.min(stats.mag, 3);
+        } else run.mag = Math.min(stats.mag, run.mag + 3);
+      } else reload = 1;
+    }
+    // Afterburn: kills while boosting take time off the recharge
+    if (stats.boostRefund && (run.boost > 0 || run.dash > 0)) run.boostCd = Math.max(0, run.boostCd - stats.boostRefund);
     run.chain = Math.min(MULT_MAX, Math.max(1, run.chain) + (run.chainT > 0 ? 1 : 0));
     run.chainT = MULT_HOLD;
     const mult = run.chain;
@@ -670,6 +683,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   function tankHit(damage) {
     if (run.over || run.mode !== 'field') return;
+    // Reactive burst: the next hit after a few quiet seconds is blocked, and
+    // the brick it hits blasts the machines round the tank
+    if (stats.reactive && !(run.reactT > 0)) {
+      run.reactT = 8;
+      const at = pos.clone().setY(1);
+      combat.explode(at);
+      api.blast(at, 3.2, 30);
+      hud.damage(at.clone().setY(2.4), 0, 'heal', 'Blocked');
+      return;
+    }
     run.hp -= damage * stats.armor * (run.shield > 0 ? 0.2 : 1);
     hud.setHull(run.hp, stats.maxHp);
     hud.hurt();
@@ -1458,41 +1481,64 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const mg2 = { timer: 0, target: null };
   const mgWorld = new THREE.Vector3();
   function twinMg(dt, t, first) {
-    const g = partMeshes.find((m) => m.userData.pivot);
+    const g = partMeshes.find((m) => m.userData.mounts);
     if (!g || run.over || run.mode !== 'field' || dt <= 0) return;
-    let best = null;
-    let bd = stats.mgRange ** 2;
-    for (const e of enemies.alive) {
-      if (e === first || !e.los) continue;
-      const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
-      if (d < bd) {
-        bd = d;
-        best = e;
+    // each mount takes the nearest machine nobody else is on yet (or, with
+    // none left, doubles up on the first MG's)
+    const taken = new Set([first]);
+    for (const mt of g.userData.mounts) {
+      let best = null;
+      let bd = stats.mgRange ** 2;
+      for (const e of enemies.alive) {
+        if (taken.has(e) || !e.los) continue;
+        const d = (e.pos.x - pos.x) ** 2 + (e.pos.z - pos.z) ** 2;
+        if (d < bd) {
+          bd = d;
+          best = e;
+        }
       }
+      const target = best || first;
+      if (!target) continue;
+      taken.add(target);
+      const pivot = mt.pivot;
+      pivot.getWorldPosition(mgWorld);
+      const aim = enemies.aimPoint(target);
+      const want = wrapAngle(Math.atan2(-(aim.z - mgWorld.z), aim.x - mgWorld.x) - tank.group.rotation.y - tank.turret.rotation.y);
+      pivot.rotation.y = approachAngle(pivot.rotation.y, want, 9 * dt);
+      pivot.rotation.z = THREE.MathUtils.clamp(Math.atan2(aim.y - mgWorld.y, Math.hypot(aim.x - mgWorld.x, aim.z - mgWorld.z)), -0.3, 0.9);
+      if (Math.abs(wrapAngle(want - pivot.rotation.y)) > 0.3) continue;
+      mt.timer -= dt;
+      if (mt.timer > 0 || Math.sin(t * 2.4 + 1.5 + mt.pivot.id) < -0.3) continue;
+      mt.timer = 0.08;
+      const muzzle = pivot.localToWorld(mt.muzzle.clone());
+      const hit = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.2, (Math.random() - 0.5) * 0.35));
+      combat.glow.tracer(muzzle, hit, 0xffe08a, 0.05, 0.07);
+      combat.glow.flash(muzzle, 0xffc860, 0.08, 0.38, 0.05);
+      combat.fx.burst(hit, { count: 4, speed: 3.5, color: 0xffd36b, life: 0.18, size: 0.06, gravity: 9 });
+      if (Math.random() > MG_ACCURACY) continue;
+      const killed = enemies.damage(target, stats.mgDamage);
+      const p = hit.clone().add(new THREE.Vector3(0, 0.5, 0));
+      hud.damage(p, stats.mgDamage, 'mg');
+      if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
     }
-    const target = best || first;
-    if (!target) return;
-    const pivot = g.userData.pivot;
-    pivot.getWorldPosition(mgWorld);
-    const aim = enemies.aimPoint(target);
-    const want = wrapAngle(Math.atan2(-(aim.z - mgWorld.z), aim.x - mgWorld.x) - tank.group.rotation.y - tank.turret.rotation.y);
-    pivot.rotation.y = approachAngle(pivot.rotation.y, want, 9 * dt);
-    pivot.rotation.z = THREE.MathUtils.clamp(Math.atan2(aim.y - mgWorld.y, Math.hypot(aim.x - mgWorld.x, aim.z - mgWorld.z)), -0.3, 0.9);
-    if (Math.abs(wrapAngle(want - pivot.rotation.y)) > 0.3) return;
-    mg2.timer -= dt;
-    if (mg2.timer > 0 || Math.sin(t * 2.4 + 1.5) < -0.3) return;
-    mg2.timer = 0.08;
-    const muzzle = pivot.localToWorld(g.userData.muzzle.clone());
-    const hit = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.2, (Math.random() - 0.5) * 0.35));
-    combat.glow.tracer(muzzle, hit, 0xffe08a, 0.05, 0.07);
-    combat.glow.flash(muzzle, 0xffc860, 0.08, 0.38, 0.05);
-    combat.fx.burst(hit, { count: 4, speed: 3.5, color: 0xffd36b, life: 0.18, size: 0.06, gravity: 9 });
-    if (Math.random() > MG_ACCURACY) return;
-    const killed = enemies.damage(target, stats.mgDamage);
-    const p = hit.clone().add(new THREE.Vector3(0, 0.5, 0));
-    hud.damage(p, stats.mgDamage, 'mg');
-    if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
   }
+
+  // Spotter (Legendary Wider view): every few seconds the farthest machines
+  // in sight are marked; marked ones take extra damage until it wears off
+  function spotter(dt) {
+    if (!stats.spotter || run.over || run.mode !== 'field') return;
+    run.spotT = (run.spotT ?? 1) - dt;
+    if (run.spotT > 0) return;
+    run.spotT = 5;
+    const reach = 24 * stats.view;
+    const seen = enemies.alive.filter((e) => e.los && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach);
+    seen.sort((a, b) => Math.hypot(b.pos.x - pos.x, b.pos.z - pos.z) - Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z));
+    for (const e of seen.slice(0, stats.spotter)) {
+      e.markT = 5;
+      combat.glow.flash(new THREE.Vector3(e.pos.x, 1.6 * e.stats.scale, e.pos.z), 0xffffff, 0.2, 1.0, 0.15);
+    }
+  }
+
 
   const input = new THREE.Vector3();
   let dustCarry = 0;
@@ -1851,6 +1897,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
       }
       if (stats.twinMg) twinMg(dt, t, mgTarget);
+      spotter(dt);
+      run.reactT = Math.max(0, (run.reactT || 0) - dt);
       tryFire(dt);
       autoFire(dt);
       combat.handleTankEvents(tank);

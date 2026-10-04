@@ -1006,6 +1006,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
         openFitting();
       },
       buttons: [['Back', () => closeRoom()]],
+      // scraps take parts up a tier here
+      upgrades: true,
+      onUpgrade() {
+        bankEl.textContent = bankTotal();
+        fitHubTank();
+      },
       anchor: (id) => {
         const w = anchorWorld(tank, tankId, id);
         return w ? toScreen(w) : null;

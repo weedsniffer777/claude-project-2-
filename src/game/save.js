@@ -12,6 +12,7 @@ const K = {
   seen: 'scavenger.seen',
   tutorial: 'scavenger.tutorial',
   tips: 'scavenger.tips',
+  tiers: 'scavenger.tiers',
   equipment: 'scavenger.equipment.',
   ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
@@ -71,6 +72,11 @@ export const save = {
   ownEquipment(id) {
     const list = save.ownedEquipment();
     if (!list.includes(id)) write(K.ownedEquipment, [...list, id]);
+  },
+  // part tiers: { id: 0 Rare | 1 Epic | 2 Legendary }
+  tiers: () => read(K.tiers, {}),
+  setTier(id, n) {
+    write(K.tiers, { ...save.tiers(), [id]: n });
   },
   tips: () => read(K.tips, []),
   seeTip(id) {
