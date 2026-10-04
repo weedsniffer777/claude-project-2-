@@ -37,6 +37,7 @@ export const BASE_STATS = {
   breakTime: 1.5,
   breakSpeed: 1.0,
   breakCooldown: 8,
+  salvoCooldown: 10, // the missile tank's Missile salvo
   breakShield: 0.25, // damage cut while it (or the dash) runs: grows with the tank's level to 0.5
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
@@ -584,7 +585,20 @@ function sightHead() {
 export function attachPart(tank, id) {
   const p = PARTS[id];
   const tier = tierOf(id);
-  const g = tank.kind === 'light' && p.light ? p.light(tank, tier) : p.build(tank, tier);
+  let g;
+  if (tank.kind === 'light' && p.light) g = p.light(tank, tier);
+  else if (tank.kind === 'missile') {
+    // the missile tank: the part's own model, bolted on where it goes on
+    // this hull (tanks.js mounts), unless the part has its own fitting
+    g = p.missile ? p.missile(tank, tier) : partModel(id);
+    if (!p.missile) {
+      const [x, y, z, sc = 0.6, yaw = 0] = tankDef('missile').mounts?.[id] || [0, 1.2, 0];
+      g.scale.setScalar(sc);
+      g.position.set(x, y, z);
+      g.rotation.y = yaw;
+      tank.chassis.add(g);
+    }
+  } else g = p.build(tank, tier);
   for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
   g.userData.part = id;
   return g;

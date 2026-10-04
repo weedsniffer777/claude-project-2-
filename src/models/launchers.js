@@ -36,7 +36,7 @@ function tube(len = 1.1, r = 0.09) {
 }
 
 export function buildLauncher(tank) {
-  if (!tank?.turret) return null;
+  if (!tank?.turret || tank.missile) return null; // (the missile tank fires them from its own pack)
   if (tank.kind === 'light') {
     // the tub: the right side's back bin, its lid off and its sides built
     // up into an open-topped tub

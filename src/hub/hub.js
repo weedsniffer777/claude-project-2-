@@ -155,6 +155,10 @@ const CSS = `
 .base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news h2.warn { color: #ff4a3a; }
 .base button.go.yel { background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; }
+.base-news .newtag.leg { background: #ffc24a; }
+.base-news .legpic { position: relative; display: block; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 16px #ffc24a88; background: #1d1b1e; }
+.base-news .legpic img { display: block; }
+.base-news .legpic em { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); padding: 2px 5px; font: 400 9px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
 .base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
@@ -1188,32 +1192,56 @@ export function createHub({ renderer, pixel, onDeploy }) {
     });
   }
 
-  // "New!": what the last level unlocked, once, on coming back to the base
+  // "New!": what the last level unlocked, once, on coming back to the base:
+  // a new tank, equipment, a first clear part (the Vulcan): one popup after
+  // another
+  let newsQueue = [];
   function showNews() {
     const all = save.news();
     save.clearNews();
-    // new equipment gets the same popup, after any tank's
-    const gear = all.filter((n) => n.kind === 'equipment' && EQUIPMENT[n.id]);
-    const items = all.filter((n) => n.kind === 'tank' && TANKS[n.id]);
-    if (!items.length) {
-      if (gear.length) showGear(gear[0].id);
-      return;
-    }
-    const n = items[0];
-    freshTanks = items.map((i) => i.id);
-    if (gear.length) save.addNews(gear); // shown next time round
+    const tanks = all.filter((n) => n.kind === 'tank' && TANKS[n.id]);
+    if (tanks.length) freshTanks = tanks.map((i) => i.id);
+    newsQueue = [...tanks, ...all.filter((n) => n.kind === 'equipment' && EQUIPMENT[n.id]), ...all.filter((n) => n.kind === 'part' && PARTS[n.id])];
+    nextNews();
+  }
+  function nextNews() {
+    const n = newsQueue.shift();
+    if (!n) return void (news.hidden = true);
+    if (n.kind === 'tank') showTank(n.id);
+    else if (n.kind === 'equipment') showGear(n.id);
+    else showPart(n.id);
+  }
+  function newsButtons(go) {
+    news.querySelector('.go').addEventListener('click', () => {
+      newsQueue = [];
+      news.hidden = true;
+      go();
+    });
+    news.querySelector('.back').addEventListener('click', () => nextNews());
+  }
+  const toHangar = () => clickRoom(ROOMS.find((r) => r.id === 'hangar'));
+  function showTank(id) {
     news.hidden = false;
     news.innerHTML = `
-      <span class="newtag">New!</span>
-      <h2>${TANKS[n.id].name} unlocked</h2>
-      <img alt="" src="${tankIcon(n.id)}">
-      <p>${tankDef(n.id).blurb} Pick it in the hangar.</p>
-      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
-    news.querySelector('.go').addEventListener('click', () => {
-      news.hidden = true;
-      clickRoom(ROOMS.find((r) => r.id === 'hangar'));
-    });
-    news.querySelector('.back').addEventListener('click', () => (news.hidden = true));
+      <span class="newtag">New tank!</span>
+      <h2>${TANKS[id].name} unlocked</h2>
+      <img alt="" src="${tankIcon(id)}">
+      <p>${tankDef(id).blurb} Pick it in the hangar.</p>
+      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">${newsQueue.length ? 'Next' : 'Later'}</button></div>`;
+    newsButtons(toHangar);
+  }
+  function showPart(id) {
+    const p = PARTS[id];
+    news.hidden = false;
+    news.innerHTML = `
+      <span class="newtag leg">New Legendary part!</span>
+      <h2></h2>
+      <span class="legpic"><img class="gear" alt="" src="${partIcon(id)}"><em>Legendary</em></span>
+      <div class="eqfx">${effectsHtml(id, p.only || save.tank(), p.startLevel || 1)}</div>
+      ${p.only ? `<p class="hint">${TANKS[p.only].name} only. Fit it in the hangar.</p>` : '<p class="hint">Fit it in the hangar.</p>'}
+      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">${newsQueue.length ? 'Next' : 'Later'}</button></div>`;
+    news.querySelector('h2').textContent = `${p.name} unlocked`;
+    newsButtons(toHangar);
   }
 
   function showGear(id) {
@@ -1225,14 +1253,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <img class="gear" alt="" src="${equipmentIcon(id, 128, 96)}">
       <p></p>
       <p class="hint">Equipment goes in its own slot and is used with <b>Q</b>. Swap it in the hangar.</p>
-      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
+      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">${newsQueue.length ? 'Next' : 'Later'}</button></div>`;
     news.querySelector('h2').textContent = `${g.name} unlocked`;
     news.querySelector('p').outerHTML = `<div class="eqfx">${equipmentHtml(id)}</div>`;
-    news.querySelector('.go').addEventListener('click', () => {
-      news.hidden = true;
-      clickRoom(ROOMS.find((r) => r.id === 'hangar'));
-    });
-    news.querySelector('.back').addEventListener('click', () => (news.hidden = true));
+    newsButtons(toHangar);
   }
 
   function closeRoom() {

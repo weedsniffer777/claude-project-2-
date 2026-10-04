@@ -90,13 +90,16 @@ const CSS = `
 @keyframes fitbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); box-shadow: 0 8px 0 #6a2fa0, 0 0 0 2px #000, 0 0 16px #c77dffaa; } }
 .fit .upbtn .evtag { padding: 2px 5px; font-size: 9px; color: #fff; background: #6a2fa0; box-shadow: 0 0 0 2px #000; }
 .fit .stb { position: absolute; left: -6px; top: -8px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
-/* an improvement just picked: the part glows gold, its new star flies on */
-.fit .improved { animation: impGlow 0.9s ease-out 3; }
-@keyframes impGlow { 0% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 26px 6px #ffc24a; } 100% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 0 0 #ffc24a00; } }
-.fit .improved .stb { animation: starIn 0.8s cubic-bezier(0.2, 1.7, 0.4, 1) 0.35s both; }
-@keyframes starIn { 0% { transform: translate(-60px, -70px) scale(3.5) rotate(-120deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
-.fit .improved::after { content: ''; position: absolute; inset: -10px; pointer-events: none; background: radial-gradient(circle, #fff8 0 2px, transparent 3px) 10% 20% / 18px 18px, radial-gradient(circle, #ffc24a 0 2px, transparent 3px) 70% 60% / 22px 22px; animation: sparkle 1.2s steps(6) 0.9s 2 both; }
-@keyframes sparkle { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+/* an improvement just picked: a quick level-up: a white flash and glow,
+   sparks flying up off it, and the new star dropping into the corner */
+.fit .improved { animation: impFlash 0.5s ease-out both; }
+@keyframes impFlash { 0% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 30px 10px #ffffff; filter: brightness(2.2); } 100% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 10px 2px #ffc24a88; filter: none; } }
+.fit .improved::before { content: ''; position: absolute; left: 50%; bottom: 30%; width: 4px; height: 4px; z-index: 3; pointer-events: none; background: #fff;
+  box-shadow: -18px 0 #ffc24a, 14px -4px #fff, -8px -6px #ffd36b, 20px 2px #ffc24a, 4px -10px #fff, -24px -2px #fff, 10px 4px #ffd36b;
+  animation: impSparks 0.6s ease-out 0.05s both; }
+@keyframes impSparks { 0% { transform: translate(-50%, 0) scale(1); opacity: 1; } 100% { transform: translate(-50%, -46px) scale(0.6); opacity: 0; } }
+.fit .improved .stb { animation: starDrop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) 0.25s both; }
+@keyframes starDrop { 0% { transform: translateY(-34px) scale(2.4); opacity: 0; filter: brightness(3); } 70% { opacity: 1; } 100% { transform: none; opacity: 1; filter: none; } }
 .fit .hd .stb { position: static; display: inline-block; margin-left: 6px; }
 .fit .item .evb, .fit .slot .evb { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #8a45d0; box-shadow: 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; pointer-events: none; }
 .fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
@@ -145,6 +148,8 @@ const CSS = `
 .fit .btn { padding: 8px 14px 9px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .btn.go { color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000; }
 .fit .btn:hover { filter: brightness(1.15); }
+.fit .btn.bigbtn { position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 5; padding: 14px 44px 15px; font-size: 20px; box-shadow: 0 5px 0 #2f6b40, 0 0 0 3px #000; pointer-events: auto; animation: bigGo 1.6s ease-in-out infinite; }
+@keyframes bigGo { 50% { transform: translateX(-50%) translateY(-3px); } }
 .fit .pop { position: fixed; z-index: 30; background: #121014; padding: 8px; display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
 .fit .pop button { display: flex; gap: 8px; align-items: center; padding: 4px 8px 4px 4px; background: #1d1b1e; font-size: 11px; box-shadow: 0 0 0 2px #000; }
 .fit .pop button:hover { background: #2a2628; color: var(--amber); }
@@ -394,7 +399,7 @@ export function createFitting({ renderer, cursor }) {
     $('.left p').textContent = def.blurb;
     renderBars();
     $('.kit').innerHTML = `
-      <div><span>Gun</span><span>${def.gun === 'autocannon' ? 'Autocannon' : 'Cannon'}</span></div>
+      <div><span>Gun</span><span>${def.gun === 'autocannon' ? 'Autocannon' : def.gun === 'missile' ? 'Missiles' : 'Cannon'}</span></div>
       <div><span><kbd>Shift</kbd></span><span>${def.moveName}</span></div>
       <div><span><kbd>E</kbd></span><span class="${def.ability ? '' : 'none'}">${def.abilityName || 'None yet'}</span></div>`;
     // the equipment slot (an active item on Q): swapped in the hangar only
@@ -533,16 +538,20 @@ export function createFitting({ renderer, cursor }) {
       b.addEventListener('click', () => !replacing && (closePop(), o.onUpgradeTank()));
       btns.append(b);
     }
-    for (const [label, fn, primary] of o.buttons || []) {
+    root.querySelector('.bigbtn')?.remove();
+    for (const [label, fn, primary, center] of o.buttons || []) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = `btn${primary ? ' go' : ''}`;
+      b.className = `btn${primary ? ' go' : ''}${center ? ' bigbtn' : ''}`;
       b.textContent = label;
       b.addEventListener('click', () => {
         if (replacing) return;
         fn();
       });
-      btns.append(b);
+      // center: a big button low in the middle of the screen (the
+      // checkpoint's Continue)
+      if (center) root.append(b);
+      else btns.append(b);
     }
   }
 

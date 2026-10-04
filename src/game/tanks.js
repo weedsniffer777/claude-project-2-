@@ -3,6 +3,7 @@
 // stats it changes from the base.
 import { createTank } from '../models/tank.js';
 import { createLightTank } from '../models/lightTank.js';
+import { createMissileTank } from '../models/missileTank.js';
 
 export const TANKS = {
   battle: {
@@ -60,6 +61,42 @@ export const TANKS = {
       he: [1.0, 0.92, 0.1],
     },
   },
+  missile: {
+    id: 'missile',
+    name: 'Missile tank',
+    create: createMissileTank,
+    slots: 3,
+    gun: 'missile',
+    move: 'boost',
+    moveName: 'Boost',
+    ability: 'salvo',
+    abilityName: 'Missile salvo',
+    blurb: 'A launcher on a long, low hull. Each shot is a missile that homes on the enemy under your aim and hits hard; the Missile salvo locks on to four at once.',
+    unlockText: 'Beat level 4 to unlock',
+    // reload: seconds between missiles; cannonDamage / splash: each missile's hit
+    stats: { maxHp: 85, speed: 1.08, reload: 1.5, cannonDamage: 70, splash: 2.2, boostTime: 0.55 },
+    box: { cx: 0.05, hx: 2.15, hz: 1.02 },
+    pic: { target: [-0.2, 1.05, 0], half: 1.7 },
+    anchors: {
+      dozer: [2.25, 0.5, 0],
+      autoloader: [-0.95, 1.55, 0.6],
+      era: [1.5, 0.9, -0.3],
+      twinmg: [0.45, 1.6, 0.38],
+      afterburner: [-2.05, 0.6, 0.5],
+      optics: [0.85, 1.35, 0.42],
+      he: [-0.5, 1.12, -0.55],
+    },
+    // where each part's model sits on this hull: [x, y, z, scale, yaw]
+    mounts: {
+      dozer: [2.3, 0.15, 0, 0.85, 0],
+      autoloader: [-1.45, 1.0, 0.45, 0.5, 0],
+      era: [1.35, 0.8, 0, 0.75, 0],
+      twinmg: [0.1, 1.05, -0.45, 0.6, 0],
+      afterburner: [-2.0, 0.5, 0, 0.7, 0],
+      optics: [0.82, 1.32, 0.42, 0.7, 0],
+      he: [-0.3, 1.0, -0.55, 0.55, 0],
+    },
+  },
 };
-export const TANK_ORDER = ['battle', 'light'];
+export const TANK_ORDER = ['battle', 'light', 'missile'];
 export const tankDef = (id) => TANKS[id] || TANKS.battle;

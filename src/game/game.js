@@ -278,6 +278,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function fitLauncher() {
     launcher?.group.removeFromParent();
     launcher = equipId() === 'atgm' ? buildLauncher(tank) : null;
+    // part of the tank: same layer (its outline and see-through behind cover)
+    launcher?.group.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
   }
 
   // Quality: shadow-map size and how many point lights the lamps share.
@@ -563,6 +565,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (first.part && PARTS[first.part] && !save.owned().includes(first.part)) {
           save.own(first.part);
           save.setPartLevel(first.part, PARTS[first.part].startLevel || 1);
+          save.addNews([{ kind: 'part', id: first.part }]);
           rewards.push(['First clear reward', `${PARTS[first.part].name} (part)`]);
         }
         if (first.tokens) {
@@ -985,6 +988,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       trigger = false;
       queued = 0;
     } else if (def.ability === 'breakthrough') breakthrough();
+    else if (def.ability === 'salvo') {
+      // the missile tank: four missiles, locked on to the toughest in range
+      if (run.abilityCd > 0 || run.msl) return;
+      lockMissiles({ count: 4, damage: stats.cannonDamage * 1.2, blast: stats.splash * 1.2, ability: true });
+    }
   }
 
   // Equipment (Q). The artillery strike: Q, then click (or tap) a spot; the
@@ -1020,27 +1028,38 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // another, white-hot on bright trails, and each lands with a big blast.
   const missiles = [];
   const mslAim = (e) => new THREE.Vector3(e.pos.x, e.pos.y + (e.stats.flying || e.stats.fly ? 0 : 0.8 * (e.stats.scale || 1)), e.pos.z);
-  function lockMissiles() {
+  // o: { count, damage, blast, ability } (the missile tank's salvo: its own
+  // numbers and cooldown; default the equipment's)
+  function lockMissiles(o = {}) {
     const E = EQUIPMENT.atgm;
+    const count = o.count || E.missiles;
     // the toughest machines within range (the most HP left to chew
     // through, not the most hurt)
     const inView = enemies.alive
       .filter((e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < E.range * stats.view)
       .sort((a, b) => b.hp - a.hp)
-      .slice(0, E.missiles);
+      .slice(0, count);
     if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'MSL no targets!');
-    run.equipCd = E.cooldown;
+    if (o.ability) run.abilityCd = stats.salvoCooldown;
+    else run.equipCd = E.cooldown;
     const targets = [];
-    for (let i = 0; i < E.missiles; i++) targets.push(inView[i % inView.length]);
-    run.msl = { targets, t: E.lockTime, fired: 0, gap: 0 };
+    for (let i = 0; i < count; i++) targets.push(inView[i % inView.length]);
+    run.msl = { targets, t: E.lockTime, fired: 0, gap: 0, damage: o.damage, blast: o.blast };
   }
-  function launchMissile(e, k) {
+  // e: the machine it homes on (or null: o.point, a spot); o: { damage,
+  // blast } (default the equipment's)
+  function launchMissile(e, k, o = {}) {
     const E = EQUIPMENT.atgm;
     // off the turret roof, left, right, centre
     const side = new THREE.Vector3(-Math.sin(tank.group.rotation.y), 0, -Math.cos(tank.group.rotation.y));
     let from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
     let out = null; // the way the tube points
-    if (launcher) {
+    if (tank.missile) {
+      // the missile tank: out of its pack, one canister after another
+      const f = tank.fire();
+      from = f.position;
+      out = f.direction;
+    } else if (launcher) {
       tank.group.updateWorldMatrix(true, true);
       from = launcher.mouth.getWorldPosition(new THREE.Vector3());
       out = new THREE.Vector3(1, 0, 0).transformDirection(launcher.mouth.matrixWorld);
@@ -1061,10 +1080,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const plume = add(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, -0.95, { transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
     m.position.copy(from);
     scene.add(m);
-    const dir = new THREE.Vector3(e.pos.x - from.x, 0, e.pos.z - from.z).normalize();
+    const aim = e ? mslAim(e) : o.point.clone();
+    const dir = new THREE.Vector3(aim.x - from.x, 0, aim.z - from.z).normalize();
     if (out) dir.lerp(out, 0.6).setY(Math.max(0.5, out.y + 0.4)).normalize();
     else dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
-    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(9), t: 0, last: from.clone(), aim: mslAim(e) });
+    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast });
     // the launch: a hard white flash, a back-blast of smoke, a kick
     combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
     combat.glow.flash(from, 0xffb347, 0.5, 2.6, 0.22);
@@ -1083,7 +1103,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         st.gap -= dt;
         if (st.gap <= 0 && st.fired < st.targets.length) {
           const e = st.targets[st.fired];
-          launchMissile(e.alive ? e : st.targets.find((x) => x.alive) || e, st.fired);
+          launchMissile(e.alive ? e : st.targets.find((x) => x.alive) || e, st.fired, { damage: st.damage, blast: st.blast });
           st.fired++;
           st.gap = E.salvoGap;
         }
@@ -1099,7 +1119,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const ms = missiles[i];
       ms.t += dt;
       // where it's going: the machine (or, if that's gone, where it was)
-      if (ms.e.alive) ms.aim = mslAim(ms.e);
+      if (ms.e?.alive) ms.aim = mslAim(ms.e);
       const to = ms.aim.clone().sub(ms.m.position);
       const d = to.length();
       const speed = Math.min(E.speed, 9 + ms.t * 70);
@@ -1124,17 +1144,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         combat.explode(at);
         combat.glow.flash(at, 0xffffff, 0.6, 3.2, 0.12);
         combat.glow.flash(at, 0xff8a3a, 1.0, 4.2, 0.3);
-        combat.glow.ring(g, 0xffd59a, 0.4, E.blast * 1.1, 0.35);
+        combat.glow.ring(g, 0xffd59a, 0.4, ms.blast * 1.1, 0.35);
         combat.glow.light(at, 0xffa060, 120, 0.35);
         combat.fx.burst(at.clone().setY(at.y + 0.4), { count: 34, speed: 10, color: 0xffd36b, life: 0.5, size: 0.09, gravity: 14 });
         for (let k = 0; k < 7; k++) combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 5, 2 + Math.random() * 2, (Math.random() - 0.5) * 5), { color: 0x6f6a62, s0: 0.4, s1: 1.5, life: 1.4, drag: 2.5, lift: 0.6, fadeAt: 0.3 });
         combat.shake = Math.max(combat.shake, 0.45);
-        onImpact(at, null, false, { radius: E.blast, damage: E.damage });
+        onImpact(at, null, false, { radius: ms.blast, damage: ms.damage });
       }
     }
     // the lock boxes: over every machine a missile is on its way to (or
     // about to be)
-    const locked = new Set([...(st && run.msl ? st.targets.slice(st.fired) : []), ...missiles.map((ms) => ms.e)].filter((e) => e.alive));
+    const locked = new Set([...(st && run.msl ? st.targets.slice(st.fired) : []), ...missiles.map((ms) => ms.e)].filter((e) => e?.alive));
     hud.setLocks([...locked].map((e) => ({ pos: e.pos.clone().setY(mslAim(e).y + 0.3), label: 'MSL LOCK', locked: !!(st && st.t > 0) })));
   }
   function callStrike(at) {
@@ -1425,7 +1445,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     reload = 0;
     run.shots++;
     letGoFrame();
-    combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
+    if (def.gun === 'missile') fireMissileGun();
+    else combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
     if (--run.mag <= 0) run.magT = stats.magReload;
   }
   function reloadMag() {
@@ -1444,7 +1465,15 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     queued = 0;
     reload = 0;
     run.shots++;
-    combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
+    if (def.gun === 'missile') fireMissileGun();
+    else combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
+  }
+  // the missile tank's gun: a missile out of the pack, homing on the machine
+  // under the aim (or flying to the spot aimed at)
+  function fireMissileGun() {
+    const e = hovered?.alive && !(hovered.delay > 0) ? hovered : null;
+    const point = hasAim ? aimPoint.clone() : pos.clone().add(new THREE.Vector3(Math.cos(tank.group.rotation.y + tank.turret.rotation.y) * 12, 0.5, -Math.sin(tank.group.rotation.y + tank.turret.rotation.y) * 12));
+    launchMissile(e, 0, { point, damage: stats.cannonDamage, blast: stats.splash });
   }
   // Esc: pause (and resume)
   function setPaused(on) {
@@ -1761,7 +1790,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       owned: save.owned(),
       highlight: st.found,
       improved: st.improved, // its icon glows and the new star flies on (the first time only)
-      buttons: [['Continue', () => leaveDepot(), true]],
+      buttons: [['Continue', () => leaveDepot(), true, true]],
       onSet(list, added) {
         const crane = added && !run.parts.includes(added) && st.room.pads.some((p) => p.offer === added);
         if (!crane) {
@@ -2508,10 +2537,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
-      const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
+      const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
       const eq = equipId();
       hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
-      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
+      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : def.ability === 'salvo' ? equipmentArt('atgm') : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
