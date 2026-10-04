@@ -517,7 +517,7 @@ const STAT_ROWS = [
   ['magReload', 'Magazine reload', secs, -1],
   ['extraMgs', 'Machine guns', (v) => `${v + 1}`, 1],
   ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
-  ['ramDamage', 'Ram damage', (v) => `${Math.round(v)}`, 1],
+  ['ramDamage', 'Ram damage without boost', (v) => `${Math.round(v)}`, 1],
   ['view', 'View', pct, 1],
   ['speed', 'Speed', pct, 1],
   ['boostSpeed', 'Boost speed', pct, 1],
