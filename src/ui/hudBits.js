@@ -24,9 +24,16 @@ export function createAmmoStrip(size = 'big') {
   const S = SHELLS[size];
   const W = S.rows[0].length;
   const H = S.rows.length;
+  injectCss();
+  // a wrapper: the shells, or (a big magazine with more than ten left) the
+  // count as a number
+  const el = document.createElement('span');
+  el.className = `ammo-strip ${size}`;
   const c = document.createElement('canvas');
-  c.className = `ammo-strip ${size}`;
-  c.style.imageRendering = 'pixelated';
+  const num = document.createElement('b');
+  num.className = 'ammo-num';
+  num.style.display = 'none';
+  el.append(c, num);
   const g = c.getContext('2d');
   let key = '';
   let lastLit = -1;
@@ -49,6 +56,24 @@ export function createAmmoStrip(size = 'big') {
   // n: rounds left, max: magazine size, load: 0..1 while reloading (null
   // otherwise). A single-shot gun: max 1, n 1 when ready.
   function set({ n, max, load = null }) {
+    // more than ten rounds left: a number (reloading, the bar shows below)
+    const big = max > 10;
+    const asNumber = big && load == null && n > 10;
+    num.style.display = asNumber ? '' : 'none';
+    c.style.display = asNumber ? 'none' : ''; // (the page's canvas rule beats the hidden attribute)
+    if (asNumber) {
+      const t = String(n);
+      if (num.textContent !== t) num.textContent = t;
+      return;
+    }
+    if (big) {
+      // ten shells stand for the last ten rounds (or, reloading, the fill)
+      const shown = load == null ? n : null;
+      return draw(Math.min(10, shown ?? 0), 10, load, false);
+    }
+    return draw(n, max, load, true);
+  }
+  function draw(n, max, load, lowRed) {
     const now = performance.now();
     // shells lit: the rounds left, or (reloading) the ones loaded so far
     const lit = load == null ? n : Math.min(max, Math.floor(load * max));
@@ -60,7 +85,7 @@ export function createAmmoStrip(size = 'big') {
     if (lit > lastLit) for (let i = Math.max(0, lastLit); i < lit; i++) flashUntil[i] = now + FLASH_MS;
     lastLit = lit;
     const part = load == null ? 0 : load * max - lit; // the shell going in
-    const low = load == null && max > 1 && n <= Math.ceil(max * 0.3);
+    const low = load == null && max > 1 && (lowRed ? n <= Math.ceil(max * 0.3) : n <= 3);
     const flashing = flashUntil.some((t) => t > now);
     const k = `${n}|${max}|${lit}|${Math.round(part * H)}|${low}|${flashing ? now : 0}`;
     if (k === key) return;
@@ -85,7 +110,7 @@ export function createAmmoStrip(size = 'big') {
       } else shell(x0, () => INK.empty);
     }
   }
-  return { el: c, set };
+  return { el, set };
 }
 
 const CSS = `
@@ -100,6 +125,17 @@ const CSS = `
 @keyframes pasPop { 0% { transform: scale(1.35); box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 18px #fff; } 100% { transform: scale(1); } }
 `;
 let injected = false;
+let ammoCss = false;
+function injectCss() {
+  if (ammoCss) return;
+  ammoCss = true;
+  const st = document.createElement('style');
+  // (the page styles every canvas full-screen: not these)
+  st.textContent = `.ammo-strip { display: inline-flex; align-items: center; } .ammo-strip canvas { position: static; inset: auto; display: block; image-rendering: pixelated; }
+.ammo-num { font: 400 15px/1 'Silkscreen', monospace; color: #ffb347; text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; font-variant-numeric: tabular-nums; }
+.ammo-strip.big .ammo-num { font-size: 18px; }`;
+  document.head.append(st);
+}
 
 // Passive icons: set(list) each frame, list = [{ id, name, img, k (0..1
 // recharged), left (seconds, shown while recharging), ready (armed), pulse

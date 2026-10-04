@@ -41,6 +41,7 @@ const CSS = `
 .fit .kit span:last-child { color: var(--amber); text-align: right; }
 .fit .kit .none { color: #6d655a !important; }
 .fit .equip { display: grid; gap: 6px; }
+.fit .equip .slotbox { margin-top: 6px; }
 .fit .equip .box { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 8px; text-align: left; font-size: 13px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .equip button.box:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .fit .equip .box .none { color: #6d655a; }
@@ -230,6 +231,7 @@ export function createFitting({ renderer, cursor }) {
   }
   // put a part from storage on: into a free slot, or ask which to replace
   function equip(id) {
+    if (PARTS[id].only && PARTS[id].only !== o.tankId) return; // (another tank's own part)
     const list = loadout();
     if (list.length < tankDef(o.tankId).slots) return set([...list, id], id);
     replacing = id;
@@ -301,7 +303,9 @@ export function createFitting({ renderer, cursor }) {
       el.className = `item${id === o.highlight ? ' new' : ''}${id === replacing ? ' on' : ''}${away ? ' isaway' : ''}`;
       el.dataset.tier = tierOf(id);
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
-      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : ''}`;
+      const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
+      if (only) el.classList.add('isaway');
+      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away">${only} only</span>` : ''}`;
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
       el.addEventListener('click', () => (o.tanks ? openItemPop(id, el) : equip(id)));
       el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(id)));
@@ -437,6 +441,10 @@ export function createFitting({ renderer, cursor }) {
     fit.type = 'button';
     fit.className = 'fitb';
     fit.textContent = where(id) ? `Move here from the ${where(id)}` : 'Fit to this tank';
+    if (PARTS[id].only && PARTS[id].only !== o.tankId) {
+      fit.disabled = true;
+      fit.textContent = `${TANKS[PARTS[id].only].name} only`;
+    }
     fit.addEventListener('click', () => (closePop(), equip(id)));
     pop.append(fit);
     placePop(el);
@@ -493,7 +501,7 @@ export function createFitting({ renderer, cursor }) {
       pop.append(b);
       return placePop(el);
     }
-    for (const s of spare()) {
+    for (const s of spare().filter((x) => !PARTS[x].only || PARTS[x].only === o.tankId)) {
       const b = document.createElement('button');
       b.type = 'button';
       b.innerHTML = `<img alt="" src="${pic(s)}"><span></span>`;

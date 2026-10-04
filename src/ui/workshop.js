@@ -16,7 +16,7 @@ import { save } from '../game/save.js';
 import { tokenIconURL } from './icons.js';
 
 const CSS = `
-.ws { position: fixed; inset: 0; z-index: 13; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 560px); grid-template-rows: auto auto minmax(0, 1fr); gap: 16px 26px; justify-content: center; align-content: center;
+.ws { position: fixed; inset: 0; z-index: 13; display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 560px); grid-template-rows: auto auto auto minmax(0, 1fr); gap: 16px 26px; justify-content: center; align-content: center;
   padding: calc(18px + env(safe-area-inset-top, 0px)) 20px calc(18px + env(safe-area-inset-bottom, 0px)); background: rgba(8, 7, 9, 0.78);
   color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --go: #6be08a; --tok: #c77dff; }
 .ws[hidden] { display: none !important; }
@@ -37,6 +37,7 @@ const CSS = `
 .ws .tabs button { padding: 9px 18px 10px; font-size: 13px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .ws .tabs button.on { color: #111; background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .ws .first { grid-column: 1 / -1; padding: 10px 14px; font-size: 14px; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
+.ws .list, .ws .detail { grid-row: 4; }
 .ws .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; align-content: start; padding: 14px; overflow-y: auto; max-height: 66vh; }
 .ws .list .empty { grid-column: 1 / -1; font-size: 14px; color: #8f877a; }
 .ws .card { position: relative; display: grid; gap: 4px; justify-items: center; padding: 8px 6px 9px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--tc); text-align: center; }

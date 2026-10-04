@@ -424,7 +424,57 @@ export const PARTS = {
       return g;
     },
   },
+  // The light tank's own: its autocannon rebuilt as a six-barrelled rotary
+  // gun. A huge magazine fired very fast, each round lighter. Found already
+  // Legendary (level 21), as level 2's Hard first clear.
+  vulcan: {
+    name: 'Vulcan autocannon',
+    only: 'light',
+    startLevel: 21,
+    text: 'Six spinning barrels: a huge magazine fired at a very high rate, less damage per round. Light tank only.',
+    icon: ['................', '....--------....', '..-##########-..', '.-#+########+#-.', '..-##########-..', '....--------....', '................', '................', '................', '................'],
+    apply(s) {
+      if (!s.mag) return;
+      s.mag = 60;
+      s.reload *= 0.3;
+      s.cannonDamage *= 0.45;
+      s.magReload += 1.5;
+    },
+    // the barrels round the gun, a feed chute and an ammo drum on the turret
+    light(t) {
+      const g = vulcanBarrels();
+      g.position.set(0.5, 0, 0);
+      (t.gunPivot || t.turret).add(g);
+      const drum = new THREE.Group();
+      put(drum, cyl(0.2, 0.26, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
+      put(drum, cyl(0.21, 0.04, 0xc99a2e, { seg: 12 }), 0, 0, 0.11).rotation.x = Math.PI / 2;
+      drum.position.set(-0.25, 1.32, 0.62);
+      t.chassis.add(drum);
+      g.userData.extra = [drum];
+      return g;
+    },
+    build(t) {
+      const g = vulcanBarrels();
+      g.position.set(0.6, 1.4, 0);
+      t.turret.add(g);
+      return g;
+    },
+  },
 };
+function vulcanBarrels() {
+  const g = new THREE.Group();
+  const spin = new THREE.Group();
+  g.add(spin);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    put(spin, cyl(0.026, 0.82, 0x2b2d30, { axis: 'x', seg: 6 }), 0.41, Math.cos(a) * 0.075, Math.sin(a) * 0.075);
+  }
+  for (const x of [0.05, 0.45, 0.8]) put(spin, cyl(0.11, 0.05, 0x3a3e42, { axis: 'x', seg: 8 }), x, 0, 0); // clamps
+  put(g, cyl(0.13, 0.22, 0x4a5638, { axis: 'x', seg: 10 }), -0.08, 0, 0); // the motor housing
+  // the barrels turn (a slow idle spin, always)
+  spin.children[0].onBeforeRender = () => (spin.rotation.x += 0.12);
+  return g;
+}
 
 // A roof machine gun on a pintle (Second gun's mounts): ring, pintle, and
 // a pivot carrying the gun, its shield and ammo box; the game turns it.

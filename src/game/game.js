@@ -530,6 +530,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           bank(first.scraps);
           rewards.push(['First clear reward', `+${first.scraps} scraps`]);
         }
+        if (first.part && PARTS[first.part] && !save.owned().includes(first.part)) {
+          save.own(first.part);
+          save.setPartLevel(first.part, PARTS[first.part].startLevel || 1);
+          rewards.push(['First clear reward', `${PARTS[first.part].name} (part)`]);
+        }
         if (first.tokens) {
           save.addTokens(first.tokens);
           rewards.push(['First clear reward', `+${first.tokens} tokens`]);

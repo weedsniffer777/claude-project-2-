@@ -123,6 +123,8 @@ const CSS = `
 .base-brief .rewards span.cash { display: grid; place-items: center; width: 116px; height: 40px; font: 400 13px/1 'Silkscreen', monospace; color: var(--amber); }
 .base-brief .rewards span.cash.got { color: #6d655a; }
 .base-brief .rewards span.tok { color: #d9a8ff; }
+.base-brief .rewards span.legpart { width: 72px; height: 54px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 12px #ffc24a88; }
+.base-brief .rewards span.legpart em { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); padding: 2px 4px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; text-transform: uppercase; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
 .base-brief .rewards span.equip { width: 66px; height: 50px; background: none; box-shadow: none; } /* (the icon is its own cut-corner tile) */
 .base-brief .rewards span.res { display: flex; align-items: center; justify-content: center; gap: 7px; width: 104px; height: 34px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; }
 .base-brief .rewards span.res.scr { color: var(--amber); }
@@ -1050,6 +1052,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       let firstTile = '';
       if (first?.tank) firstTile += tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `${TANKS[first.tank].name}: ${tankDef(first.tank).blurb}`);
       if (first?.equipment) firstTile += tile(done(diff), 'equip', `<img alt="${EQUIPMENT[first.equipment].name}" src="${equipmentIcon(first.equipment)}">`, `${EQUIPMENT[first.equipment].name} (equipment): ${EQUIPMENT[first.equipment].text}`);
+      if (first?.part) firstTile += tile(done(diff), 'legpart', `<img alt="${PARTS[first.part].name}" src="${partIcon(first.part)}"><em>Legendary</em>`, `${PARTS[first.part].name}: ${PARTS[first.part].text}`);
       if (first?.scraps) firstTile += tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
       if (first?.tokens) firstTile += tile(done(diff), 'cash tok', `+${first.tokens} tokens`, `${first.tokens} upgrade tokens: spend them to evolve parts to Epic and Legendary`);
       const tab = (d, name, txt) => `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''}" data-d="${d}"><b>${name}</b><small>${txt}</small><span class="st"><i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}</span></button>`;
