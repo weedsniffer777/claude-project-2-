@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
 import { createWalker } from '../models/walker.js';
 import { createBridgeGun } from '../models/bridgeGun.js';
+import { createDrone } from '../models/drone.js';
 import { pushOut } from './collide.js';
 import { ENEMY_LAYER } from '../render/pixel.js';
 
@@ -103,6 +104,35 @@ const BRIDGE_GUN = {
   scrap: 40,
 };
 
+// The attack drone: flies (over walls and wrecks), quick, darting from spot
+// to spot round the tank. To shoot it has to stop: it hangs in the air, its
+// pods glow, then it looses a salvo of slow rockets one after another at
+// where the tank was. Side-step and they miss; catch it while it hangs
+// there and it's an easy kill. Then it darts off somewhere else.
+const DRONE = {
+  ...DOG,
+  model: createDrone,
+  flying: true,
+  hp: 32,
+  runSpeed: 7.5,
+  walkSpeed: 3,
+  fly: 2.6, // height it flies at
+  range: 15, // how far it'll fire from
+  orbit: [9, 13], // how far from the tank it darts about
+  windup: 0.7, // hanging still, pods glowing, before the salvo
+  salvo: 4,
+  salvoGap: 0.28,
+  reload: 3.4,
+  damage: 11, // each rocket (and a little splash)
+  rocketSpeed: 10,
+  box: { hx: 0.5, hz: 0.5 },
+  scale: 1.3,
+  modelScale: 1.3,
+  aimY: 2.6,
+  hit: [1.2, 0.7, 1.2, 0],
+  scrap: 5,
+};
+
 // The red funnel a machine shows while winding up a burst: where the rounds
 // will go. Unit length along +x, opening to ±0.5; scaled per shot.
 const funnelGeo = (() => {
@@ -147,6 +177,11 @@ export class Enemies {
   }
   spawnHound(x, z, opts) {
     return this.spawn(HOUND, 'hound', x, z, opts);
+  }
+  spawnDrone(x, z, opts) {
+    const e = this.spawn(DRONE, 'drone', x, z, opts);
+    e.pos.y = DRONE.fly + 3; // dropping in from higher up
+    return e;
   }
   spawnWalker(x, z, opts) {
     return this.spawn(WALKER, 'walker', x, z, opts);
@@ -283,7 +318,7 @@ export class Enemies {
     const hits = [];
     const now = performance.now();
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0 || (e.rammedAt && now - e.rammedAt < 500)) continue;
+      if (!e.alive || e.delay > 0 || e.stats.flying || (e.rammedAt && now - e.rammedAt < 500)) continue; // (fliers are over the tank's head)
       const r = e.stats.box.hx + 0.3;
       // tank-local position of the machine
       const dx = e.pos.x - tankBox.x;
@@ -317,7 +352,7 @@ export class Enemies {
     const c = Math.cos(tankBox.yaw);
     const sn = Math.sin(tankBox.yaw);
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5) continue;
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying) continue;
       const r = e.stats.box.hx * 0.8;
       const dx = e.pos.x - tankBox.x;
       const dz = e.pos.z - tankBox.z;
@@ -350,7 +385,7 @@ export class Enemies {
   // A shockwave: machines within radius are shoved away from its centre.
   shove(at, radius, dist) {
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5) continue;
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying) continue;
       const dx = e.pos.x - at.x;
       const dz = e.pos.z - at.z;
       const d = Math.hypot(dx, dz);
@@ -451,7 +486,13 @@ export class Enemies {
         e.losT = 0.25;
         const gy = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
         const ty = ctx.heightAt ? ctx.heightAt(tankPos.x, tankPos.z) : 0;
-        e.los = !sightBlocked(new THREE.Vector3(e.pos.x, gy + 0.9 * e.stats.scale, e.pos.z), new THREE.Vector3(tankPos.x, ty + 1.0, tankPos.z), ctx.colliders);
+        const eyeY = e.stats.flying ? e.pos.y : gy + 0.9 * e.stats.scale; // (a flier looks down from up there, over low cover)
+        e.los = !sightBlocked(new THREE.Vector3(e.pos.x, eyeY, e.pos.z), new THREE.Vector3(tankPos.x, ty + 1.0, tankPos.z), ctx.colliders);
+      }
+
+      if (DOG.flying) {
+        this.droneFrame(e, dt, t, ctx, dist);
+        continue;
       }
 
       // where to go: close in to rifle range, then circle-strafe; back off
@@ -620,6 +661,132 @@ export class Enemies {
     }
   }
 
+  // The drone: dart to a spot near the tank, and when it's ready to shoot,
+  // hang there, glow, and fire the salvo; then dart off again.
+  droneFrame(e, dt, t, ctx, dist) {
+    const S = e.stats;
+    const { tankPos } = ctx;
+    const ground = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
+    e.fireTimer -= dt;
+    if (e.blind > 0) e.blind -= dt;
+    const pickSpot = (far = false) => {
+      // round the tank, a fair way off, not too far round from where it is
+      const from = Math.atan2(e.pos.z - tankPos.z, e.pos.x - tankPos.x);
+      const a = from + (Math.random() - 0.5) * (far ? 2.4 : 1.4);
+      const r = S.orbit[0] + Math.random() * (S.orbit[1] - S.orbit[0]);
+      e.spot = { x: tankPos.x + Math.cos(a) * r, z: tankPos.z + Math.sin(a) * r };
+      e.hold = 0.2 + Math.random() * 0.4;
+    };
+    if (!e.spot) pickSpot();
+    let vx = 0;
+    let vz = 0;
+    let want = 0;
+    if (e.via.length) {
+      const w = e.via[0];
+      vx = w.x - e.pos.x;
+      vz = w.z - e.pos.z;
+      if (Math.hypot(vx, vz) < 1.2) e.via.shift();
+      want = S.runSpeed;
+    } else if (e.windup > 0 || e.burstLeft > 0) {
+      want = 0; // hanging there to shoot
+    } else {
+      vx = e.spot.x - e.pos.x;
+      vz = e.spot.z - e.pos.z;
+      const d = Math.hypot(vx, vz);
+      if (d < 0.6) {
+        e.hold -= dt;
+        if (e.hold <= 0) pickSpot();
+      } else want = Math.min(S.runSpeed, 2 + d * 2);
+      // too far from the tank (it drove off): a new spot near it
+      if (dist > S.orbit[1] + 6 && Math.random() < dt) pickSpot();
+    }
+    if (e.stun > 0) {
+      e.stun -= dt;
+      want = 0;
+    }
+    // a quick, darting flyer: speeds up and stops sharply
+    const len = Math.hypot(vx, vz) || 1;
+    e.vel ??= new THREE.Vector3();
+    e.vel.x += ((vx / len) * want - e.vel.x) * Math.min(1, dt * 5);
+    e.vel.z += ((vz / len) * want - e.vel.z) * Math.min(1, dt * 5);
+    e.pos.x += e.vel.x * dt;
+    e.pos.z += e.vel.z * dt;
+    if (e.kb) {
+      e.pos.addScaledVector(e.kb, dt);
+      e.kb.multiplyScalar(Math.exp(-dt * 6));
+      if (e.kb.lengthSq() < 0.01) e.kb = null;
+    }
+    // up at its flying height (it drops in from above)
+    const fly = ground + S.fly;
+    e.pos.y += (fly - e.pos.y) * Math.min(1, dt * 3);
+    // the shot: in range and in sight, it stops, glows, then fires
+    if (e.windup <= 0 && e.burstLeft <= 0 && e.fireTimer <= 0 && !e.via.length && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
+      e.windup = S.windup;
+      e.lock = new THREE.Vector3(tankPos.x, 0, tankPos.z);
+    }
+    if (e.windup > 0) {
+      e.windup -= dt;
+      e.lock.set(tankPos.x, 0, tankPos.z); // it watches the tank right up to the first rocket
+      if (e.blind > 0 || e.stun > 0) e.windup = 0;
+      else if (e.windup <= 0) {
+        e.burstLeft = S.salvo;
+        e.fireTimer = 0;
+      }
+    }
+    if (e.burstLeft > 0 && e.fireTimer <= 0) {
+      e.burstLeft--;
+      e.fireTimer = e.burstLeft > 0 ? S.salvoGap : S.reload + Math.random() * 1.2;
+      // each rocket at where the tank is as it launches (a little scatter)
+      const from = e.model.muzzle();
+      const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 0.8, 0.9, tankPos.z + (Math.random() - 0.5) * 0.8);
+      const to = aim.clone().sub(from);
+      const time = to.length() / S.rocketSpeed;
+      // past the aim point, on into the ground behind it
+      const vel = to.multiplyScalar(1 / time);
+      const mesh = new THREE.Group();
+      mesh.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.08), new THREE.MeshBasicMaterial({ color: 0x3a3f36 })));
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.07), new THREE.MeshBasicMaterial({ color: 0xff3b2f }));
+      head.position.x = 0.2;
+      mesh.add(head);
+      const burn = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, 0.09), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
+      burn.position.x = -0.22;
+      mesh.add(burn);
+      mesh.position.copy(from);
+      this.scene.add(mesh);
+      this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time * 1.6, damage: S.damage, rocket: mesh });
+      this.combat.glow.flash(from, 0xffb070, 0.12, 0.7, 0.06);
+      this.combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5), { color: 0xb8b2a6, s0: 0.12, s1: 0.4, life: 0.5, drag: 3, lift: 0.4, fadeAt: 0.3 });
+      // salvo done: dart off somewhere else
+      if (e.burstLeft === 0) pickSpot(true);
+    }
+    // the funnel: where the salvo's going, while it lines up
+    const showing = e.windup > 0 || e.burstLeft > 0;
+    e.funnelK = showing ? 1 : Math.max(0, e.funnelK - dt * 6);
+    e.funnel.visible = e.funnelK > 0.02 && !!e.lock;
+    if (e.funnel.visible) {
+      const len2 = Math.hypot(e.lock.x - e.pos.x, e.lock.z - e.pos.z) + 2;
+      e.funnel.position.set(e.pos.x, ground + 0.06, e.pos.z);
+      e.funnel.rotation.y = Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x);
+      e.funnel.scale.set(len2, 1, 1.6);
+      const k = e.windup > 0 ? 1 - e.windup / S.windup : 1;
+      e.funnel.material.opacity = e.funnelK * (0.2 + 0.3 * k);
+      e.funnelEdge.material.opacity = e.funnelK * (0.6 + 0.4 * k);
+    }
+    // facing: where it's flying, the body turning to the tank
+    const g = e.model.group;
+    const moving = Math.hypot(e.vel.x, e.vel.z);
+    if (moving > 0.3) {
+      let diff = Math.atan2(-e.vel.z, e.vel.x) - g.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      g.rotation.y += diff * Math.min(1, dt * 8);
+    }
+    let aimYaw = Math.atan2(-(tankPos.z - e.pos.z), tankPos.x - e.pos.x) - g.rotation.y;
+    aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
+    e.speed = moving / S.runSpeed;
+    const charge = e.windup > 0 ? 1 - e.windup / S.windup : e.burstLeft > 0 ? 1 : 0;
+    e.model.update(dt, t, { speed: e.speed, tilt: Math.min(0.35, moving * 0.05), aimYaw, charge });
+  }
+
   // The walker and the bridge gun: line up, then fire a beam.
   sniperFrame(e, dt, t, ctx, dist, aimYaw) {
     const S = e.stats;
@@ -715,6 +882,20 @@ export class Enemies {
 
   // Rounds in flight: red streaks; a round that passes through the tank's
   // footprint (low enough) hits it, the rest go on into the ground.
+  // a round's done: a rocket bursts (a small blast, a little splash on the
+  // tank if it's close) and its body goes
+  endBolt(i, ctx) {
+    const b = this.bolts[i];
+    this.bolts.splice(i, 1);
+    if (!b.rocket) return;
+    b.rocket.removeFromParent();
+    const at = b.pos.clone().setY(Math.max(0.2, b.pos.y));
+    this.combat.glow.flash(at, 0xffb070, 0.15, 1.2, 0.08);
+    this.combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
+    for (let k = 0; k < 3; k++) this.combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
+    const tb = ctx.tankBox;
+    if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
+  }
   updateBolts(dt, ctx) {
     const tb = ctx.tankBox;
     for (let i = this.bolts.length - 1; i >= 0; i--) {
@@ -732,10 +913,18 @@ export class Enemies {
           const wall = losRay.intersectObjects(ctx.colliders, false)[0];
           if (wall) {
             this.combat.fx.burst(wall.point, { count: 4, speed: 3, color: 0xffb08a, life: 0.2, size: 0.06, gravity: 9 });
-            this.bolts.splice(i, 1);
+            this.endBolt(i, ctx);
             continue;
           }
         }
+      }
+      if (b.rocket) {
+        // a rocket: its body pointing along its flight, a smoke trail
+        b.rocket.position.copy(b.pos);
+        b.rocket.lookAt(b.pos.clone().add(b.vel));
+        b.rocket.rotateY(-Math.PI / 2); // (its length runs along x)
+        if (Math.random() < 0.7) this.combat.puffs.spawn(b.pos.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.3, (Math.random() - 0.5) * 0.3), { color: 0xa9a399, s0: 0.1, s1: 0.35, life: 0.6, drag: 2, lift: 0.2, fadeAt: 0.2 });
+        this.combat.glow.tracer(b.pos.clone().addScaledVector(b.vel, -0.03), b.pos, 0xff7a3a, 0.08, 0.05);
       }
       // a long bright streak with a hot core, so a round in flight is easy to
       // see (and to dodge)
@@ -755,10 +944,11 @@ export class Enemies {
         this.combat.glow.flash(b.pos, 0xffd9a0, 0.06, 0.3, 0.06);
         this.combat.fx.burst(b.pos, { count: 6, speed: 4, color: 0xffd36b, life: 0.2, size: 0.06, gravity: 9 });
         ctx.onTankHit?.(b.damage, b.pos);
-        this.bolts.splice(i, 1);
+        b.hitTank = true;
+        this.endBolt(i, ctx);
       } else if (b.life <= 0 || b.pos.y <= 0.05) {
         this.combat.fx.burst(b.pos.clone().setY(0.08), { count: 3, speed: 2.5, color: 0x8d8b86, glow: false, life: 0.3, size: 0.06, gravity: 9 });
-        this.bolts.splice(i, 1);
+        this.endBolt(i, ctx);
       }
     }
   }

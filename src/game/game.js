@@ -315,6 +315,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     spawnHound: (x, z, opts) => enemies.spawnHound(x, z, opts),
     spawnWalker: (x, z, opts) => enemies.spawnWalker(x, z, opts),
+    spawnDrone: (x, z, opts) => enemies.spawnDrone(x, z, opts),
     spawnBridgeGun: (x, z, opts) => enemies.spawnBridgeGun(x, z, opts),
     get run() {
       return run;
