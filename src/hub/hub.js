@@ -117,6 +117,8 @@ const CSS = `
 .base-brief .node .stars .star { width: 11px; height: 11px; background: #5a5456; }
 .base-brief .node .stars .star.easy.got { background: var(--amber); }
 .base-brief .node .stars .star.hard.got { background: #ff3b2f; }
+.base-brief .node .hardtag { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); padding: 4px 7px 5px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; animation: basecall 1.2s steps(2) infinite; pointer-events: none; }
+.base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
@@ -295,8 +297,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // rect: [x0, x1, z0, z1]. Walls toward the camera (west and south) are
   // kept low, the far ones full height.
   const ROOMS = [
-    { id: 'quarters', name: 'Quarters', rect: [-8, 4, -17, -6], focus: new THREE.Vector3(-2, 0, -11.5), view: 12, label: new THREE.Vector3(-2, 4.4, -16.8), entry: new THREE.Vector3(1, 0, -7.2) },
-    { id: 'briefing', name: 'Briefing', rect: [-12, -2, -5, 7], focus: new THREE.Vector3(-7, 0, 1), view: 11, label: new THREE.Vector3(-7, 3.0, -4.6), entry: new THREE.Vector3(-3.2, 0, 1.5) },
+    { id: 'quarters', name: 'Crew', rect: [-8, 4, -17, -6], focus: new THREE.Vector3(-2, 0, -11.5), view: 12, label: new THREE.Vector3(-2, 4.4, -16.8), entry: new THREE.Vector3(1, 0, -7.2) },
+    { id: 'briefing', name: 'Levels', rect: [-12, -2, -5, 7], focus: new THREE.Vector3(-7, 0, 1), view: 11, label: new THREE.Vector3(-7, 3.0, -4.6), entry: new THREE.Vector3(-3.2, 0, 1.5) },
     { id: 'hangar', name: 'Hangar', rect: [6, 24, -8, 8], focus: new THREE.Vector3(15, 0.4, 0), view: 8.5, label: new THREE.Vector3(15, 5.8, -7.8), entry: new THREE.Vector3(7.4, 0, 0.5) },
   ];
   const HALL = [-2, 6, -6, 8];
@@ -928,12 +930,14 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function openBriefing() {
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? '<span class="hardtag">Hard mode</span>' : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
     showLevel(selLevel);
   }
+  // beaten on Easy but not yet on Hard: a red "Hard mode" box over it
+  const hardNext = (z) => z.id && save.cleared().includes(clearKey(z.id, 'easy')) && !save.cleared().includes(clearKey(z.id, 'hard'));
   // a level's two stars on the map: Easy cleared (amber), Hard (red)
   const stars = (z) => ['easy', 'hard'].map((d) => `<i class="star ${d} ${save.cleared().includes(clearKey(z.id, d)) ? 'got' : ''}"></i>`).join('');
   function showLevel(z) {
@@ -1013,10 +1017,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
       buttons: [['Back', () => closeRoom()]],
       // scraps take parts up a tier on a screen of their own
       upgradeHint: upgradeHint(),
-      onUpgrades() {
+      onUpgrades(partId = null) {
         fitting.hide();
         workshop.show({
           tankId,
+          select: partId,
           onChange() {
             bankEl.textContent = bankTotal();
             fitHubTank();

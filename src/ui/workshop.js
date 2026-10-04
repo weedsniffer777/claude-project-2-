@@ -336,7 +336,8 @@ export function createWorkshop({ renderer, cursor }) {
       busy = false;
       const owned = save.owned().filter((id) => PARTS[id]);
       // start on something worth upgrading
-      if (!sel || !owned.includes(sel)) sel = owned.find(canAfford) || owned.find((id) => save.loadout(o.tankId).includes(id)) || owned[0] || null;
+      if (opts.select && owned.includes(opts.select)) sel = opts.select;
+      else if (!sel || !owned.includes(sel)) sel = owned.find(canAfford) || owned.find((id) => save.loadout(o.tankId).includes(id)) || owned[0] || null;
       setBank(save.bank());
       // the first visit: what this is for
       const first = !save.tips().includes('upgrades');

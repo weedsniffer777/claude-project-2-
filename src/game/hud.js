@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
 import { EFFECT_CSS } from './parts.js';
+import { fixPixelifyH } from '../ui/fontFix.js';
 
 const CSS = `
 .hud button, .hud .hud-card { cursor: var(--cursor); }
@@ -145,9 +146,6 @@ const CSS = `
 .hud-reticle .ammo-strip { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); }
 .hud-ammo { display: flex; align-items: center; gap: 10px; }
 .hud-ammo .px { font-size: 12px; color: var(--dim); }
-.hud-ammo .val { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
-.hud-ammo .val.low { color: var(--danger); }
-.hud-ammo .val.out { color: #8f877a; }
 .hud-passives { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
 .hud.touch .hud-passives { right: calc(46px + env(safe-area-inset-right, 0px)); bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
 .hud-dmg { position: absolute; left: 0; top: 0; font: 400 16px/1 'Silkscreen', monospace; color: var(--ink);
@@ -285,6 +283,7 @@ function inject() {
   link.rel = 'stylesheet';
   link.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap';
   document.head.append(link);
+  fixPixelifyH(link);
   const style = document.createElement('style');
   style.textContent = CSS + EFFECT_CSS;
   document.head.append(style);
@@ -303,7 +302,7 @@ export function createHud() {
     <canvas class="hud-spot"></canvas>
     <div class="hud-hurt"></div>
     <div class="hud-top">
-      <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div><div class="hud-ammo" hidden><span class="px">Ammo</span><span class="px val"></span></div></div>
+      <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div><div class="hud-ammo" hidden><span class="px">Ammo</span></div></div>
       <div class="hud-sectors panel px" hidden></div>
     </div>
     <div class="hud-right">
@@ -422,8 +421,7 @@ export function createHud() {
   reticle.append(reticleAmmo.el);
   const panelAmmoRow = $('.hud-ammo');
   const panelAmmo = createAmmoStrip('big');
-  panelAmmoRow.querySelector('.val').before(panelAmmo.el);
-  const ammoVal = panelAmmoRow.querySelector('.val');
+  panelAmmoRow.append(panelAmmo.el);
   const passives = createPassives();
   root.append(passives.el);
   // depot cards
@@ -583,7 +581,7 @@ export function createHud() {
       const el = a.el;
       el.hidden = !state;
       if (!state) return;
-      const key = `${Math.round(state.k * 26)}|${state.lit}|${state.art?.width}|${state.art && artId(state.art)}`;
+      const key = `${Math.round(state.k * 26)}|${state.k >= 1}|${state.lit}|${state.art?.width}|${state.art && artId(state.art)}`;
       if (key !== a.key) {
         a.key = key;
         drawAbility(el.querySelector('canvas'), state.k, state.lit, state.art);
@@ -663,19 +661,13 @@ export function createHud() {
       reticle.hidden = !on;
     },
     // ammo: { n, max, load (0..1 while reloading, else null) } or null to
-    // hide it. A single-shot gun is max 1: one shell in the panel, the ring
-    // at the reticle is enough there.
+    // hide it. A single-shot gun is max 1: one shell, filling as it reloads.
     setAmmo(ammo) {
       panelAmmoRow.hidden = !ammo;
-      reticleAmmo.el.hidden = !ammo || ammo.max < 2;
+      reticleAmmo.el.hidden = !ammo;
       if (!ammo) return;
       panelAmmo.set(ammo);
-      if (ammo.max > 1) reticleAmmo.set(ammo);
-      const reloading = ammo.load != null;
-      const txt = reloading ? 'Reloading' : ammo.max > 1 ? `${ammo.n}/${ammo.max}` : 'Ready';
-      if (ammoVal.textContent !== txt) ammoVal.textContent = txt;
-      ammoVal.classList.toggle('low', !reloading && ammo.max > 1 && ammo.n <= Math.ceil(ammo.max * 0.3));
-      ammoVal.classList.toggle('out', reloading);
+      reticleAmmo.set(ammo);
     },
     // passive perks: small icons with timers (see createPassives)
     setPassives(list) {

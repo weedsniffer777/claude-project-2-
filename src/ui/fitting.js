@@ -102,6 +102,8 @@ const CSS = `
 .fit .pop button:hover { background: #2a2628; color: var(--amber); }
 .fit .pop img { width: 48px; height: 32px; image-rendering: pixelated; }
 .fit .pop .remove { justify-content: center; padding: 8px; color: #ff9a8a; }
+.fit .pop .upb { justify-content: center; padding: 8px; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
+.fit .pop .upb:hover { color: #111; background: #ffd77a; }
 .fit .pop .fitb { justify-content: center; padding: 8px; color: #111; background: var(--go); }
 .fit .pop .fitb:hover { color: #111; background: #b6ffc4; }
 .fit .pop .none { padding: 6px; font-size: 13px; color: #b9b0a0; }
@@ -433,6 +435,15 @@ export function createFitting({ renderer, cursor }) {
     d.innerHTML = `<div class="hd"><img alt="" src="${pic(id)}"><b><span class="tiername">${TIERS[tier].name}</span><span class="pn"></span></b></div><p></p>${effectsHtml(id, o.tankId, tier)}${where(id) ? `<span class="where">On the ${where(id)}.</span>` : ''}`;
     d.querySelector('.pn').textContent = PARTS[id].name;
     d.querySelector('p').textContent = PARTS[id].text;
+    // in the hangar: straight to this part on the upgrades screen
+    if (o.onUpgrades) {
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'upb';
+      up.textContent = tier >= TIERS.length - 1 ? 'Upgrades' : 'Upgrade';
+      up.addEventListener('click', () => (closePop(), o.onUpgrades(id)));
+      d.append(up);
+    }
     return d;
   }
   // a slot's line: its biggest change or two, and its perk
