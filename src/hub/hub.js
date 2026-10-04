@@ -112,6 +112,9 @@ const CSS = `
 .base-brief .dtab .st { display: flex; gap: 6px; align-items: center; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; }
 .base-brief .dtab.on { background: #2a2420; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .base-brief .dtab.hard b { color: #ff8a7a; }
+.base-brief .dtab.locked { cursor: var(--cursor); opacity: 0.45; filter: grayscale(0.6); }
+.base-brief .dtab .lock { position: relative; width: 8px; height: 6px; margin-top: 4px; background: #b9b0a0; }
+.base-brief .dtab .lock::before { content: ''; position: absolute; left: 1px; top: -5px; width: 4px; height: 4px; border: 1px solid #b9b0a0; border-bottom: 0; }
 .base-brief .dtab.hard.on { background: #2a1716; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ff3b2f; }
 .base-brief .star { width: 12px; height: 12px; clip-path: polygon(50% 0, 63% 35%, 100% 38%, 71% 61%, 81% 100%, 50% 78%, 19% 100%, 29% 61%, 0 38%, 37% 35%); background: #3a3634; }
 .base-brief .star.easy.got { background: var(--amber); }
@@ -1063,8 +1066,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
       // Easy and Hard: each cleared on its own (a star each), each with
       // its own first clear reward; parts can turn up on either
       const cleared = save.cleared();
-      const diff = save.difficulty() === 'hard' ? 'hard' : 'easy';
       const done = (d) => cleared.includes(clearKey(z.id, d));
+      // Hard opens once the level's beaten on Easy
+      const hardLocked = !done('easy');
+      if (hardLocked && save.difficulty() === 'hard') save.setDifficulty('easy');
+      const diff = save.difficulty() === 'hard' ? 'hard' : 'easy';
       const first = z.first?.[diff];
       const tile = (got, cls, inner, tip) => `<span class="${cls}${got ? ' got' : ''}" data-tip="${tip}${got ? ' (got it)' : ''}">${inner}</span>`;
       let firstTile = '';
@@ -1073,7 +1079,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
       if (first?.part) firstTile += tile(done(diff), 'legpart', `<img alt="${PARTS[first.part].name}" src="${partIcon(first.part)}"><em>Legendary</em>`, `${PARTS[first.part].name}: ${PARTS[first.part].text}`);
       if (first?.scraps) firstTile += tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
       if (first?.tokens) firstTile += tile(done(diff), 'cash tok', `+${first.tokens} tokens`, `${first.tokens} upgrade tokens: spend them to evolve parts to Epic and Legendary`);
-      const tab = (d, name, txt) => `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''}" data-d="${d}"><b>${name}</b><small>${txt}</small><span class="st"><i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}</span></button>`;
+      const tab = (d, name, txt) => {
+        const locked = d === 'hard' && hardLocked;
+        const st = locked ? '<i class="lock"></i>Beat Easy to unlock' : `<i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}`;
+        return `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''} ${locked ? 'locked' : ''}" data-d="${d}" ${locked ? 'disabled' : ''}><b>${name}</b><small>${txt}</small><span class="st">${st}</span></button>`;
+      };
       info.innerHTML = `
         <span class="tagline px">Level ${z.n}</span>
         <h2>${z.name}</h2>
@@ -1086,7 +1096,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         <span class="label">Possible resources</span>
         <div class="rewards res"><span class="res scr" data-tip="Scraps: amber shards and blue crystals (worth 5) from every enemy"><i></i>Scraps</span><span class="res tok" data-tip="Upgrade tokens: rare drops, more from bigger enemies. Spend them to evolve parts"><i></i>Tokens</span></div>
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
-      for (const b of info.querySelectorAll('.dtab'))
+      for (const b of info.querySelectorAll('.dtab:not(.locked)'))
         b.addEventListener('click', () => {
           save.setDifficulty(b.dataset.d);
           showLevel(z);

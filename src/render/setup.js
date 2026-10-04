@@ -177,24 +177,26 @@ export function addDawn(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
 
 // Midday: a high sun from the south-west, a clear pale sky deepening to blue
 // overhead, a light haze far off. Crisp, short shadows.
-export const NOON_SUN = new THREE.Vector3(-12, 30, 9);
+export const NOON_SUN = new THREE.Vector3(-17, 17, 13);
 export function addNoon(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
   const c = document.createElement('canvas');
   c.width = 4;
   c.height = 128;
   const g = c.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 128);
-  grad.addColorStop(0, '#6f9fd0');
-  grad.addColorStop(0.6, '#a9c6e0');
-  grad.addColorStop(1, '#dfe6e6');
+  grad.addColorStop(0, '#3f7fd0');
+  grad.addColorStop(0.55, '#7fb0e4');
+  grad.addColorStop(1, '#c4dcef');
   g.fillStyle = grad;
   g.fillRect(0, 0, 4, 128);
   const sky = new THREE.CanvasTexture(c);
   sky.colorSpace = THREE.SRGBColorSpace;
   scene.background = sky;
-  scene.fog = new THREE.Fog(0xc9d6e0, 85, 130);
-  scene.add(new THREE.HemisphereLight(0xdfeaff, 0x7d7a70, 2.4));
-  const sun = new THREE.DirectionalLight(0xfff4e0, 4.2);
+  // a clear blue day: bluish sky light and haze, a warm sun low enough
+  // for the buildings to throw long shadows across the street
+  scene.fog = new THREE.Fog(0x9fc2e4, 80, 135);
+  scene.add(new THREE.HemisphereLight(0x8fbcff, 0x4a5262, 1.5));
+  const sun = new THREE.DirectionalLight(0xffe2b0, 3.4);
   const offset = NOON_SUN.clone().setLength(SUN_BACK);
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMap, shadowMap);

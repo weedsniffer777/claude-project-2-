@@ -64,15 +64,15 @@ function groundTexture(rand) {
     g.fillRect(X(x0), Z(z0), X(x1) - X(x0), Z(z1) - Z(z0));
   };
   // fields: brown grass under a thin, patchy snow
-  rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#8a7f63');
+  rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#7f7a52');
   speckle(g, W, H, ['#7d7358', '#958a6c', '#6f6650', '#a39878'], W * H * 0.02, rand);
-  for (let i = 0; i < 900; i++) {
-    g.fillStyle = rand() < 0.6 ? '#dfe3e6' : '#c9ced3';
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = rand() < 0.6 ? '#cfd6dc' : '#b9c2ca';
     blob(g, rand() * W, rand() * H, (1 + rand() * 4) * GPX, (0.6 + rand() * 2) * GPX, rand, 9);
   }
   // the city end: hard standing and yards, mostly snow
-  rect(MAP.x0, MAP.z0, RAMP.x0 - 10, MAP.z1, '#c3c6cb');
-  speckle(g, X(RAMP.x0 - 10), H, ['#b3b6bb', '#cfd2d6', '#a9abaf'], X(RAMP.x0 - 10) * H * 0.03, rand);
+  rect(MAP.x0, MAP.z0, RAMP.x0 - 10, MAP.z1, '#8f9196');
+  speckle(g, X(RAMP.x0 - 10), H, ['#85878c', '#9b9da2', '#7c7e83'], X(RAMP.x0 - 10) * H * 0.03, rand);
   // the road, all the way along
   rect(MAP.x0, CURB.n, MAP.x1, CURB.s, '#5e5f64');
   speckle(g, W, Z(CURB.s) - Z(CURB.n), ['#68696e', '#54555a', '#6e6e72'], W * (Z(CURB.s) - Z(CURB.n)) * 0.05, rand, Z(CURB.n));
