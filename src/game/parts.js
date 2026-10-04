@@ -612,7 +612,7 @@ export const PARTS = {
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2 + 0.4;
         const leg = put(g, cyl(0.03, 0.9, legs, { seg: 6 }), Math.cos(a) * 0.22, 0.42, Math.sin(a) * 0.22);
-        leg.rotation.set(Math.sin(a) * 0.28, 0, -Math.cos(a) * 0.28);
+        leg.rotation.set(-Math.sin(a) * 0.28, 0, Math.cos(a) * 0.28); // feet out, tops in under the head
       }
       put(g, cyl(0.09, 0.08, legs, { seg: 10 }), 0, 0.88, 0);
       put(g, box(0.2, 0.18, 0.16, 0xa8956a, { r: 0.02 }), 0, 1.0, 0); // the pan head

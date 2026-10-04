@@ -175,7 +175,7 @@ const SPIDER = {
   spider: true,
   kinetic: true,
   shatterOnDeath: true,
-  hp: 1800,
+  hp: 2700,
   runSpeed: 2.0,
   walkSpeed: 1.3,
   turnRate: 1.2,
