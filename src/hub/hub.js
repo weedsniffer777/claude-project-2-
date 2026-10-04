@@ -1107,7 +1107,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
         ${done('easy') && !done('hard') && diff === 'easy' ? '<span class="callout">Beat it on Hard for extra rewards!</span>' : ''}
         ${firstTile ? `<span class="label">First clear reward${diff === 'hard' ? ' (Hard)' : ''}</span><div class="rewards">${firstTile}</div>` : ''}
         <span class="label">Possible parts</span>
-        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'imp' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"><div class="tip">${partTip(id)}</div></span>`).join('')}</div>
+        <div class="rewards">${z.rewards.map((id) => {
+          // had from this level already (the part, or its improvement): greyed out, done
+          const had = save.levelFinds(z.id).includes(id);
+          const tip = had ? `<div class="fx-head">${esc(PARTS[id].name)}</div><div class="fx-how">Already found on this level.</div>` : partTip(id);
+          return `<span class="${had ? 'got' : owned.includes(id) ? 'imp' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"><div class="tip">${tip}</div></span>`;
+        }).join('')}</div>
         <span class="label">Possible resources</span>
         <div class="rewards res"><span class="res scr"><i></i>Scraps<div class="tip"><div class="fx-head">Scraps</div><div class="fx-how">Currency used for upgrades and purchases.</div></div></span><span class="res tok"><i></i>Tokens<div class="tip"><div class="fx-head">Tokens</div><div class="fx-how">Needed for promoting parts, tanks and drones.</div></div></span></div>
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;

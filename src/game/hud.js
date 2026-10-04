@@ -167,7 +167,7 @@ const CSS = `
 .hud-dmg.chain { color: var(--amber); font-size: 20px; }
 .hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
-.hud-lock { position: absolute; left: 0; top: 0; width: 56px; height: 56px; margin: -28px 0 0 -28px; filter: drop-shadow(0 0 4px #ffc24a88); --lc: #ffc24a; animation: lockBlink 0.5s steps(1) infinite; }
+.hud-lock { position: absolute; left: 0; top: 0; width: 56px; height: 56px; margin: -28px 0 0 -28px; filter: drop-shadow(0 0 5px #3aa0ff); --lc: #3aa0ff; animation: lockBlink 0.5s steps(1) infinite; }
 @keyframes lockBlink { 50% { --lc: #ffffff; } }
 .hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid var(--lc); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
 .hud-lock.on::before { animation: hudlock 0.35s steps(2) infinite; }

@@ -10,6 +10,7 @@ import { createDevKit } from './devkit/devkit.js';
 import { MODELS } from './models/registry.js';
 import { LEVELS } from './levels/index.js';
 import { CURSOR } from './game/hud.js';
+import { PARTS } from './game/parts.js';
 
 // The themed cursor everywhere: over panels, text and empty UI too (not the
 // browser's arrow or text beam). Zero specificity, so anything that sets
@@ -143,7 +144,7 @@ const devkit = createDevKit({
     },
     {
       id: 'complete',
-      label: 'Complete up to',
+      label: 'Complete up to (Easy and Hard)',
       options: [{ value: '0', label: '(nothing)' }, ...CAMPAIGN.filter((l) => l.id).map((l) => ({ value: String(l.n), label: `Level ${l.n}` }))],
       value: '0',
       // marks every level up to n cleared and hands over all their rewards
@@ -151,7 +152,13 @@ const devkit = createDevKit({
         for (const l of CAMPAIGN) {
           if (!l.id || l.n > +v) continue;
           save.clear(l.id);
+          save.clear(`${l.id}:hard`); // (on Hard too, with its first clear rewards)
           for (const id of l.rewards || []) save.own(id);
+          const hard = l.first?.hard || {};
+          if (hard.part && PARTS[hard.part] && !save.owned().includes(hard.part)) {
+            save.own(hard.part);
+            save.setPartLevel(hard.part, PARTS[hard.part].startLevel || 1);
+          }
           const gear = l.first?.easy?.equipment;
           if (gear && !save.ownedEquipment().includes(gear)) {
             save.ownEquipment(gear);

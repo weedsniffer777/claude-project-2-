@@ -121,7 +121,7 @@ const ROCKET_MATS = {
   core: new THREE.MeshBasicMaterial({ color: 0xffffff }),
   plume: new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }),
   halo: new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }),
-  glow: new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending }),
+  glow: new THREE.MeshBasicMaterial({ color: 0xffb050, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }),
 };
 const ROCKET_GEO = {
   body: new THREE.CylinderGeometry(0.055, 0.055, 0.36, 8).rotateZ(Math.PI / 2),
@@ -129,7 +129,7 @@ const ROCKET_GEO = {
   fin: new THREE.BoxGeometry(0.1, 0.2, 0.015),
   seeker: new THREE.SphereGeometry(0.032, 6, 4),
   halo: new THREE.SphereGeometry(0.13, 8, 6),
-  glow: new THREE.SphereGeometry(0.3, 10, 8),
+  glow: new THREE.SphereGeometry(0.38, 10, 8),
   beam: new THREE.CylinderGeometry(0.008, 0.008, 1.6, 4).rotateZ(Math.PI / 2),
   core: new THREE.SphereGeometry(0.07, 6, 4),
   plume: new THREE.ConeGeometry(0.1, 0.7, 8).rotateZ(Math.PI / 2),
@@ -173,7 +173,7 @@ const DRONE = {
   fly: 3.4, // height it flies at (over the ground, or the tank's, whichever's higher)
   range: 15, // how far it'll fire from
   orbit: [9, 13], // how far from the tank it darts about
-  windup: 0.9, // hanging still, pods glowing, a red target ring on you, before the salvo
+  windup: 0.9, // hanging still, pods glowing, its red funnel on the ground, before the salvo
   salvo: 3,
   salvoGap: 0.28,
   reload: 3.4,
@@ -835,39 +835,6 @@ export class Enemies {
       e.funnel.material.opacity = e.funnelK * (0.2 + 0.3 * k);
       e.funnelEdge.material.opacity = e.funnelK * (0.6 + 0.4 * k);
     }
-    // the warning: a red target ring on the ground where the salvo's going,
-    // closing in and blinking faster as it lines up, and a thin red sight
-    // line down to it from the drone
-    if (!e.warn) {
-      e.warn = new THREE.Group();
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-      const cross = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 1.2).rotateX(-Math.PI / 2), ring.material);
-      const cross2 = cross.clone();
-      cross2.rotation.y = Math.PI / 2;
-      e.warn.add(ring, cross, cross2);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 1, 0)]), new THREE.LineBasicMaterial({ color: 0xff3b2f, transparent: true, depthWrite: false }));
-      line.frustumCulled = false;
-      e.warnLine = line;
-      e.warnMat = ring.material;
-      this.scene.add(e.warn, line);
-      e.warnLine.userData.owner = e;
-    }
-    const lining = e.windup > 0 || e.burstLeft > 0;
-    e.warn.visible = e.warnLine.visible = lining && !!e.lock;
-    if (e.warn.visible) {
-      const k = e.windup > 0 ? 1 - e.windup / S.windup : 1;
-      const gy = ctx.heightAt ? ctx.heightAt(e.lock.x, e.lock.z) : 0;
-      e.warn.position.set(e.lock.x, gy + 0.08, e.lock.z);
-      e.warn.scale.setScalar(1.8 - k * 0.9);
-      e.warn.rotation.y = t * 2;
-      const blink = Math.sin(t * (10 + k * 26)) > 0;
-      e.warnMat.opacity = blink ? 0.95 : 0.35;
-      const pts = e.warnLine.geometry.attributes.position;
-      pts.setXYZ(0, e.pos.x, e.pos.y - 0.2, e.pos.z);
-      pts.setXYZ(1, e.lock.x, gy + 0.1, e.lock.z);
-      pts.needsUpdate = true;
-      e.warnLine.material.opacity = blink ? 0.9 : 0.4;
-    }
     // facing: where it's flying, the body turning to the tank
     const g = e.model.group;
     const moving = Math.hypot(e.vel.x, e.vel.z);
@@ -1034,16 +1001,16 @@ export class Enemies {
         b.rocket.rotateY(-Math.PI / 2); // (its length runs along x)
         const fl = b.rocket.userData.flame;
         fl.scale.set(0.75 + Math.random() * 0.5, 1, 1);
-        // the trail: a hot streak that fades from the tail back, and a soft
-        // white smoke ribbon (small puffs close together, growing as they go)
+        // the trail, like a real rocket's (and our own missiles'): a bright
+        // hot streak, and smoke puffs thrown out unevenly, some bigger, some
+        // drifting, that billow and linger
         const tail = b.pos.clone().addScaledVector(b.vel, -0.04);
         b.last ??= tail.clone();
-        this.combat.glow.tracer(b.last, tail, 0xffc070, 0.14, 0.18);
-        this.combat.glow.tracer(b.last, tail, 0xffffff, 0.05, 0.08);
-        b.smoke = (b.smoke || 0) + dt;
-        if (b.smoke > 0.03) {
-          b.smoke = 0;
-          this.combat.puffs.spawn(tail, new THREE.Vector3((Math.random() - 0.5) * 0.15, 0.15, (Math.random() - 0.5) * 0.15), { color: 0xd8d6d0, s0: 0.07, s1: 0.32, life: 0.9, drag: 1.5, lift: 0.15, fadeAt: 0.1 });
+        this.combat.glow.tracer(b.last, tail, 0xffc070, 0.16, 0.16);
+        this.combat.glow.tracer(b.last, tail, 0xffffff, 0.06, 0.07);
+        if (Math.random() < 0.85) {
+          const big = Math.random() < 0.25;
+          this.combat.puffs.spawn(tail.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.12, (Math.random() - 0.5) * 0.12)), new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.2 + Math.random() * 0.3, (Math.random() - 0.5) * 0.6), { color: Math.random() < 0.3 ? 0xb8b2a6 : 0xd0cabe, s0: big ? 0.16 : 0.1, s1: big ? 0.7 : 0.45, life: 0.7 + Math.random() * 0.5, drag: 2, lift: 0.2, fadeAt: 0.2 });
         }
         b.last.copy(tail);
       }

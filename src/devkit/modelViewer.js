@@ -152,8 +152,8 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
     { id: 'optics', name: 'Spotter', every: 5 },
     { id: 'era', name: 'Reactive', every: 8, armed: true },
     { id: 'autoloader', name: 'Ready rack', every: 3.3 },
-    { id: 'afterburner', name: 'Afterburn', every: 4.1 },
-    { id: 'dozer', name: 'Plough', every: 2.7 },
+    { id: 'afterburner', name: 'Afterburner', every: 4.1 },
+    { id: 'dozer', name: 'Disorient', every: 2.7 },
   ];
   function resetAmmo() {
     ammo.stats = model.fire ? statsFor([], model.autocannon ? 'light' : 'battle') : null;

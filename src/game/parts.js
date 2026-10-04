@@ -96,7 +96,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Rams hit much harder.', apply: (s) => (s.ramDamage = 70) },
-      { text: '', perk: 'Plough', perkText: 'Rammed enemies are thrown back and stunned for 1.5 s.', apply: (s) => (s.dozerStun = 1.5) },
+      { text: '', perk: 'Disorient', perkText: 'Rammed enemies are thrown back and stunned for 1.5 s.', apply: (s) => (s.dozerStun = 1.5) },
     ],
     build(t) {
       const g = new THREE.Group();
@@ -196,7 +196,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Take 38% less damage.', apply: (s) => (s.armor *= 0.62 / 0.7) },
-      { text: '', perk: 'Reactive burst', perkText: 'Blocks one hit completely every 8 s, and the blast deals 30 damage to enemies nearby.', apply: (s) => (s.reactive = true) },
+      { text: '', perk: 'Explosion', perkText: 'Blocks one hit completely every 8 s, and the blast deals 30 damage to enemies nearby.', apply: (s) => (s.reactive = true) },
     ],
     build(t) {
       // a T-72 style conversion: shingled rows of bricks over the whole
@@ -358,7 +358,7 @@ export const PARTS = {
     },
     tiers: [
       { text: 'Boost faster and longer still.', apply: (s) => ((s.boostSpeed *= 1.1), (s.boostTime *= 1.15)) },
-      { text: '', perk: 'Afterburn', perkText: 'Every kill while boosting takes 2 s off the boost recharge.', apply: (s) => (s.boostRefund = 2) },
+      { text: '', perk: 'Afterburner', perkText: 'Every kill while boosting takes 2 s off the boost recharge.', apply: (s) => (s.boostRefund = 2) },
     ],
     build(t) {
       // nothing new to see until it fires: the flame burns blue and pink

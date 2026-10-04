@@ -90,9 +90,8 @@ export const save = {
   setPartLevel(id, n) {
     write(K.partLevels, { ...save.partLevels(), [id]: n });
   },
-  // parts picked up at a level's checkpoints since it was last cleared:
-  // they don't turn up there again as improvements (no farming a level by
-  // dying after the checkpoint). Cleared when the level's beaten.
+  // parts picked up at a level's checkpoints (new, or as an improvement):
+  // each level gives each of its parts once, ever, like its first find
   levelFinds: (level) => read(K.levelFinds, {})[level] || [],
   addLevelFind(level, id) {
     const all = read(K.levelFinds, {});

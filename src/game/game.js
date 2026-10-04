@@ -475,7 +475,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // parts not found yet first; then ones you own, as improvements
       // (free levels), if they can still go up
       const have = save.owned();
-      const already = save.levelFinds(levelDef.id); // found here before, on a run that didn't finish
+      const already = save.levelFinds(levelDef.id); // already had from this level (as the part, or its improvement): once each, ever
       offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id) && !already.includes(id))].slice(0, count);
       hud.banner('Checkpoint reached');
       run.checkpoint = shack; // where an Easy revive puts you back
@@ -548,7 +548,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const lvl = campaignLevel(levelDef.id);
       const rewards = [];
       for (const id of run.pendingTips) save.seeTip(id);
-      save.clearLevelFinds(levelDef.id); // beaten: its parts can turn up as improvements again
       const diff = run.hard ? 'hard' : 'easy';
       const first = lvl?.first?.[diff];
       if (save.clear(clearKey(levelDef.id, diff)) && first) {
@@ -623,7 +622,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else reload = 1;
       pulse('autoloader');
     }
-    // Afterburn: kills while boosting take time off the recharge
+    // Afterburner: kills while boosting take time off the recharge
     if (stats.boostRefund && (run.boost > 0 || run.dash > 0) && run.boostCd > 0) {
       run.boostCd = Math.max(0, run.boostCd - stats.boostRefund);
       pulse('afterburner');
@@ -882,7 +881,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   function tankHit(damage) {
     if (run.over || run.mode !== 'field') return;
-    // Reactive burst: the next hit after a few quiet seconds is blocked, and
+    // Explosion: the next hit after a few quiet seconds is blocked, and
     // the brick it hits blasts the machines round the tank
     if (stats.reactive && !(run.reactT > 0)) {
       run.reactT = 8;
@@ -1829,10 +1828,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const list = [];
     const add = (id, name, o = {}) => list.push({ id, name, img: partShot(id), pulse: run.pulse?.[id] || 0, ...o });
     if (stats.spotter) add('optics', 'Spotter', { k: 1 - Math.max(0, run.spotT) / 5, left: run.spotT });
-    if (stats.reactive) add('era', 'Reactive', { k: 1 - run.reactT / 8, left: run.reactT, ready: !(run.reactT > 0) });
+    if (stats.reactive) add('era', 'Explosion', { k: 1 - run.reactT / 8, left: run.reactT, ready: !(run.reactT > 0) });
     if (stats.hotLoader) add('autoloader', 'Ready rack');
-    if (stats.boostRefund) add('afterburner', 'Afterburn');
-    if (stats.dozerStun) add('dozer', 'Plough');
+    if (stats.boostRefund) add('afterburner', 'Afterburner');
+    if (stats.dozerStun) add('dozer', 'Disorient');
     return list;
   }
 
