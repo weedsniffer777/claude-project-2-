@@ -13,6 +13,9 @@ const K = {
   tutorial: 'scavenger.tutorial',
   tips: 'scavenger.tips',
   tiers: 'scavenger.tiers',
+  partLevels: 'scavenger.partLevels',
+  tankLevels: 'scavenger.tankLevels',
+  tokens: 'scavenger.tokens',
   equipment: 'scavenger.equipment.',
   ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
@@ -73,10 +76,29 @@ export const save = {
     const list = save.ownedEquipment();
     if (!list.includes(id)) write(K.ownedEquipment, [...list, id]);
   },
-  // part tiers: { id: 0 Rare | 1 Epic | 2 Legendary }
-  tiers: () => read(K.tiers, {}),
-  setTier(id, n) {
-    write(K.tiers, { ...save.tiers(), [id]: n });
+  // part levels 1..30: { id: level } (1-10 Rare, 11-20 Epic, 21-30
+  // Legendary). Older saves kept a tier: tier t reads as level 10t + 1.
+  partLevels() {
+    const lv = read(K.partLevels, null);
+    if (lv) return lv;
+    const old = read(K.tiers, {});
+    return Object.fromEntries(Object.entries(old).map(([id, t]) => [id, t * 10 + 1]));
+  },
+  partLevel: (id) => save.partLevels()[id] || 1,
+  setPartLevel(id, n) {
+    write(K.partLevels, { ...save.partLevels(), [id]: n });
+  },
+  // the tier, from the level
+  tiers: () => Object.fromEntries(Object.entries(save.partLevels()).map(([id, l]) => [id, Math.floor((l - 1) / 10)])),
+  // tank levels 1..50: { tankId: level }
+  tankLevel: (id) => read(K.tankLevels, {})[id] || 1,
+  setTankLevel(id, n) {
+    write(K.tankLevels, { ...read(K.tankLevels, {}), [id]: n });
+  },
+  // upgrade tokens: rare drops, spent to evolve a part to its next tier
+  tokens: () => read(K.tokens, 0) | 0,
+  addTokens(n) {
+    write(K.tokens, Math.max(0, save.tokens() + n));
   },
   tips: () => read(K.tips, []),
   seeTip(id) {

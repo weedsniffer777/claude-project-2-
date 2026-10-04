@@ -133,6 +133,12 @@ const devkit = createDevKit({
           if (!l.id || l.n > +v) continue;
           save.clear(l.id);
           for (const id of l.rewards || []) save.own(id);
+          const gear = l.first?.easy?.equipment;
+          if (gear && !save.ownedEquipment().includes(gear)) {
+            save.ownEquipment(gear);
+            for (const t of save.tanks()) if (!save.equipment(t)) save.setEquipment(gear, t);
+            save.addNews([{ kind: 'equipment', id: gear }]);
+          }
           const tank = l.first?.easy?.tank;
           if (tank && !save.tanks().includes(tank)) {
             save.unlockTank(tank);

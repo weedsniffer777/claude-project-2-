@@ -20,6 +20,7 @@ import { TANKS, tankDef } from '../game/tanks.js';
 import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { createWorkshop, upgradeHint } from '../ui/workshop.js';
 import { save } from '../game/save.js';
+import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
 import { partPicture } from '../render/partPictures.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
 
@@ -111,6 +112,13 @@ const CSS = `
 .base-brief .rewards span.tank { width: 116px; height: 68px; }
 .base-brief .rewards span.cash { display: grid; place-items: center; width: 116px; height: 40px; font: 400 13px/1 'Silkscreen', monospace; color: var(--amber); }
 .base-brief .rewards span.cash.got { color: #6d655a; }
+.base-brief .rewards span.tok { color: #d9a8ff; }
+.base-brief .rewards span.equip { width: 66px; height: 54px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff; clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 8px, 100% calc(100% - 8px), calc(100% - 8px) 100%, 8px 100%, 0 calc(100% - 8px), 0 8px); }
+.base-brief .rewards span.res { display: flex; align-items: center; justify-content: center; gap: 7px; width: 104px; height: 34px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; }
+.base-brief .rewards span.res.scr { color: var(--amber); }
+.base-brief .rewards span.res.tok { color: #d9a8ff; }
+.base-brief .rewards span.res.scr i { width: 9px; height: 13px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: 12px 0 0 #5fb8ff; }
+.base-brief .rewards span.res.tok i { width: 12px; height: 12px; border-radius: 50%; background: #c77dff; box-shadow: inset -2px -2px 0 #8a3fc4; }
 .base-brief .rewards span.tank img { object-fit: contain; }
 .base-brief .note { font-size: 12px; color: #b9b0a0; }
 .base-brief .node .stars { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%); display: flex; gap: 2px; }
@@ -123,6 +131,8 @@ const CSS = `
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
 .base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
+.base-news img.gear { width: 128px; height: 96px; }
+.base-news .hint { font-size: 12px; color: #8f877a; }
 .base-news .row { display: flex; gap: 10px; }
 .base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; white-space: nowrap; }
 .base-fade { position: absolute; inset: 0; background: #070609; opacity: 1; transition: opacity 0.45s steps(5); }
@@ -961,8 +971,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const first = z.first?.[diff];
       const tile = (got, cls, inner, tip) => `<span class="${cls}${got ? ' got' : ''}" data-tip="${tip}${got ? ' (got it)' : ''}">${inner}</span>`;
       let firstTile = '';
-      if (first?.tank) firstTile = tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `${TANKS[first.tank].name}: ${tankDef(first.tank).blurb}`);
-      else if (first?.scraps) firstTile = tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
+      if (first?.tank) firstTile += tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `${TANKS[first.tank].name}: ${tankDef(first.tank).blurb}`);
+      if (first?.equipment) firstTile += tile(done(diff), 'equip', `<img alt="${EQUIPMENT[first.equipment].name}" src="${equipmentIcon(first.equipment)}">`, `${EQUIPMENT[first.equipment].name} (equipment): ${EQUIPMENT[first.equipment].text}`);
+      if (first?.scraps) firstTile += tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
+      if (first?.tokens) firstTile += tile(done(diff), 'cash tok', `+${first.tokens} tokens`, `${first.tokens} upgrade tokens: spend them to evolve parts to Epic and Legendary`);
       const tab = (d, name, txt) => `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''}" data-d="${d}"><b>${name}</b><small>${txt}</small><span class="st"><i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}</span></button>`;
       info.innerHTML = `
         <span class="tagline px">Level ${z.n}</span>
@@ -973,6 +985,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
         ${firstTile ? `<span class="label">First clear reward${diff === 'hard' ? ' (Hard)' : ''}</span><div class="rewards">${firstTile}</div>` : ''}
         <span class="label">Possible parts</span>
         <div class="rewards">${z.rewards.map((id) => tile(owned.includes(id), '', `<img alt="${PARTS[id].name}" src="${partIcon(id)}">`, `${PARTS[id].name}: ${PARTS[id].text}`)).join('')}</div>
+        <span class="label">Possible resources</span>
+        <div class="rewards res"><span class="res scr" data-tip="Scraps: amber shards and blue crystals (worth 5) from every enemy"><i></i>Scraps</span><span class="res tok" data-tip="Upgrade tokens: rare drops, more from bigger enemies. Spend them to evolve parts"><i></i>Tokens</span></div>
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
       for (const b of info.querySelectorAll('.dtab'))
         b.addEventListener('click', () => {
@@ -1043,11 +1057,18 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
   // "New!": what the last level unlocked, once, on coming back to the base
   function showNews() {
-    const items = save.news().filter((n) => n.kind === 'tank' && TANKS[n.id]);
+    const all = save.news();
     save.clearNews();
-    if (!items.length) return;
+    // new equipment gets the same popup, after any tank's
+    const gear = all.filter((n) => n.kind === 'equipment' && EQUIPMENT[n.id]);
+    const items = all.filter((n) => n.kind === 'tank' && TANKS[n.id]);
+    if (!items.length) {
+      if (gear.length) showGear(gear[0].id);
+      return;
+    }
     const n = items[0];
     freshTanks = items.map((i) => i.id);
+    if (gear.length) save.addNews(gear); // shown next time round
     news.hidden = false;
     news.innerHTML = `
       <span class="newtag">New!</span>
@@ -1055,6 +1076,25 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <img alt="" src="${tankIcon(n.id)}">
       <p>${tankDef(n.id).blurb} Pick it in the hangar.</p>
       <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
+    news.querySelector('.go').addEventListener('click', () => {
+      news.hidden = true;
+      clickRoom(ROOMS.find((r) => r.id === 'hangar'));
+    });
+    news.querySelector('.back').addEventListener('click', () => (news.hidden = true));
+  }
+
+  function showGear(id) {
+    const g = EQUIPMENT[id];
+    news.hidden = false;
+    news.innerHTML = `
+      <span class="newtag">New equipment!</span>
+      <h2></h2>
+      <img class="gear" alt="" src="${equipmentIcon(id, 128, 96)}">
+      <p></p>
+      <p class="hint">Equipment goes in its own slot and is used with <b>Q</b>. Swap it in the hangar.</p>
+      <div class="row"><button type="button" class="go">Go to hangar</button><button type="button" class="back">Later</button></div>`;
+    news.querySelector('h2').textContent = `${g.name} unlocked`;
+    news.querySelector('p').textContent = g.text;
     news.querySelector('.go').addEventListener('click', () => {
       news.hidden = true;
       clickRoom(ROOMS.find((r) => r.id === 'hangar'));

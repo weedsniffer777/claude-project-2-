@@ -422,7 +422,6 @@ function buildRiver(scene) {
     for (let z = z0 + 1.3; z < z1; z += 2.5) container(SQUARE.x0 + 1.4, 0, z, Math.PI / 2, CONTAINERS[((z * 7) | 0) % 5 < 0 ? 0 : ((z * 7) | 0) % 5]);
     B.block(SQUARE.x0 + 1.4, (z0 + z1) / 2, 1.3, (z1 - z0) / 2);
   }
-  B.block((SQUARE.x0 + SQUARE.x1) / 2, SQUARE.n + 0.4, (SQUARE.x1 - SQUARE.x0) / 2, 0.3);
   // cover in the square: trams, wrecks, heaps, barriers, containers
   P.tram(B, 56, -12.5, 0.18, { tilt: 0.05, burn: 0.7 });
   P.tram(B, 80, 10.5, -0.12, { trailer: true, tilt: -0.04, burn: 0.85 });
@@ -619,7 +618,9 @@ function buildRiver(scene) {
   const SECTORS = ['The street', 'The square', 'The bridge'];
   const [shackA, shackB] = shacks;
   const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
-  const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: SQUARE.n + 0.6, maxZ: SQUARE.s - 0.6 };
+  // the square: out onto its sidewalks too (drops land there), up to the
+  // blocks on the far side and the ruined arcade on the near one
+  const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: SQUARE.n - 1.3, maxZ: SQUARE.s + 0.9 };
   // the bridge: room to drive right round the gun, out onto the far bank
   const B3 = { minX: shackB.x1 + 1.2, maxX: END_X - 2, minZ: BRIDGE.n + 0.6, maxZ: BRIDGE.s - 0.6 };
   const S = { sector: 0, step: 0, t: 0, n: 0, boss: null, waveT: 0, walkerT: 0 };
@@ -699,9 +700,18 @@ function buildRiver(scene) {
     go(0);
     setBounds(api, B2);
     api.sectors(SECTORS, 1, 'Level 2');
-    api.objective('Clear the square');
+    api.objective('Clear the square, or break through to the checkpoint');
+  }
+  // past the square, into the street to the bridge: made it through. The
+  // checkpoint opens; whatever's still about is left behind at its door.
+  function brokeThrough(api) {
+    if (S.step > 2 || api.tankPos.x < SQUARE.x1 + 3) return false;
+    openShack(api, shackB, 'Made it through! Drive into the <b>checkpoint</b> before the bridge.');
+    go(4);
+    return true;
   }
   function sector2(api) {
+    if (brokeThrough(api)) return;
     switch (S.step) {
       case 0:
         if (S.t > 1.5) {
@@ -744,6 +754,7 @@ function buildRiver(scene) {
       case 4:
         if (atDoor(api, shackB)) {
           go(5);
+          if (api.enemiesAlive) api.clearEnemies(); // left behind in the square
           api.depot(shackB, { offers: ['afterburner', 'twinmg', 'optics'], onLeave: () => startSector3(api) });
         }
         break;

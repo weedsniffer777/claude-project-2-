@@ -23,6 +23,7 @@ import { PARTS, attachPart, statsFor, BASE_STATS, tierOf, effectsHtml } from './
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
+import { EQUIPMENT, equipmentCanvas } from './equipment.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -93,7 +94,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const fitting = createFitting({ renderer, cursor: hud.cursor });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const camTarget = new THREE.Vector3();
-  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, pickups, crushing;
+  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, artyRing, pickups, crushing;
+  const strikes = []; // artillery shells on their way: { at, t, marker }
   const run = { hp: 100, time: 0, over: false, won: false };
   let stats = { ...BASE_STATS };
   const partMeshes = [];
@@ -147,7 +149,24 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       aimBeam.add(m);
     }
     aimBeam.visible = false;
-    scene.add(aimLine, aimMark, aimBeam);
+    // the artillery strike's designation: a cyan ring the size of the area
+    // the shells land in, a cross in the middle
+    artyRing = new THREE.Group();
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x5fe6ff, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 40), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    artyRing.add(ring);
+    for (const r of [0, Math.PI / 2]) {
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.06), ringMat);
+      bar.rotation.set(-Math.PI / 2, 0, r);
+      artyRing.add(bar);
+    }
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(1, 40), new THREE.MeshBasicMaterial({ color: 0x5fe6ff, transparent: true, opacity: 0.1, depthWrite: false }));
+    fill.rotation.x = -Math.PI / 2;
+    artyRing.add(fill);
+    artyRing.visible = false;
+    scene.add(aimLine, aimMark, aimBeam, artyRing);
+    strikes.length = 0;
     tank.group.position.set(level.spawn.x, 0, level.spawn.z);
     tank.group.rotation.y = level.spawn.yaw;
     // a fresh run: the tank as it finished its last level (its saved
@@ -168,6 +187,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       rockets: false,
       ability: false, // the signature ability (E), once the level hands it over
       abilityCd: 0,
+      equipCd: 0, // the equipment's (Q) recharge
+      arty: 0, // designating an artillery strike: seconds left to pick the spot
       aiming: 0, // Piercing shot: seconds left to aim it
       dash: 0, // Dash (light tank's Shift): seconds left
       brk: 0, // Breakthrough: seconds of charge left
@@ -211,6 +232,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     hud.reset();
     hud.setHull(run.hp, stats.maxHp);
     hud.setScrap(0);
+    hud.setTokens(save.tokens());
     // a scripted level (the tutorial) hands out the main gun and the scraps
     // counter as it introduces them; anywhere else they're there from the start
     // (once its tips have been seen, the level hands them over at the start)
@@ -508,6 +530,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           bank(first.scraps);
           rewards.push(['First clear reward', `+${first.scraps} scraps`]);
         }
+        if (first.tokens) {
+          save.addTokens(first.tokens);
+          rewards.push(['First clear reward', `+${first.tokens} tokens`]);
+        }
+        if (first.equipment && EQUIPMENT[first.equipment] && !save.ownedEquipment().includes(first.equipment)) {
+          save.ownEquipment(first.equipment);
+          // fitted straight away to every tank with nothing in that slot
+          for (const t of save.tanks()) if (!save.equipment(t)) save.setEquipment(first.equipment, t);
+          save.addNews([{ kind: 'equipment', id: first.equipment }]);
+          rewards.push(['First clear reward', EQUIPMENT[first.equipment].name]);
+        }
       }
       pickups.collectAll(collect);
       hud.clearPrompt();
@@ -566,10 +599,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.chainT = MULT_HOLD;
     const mult = run.chain;
     const at = new THREE.Vector3(e.pos.x, 0.8 * e.stats.scale, e.pos.z);
-    pickups.spawn(at, e.stats.scrap > 10 ? 16 : e.stats.scrap, 'scrap', e.stats.scrap > 10 ? Math.ceil(e.stats.scrap / 16) * mult : mult);
+    // scraps: a blue crystal per five, amber shards for the rest; the odd
+    // medkit; rarely an upgrade token (bigger machines more often, the boss
+    // always a couple)
+    const big = Math.floor(e.stats.scrap / 5);
+    if (big) pickups.spawn(at, big, 'bigscrap', 5 * mult);
+    if (e.stats.scrap % 5) pickups.spawn(at, e.stats.scrap % 5, 'scrap', mult);
     run.drops++;
     if (e.stats.scale > 1.5) pickups.spawn(at, 3, 'repair', 15);
     else if (Math.random() < 0.12) pickups.spawn(at, 1, 'repair', 12);
+    const tokenChance = (e.stats.scale > 1.5 ? 1 : e.kind === 'walker' ? 0.06 : 0.015) * (run.hard ? 1.5 : 1);
+    if (Math.random() < tokenChance) pickups.spawn(at, e.stats.scale > 1.5 ? 2 : 1, 'token', 1);
     if (blasted) run.hitstop = Math.max(run.hitstop, e.stats.scale > 1.5 ? 0.25 : 0.075);
     if (run.chain >= 2) hud.damage(at.clone().setY(at.y + 1.2), 0, 'chain', `x${mult}`);
   }
@@ -580,7 +620,15 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.hp = Math.min(stats.maxHp, run.hp + p.value);
       hud.setHull(run.hp, stats.maxHp);
       if (run.hp > before) hud.damage(pos.clone().setY(2.2), run.hp - before, 'heal');
-      combat.fx.burst(pos.clone().setY(1.4), { count: 8, speed: 3, color: 0x5fe6ff, life: 0.3, size: 0.07, gravity: 4 });
+      combat.fx.burst(pos.clone().setY(1.4), { count: 8, speed: 3, color: 0x4fdc6a, life: 0.3, size: 0.07, gravity: 4 });
+    } else if (p.kind === 'token') {
+      // tokens go straight into the save: rare enough never to lose one
+      save.addTokens(p.value);
+      run.tokens = (run.tokens || 0) + p.value;
+      hud.setTokens(save.tokens(), true);
+      hud.damage(pos.clone().setY(2.4), 0, 'token', '+1 token');
+      combat.glow.flash(pos.clone().setY(1.4), 0xc77dff, 0.3, 1.2, 0.12);
+      combat.fx.burst(pos.clone().setY(1.6), { count: 16, speed: 4, color: 0xc77dff, life: 0.4, size: 0.08, gravity: 6 });
     } else {
       run.scrap += p.value;
       hud.setScrap(run.scrap);
@@ -591,8 +639,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // A shell burst: splash the machines, then let the level react (the gate).
   // small: an autocannon round. It breaks junk it lands right on; a
   // barricade or the gate takes a few of them.
-  function onImpact(at, mesh, small = false) {
-    for (const h of enemies.blast(at, stats.splash, stats.cannonDamage)) {
+  // shell: { radius, damage } instead of the gun's (an artillery shell)
+  function onImpact(at, mesh, small = false, shell = null) {
+    for (const h of enemies.blast(at, shell ? shell.radius : stats.splash, shell ? shell.damage : stats.cannonDamage)) {
       const p = new THREE.Vector3(h.e.pos.x, 1.2, h.e.pos.z);
       hud.damage(p, h.amount, 'big');
       if (h.killed) hud.damage(p.clone().setY(1.9), 0, 'kill');
@@ -792,6 +841,67 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       trigger = false;
       queued = 0;
     } else if (def.ability === 'breakthrough') breakthrough();
+  }
+
+  // Equipment (Q). The artillery strike: Q, then click (or tap) a spot; the
+  // shells come down there a moment later. Q again (or Esc) calls it off.
+  const equipId = () => {
+    const id = save.equipment(tankId);
+    return id && EQUIPMENT[id] && save.ownedEquipment().includes(id) ? id : null;
+  };
+  function equipment() {
+    const id = equipId();
+    if (!id || !run.gun || run.over || run.mode !== 'field' || run.locked) return;
+    if (run.arty > 0) return void (run.arty = 0);
+    if (run.equipCd > 0 || run.aiming > 0) return;
+    if (id === 'artillery') {
+      run.arty = 8;
+      trigger = false;
+    }
+  }
+  function callStrike(at) {
+    const E = EQUIPMENT.artillery;
+    run.arty = 0;
+    run.equipCd = E.cooldown;
+    for (let i = 0; i < E.shells; i++) {
+      // the first dead centre, the rest scattered round it
+      const a = Math.random() * Math.PI * 2;
+      const r = i ? E.radius * (0.35 + Math.random() * 0.65) : 0;
+      const p = new THREE.Vector3(at.x + Math.cos(a) * r, 0, at.z + Math.sin(a) * r);
+      p.y = level.heightAt ? level.heightAt(p.x, p.z) : 0;
+      // its impact circle on the ground, closing in as it comes
+      const marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      marker.rotation.x = -Math.PI / 2;
+      marker.position.set(p.x, p.y + 0.06, p.z);
+      scene.add(marker);
+      strikes.push({ at: p, t: E.delay + i * 0.22 + Math.random() * 0.1, total: E.delay + i * 0.22, marker });
+    }
+    hud.damage(at.clone().setY(2), 0, 'chain', 'Incoming!');
+  }
+  function strikeFrame(dt, t) {
+    const E = EQUIPMENT.artillery;
+    for (let i = strikes.length - 1; i >= 0; i--) {
+      const s = strikes[i];
+      s.t -= dt;
+      const k = Math.max(0, s.t / s.total);
+      const r = E.blast * (0.4 + 0.9 * k);
+      s.marker.scale.setScalar(r);
+      s.marker.material.opacity = 0.5 + 0.5 * (Math.sin(t * (14 + (1 - k) * 30)) > 0 ? 1 : 0.3);
+      // the last moment: a streak coming down
+      if (s.t < 0.18 && !s.streak) {
+        s.streak = true;
+        combat.glow.tracer(s.at.clone().add(new THREE.Vector3(-4, 14, 3)), s.at.clone().setY(s.at.y + 0.3), 0xfff0c8, 0.5, 0.2);
+      }
+      if (s.t <= 0) {
+        s.marker.removeFromParent();
+        s.marker.geometry.dispose();
+        strikes.splice(i, 1);
+        const at = s.at.clone().setY(s.at.y + 0.2);
+        combat.explode(at);
+        combat.shake = Math.max(combat.shake, 0.45);
+        onImpact(at, null, false, { radius: E.blast, damage: E.damage });
+      }
+    }
   }
 
   // Breakthrough (the light tank's E): a deliberate charge on full rockets,
@@ -1051,6 +1161,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.paused) return;
     if (e.code === 'Space') {
       e.preventDefault();
+      if (run.arty > 0) return void (hasAim && callStrike(aimPoint.clone()));
       if (run.aiming > 0) firePierce();
       else if (holdFire()) trigger = true;
       else fire();
@@ -1062,6 +1173,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
     if (e.code === 'KeyE') {
       if (!e.repeat) ability();
+      return;
+    }
+    if (e.code === 'KeyQ') {
+      if (!e.repeat) equipment();
       return;
     }
     if (e.code === 'KeyR') {
@@ -1086,6 +1201,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const STICK_GRAB = 96; // touches this close to the stick grab it; anything else fires
   const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
   let fireOnAim = false;
+  let strikeOnAim = false;
   function setTouch(on) {
     if (touch === on) return;
     touch = on;
@@ -1119,6 +1235,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         boost();
         return;
       }
+      const a3 = hud.ability3Center();
+      if (equipId() && Math.hypot(e.clientX - a3.x, e.clientY - a3.y) < 50) {
+        equipment();
+        return;
+      }
       const a2 = hud.ability2Center();
       if (run.ability && def.ability && Math.hypot(e.clientX - a2.x, e.clientY - a2.y) < 56) {
         ability();
@@ -1129,7 +1250,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         onMove(e); // the knob jumps straight to the thumb
       } else {
         aimAt(e.clientX, e.clientY);
-        if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
+        if (run.arty > 0) strikeOnAim = true; // the spot tapped, once the aim ray's found it
+        else if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
         else if (holdFire()) {
           trigger = true; // held down: keeps firing
           aimTouch = e.pointerId;
@@ -1138,7 +1260,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return;
     }
     setTouch(false);
+    if (e.button === 2 && run.arty > 0) return void (run.arty = 0); // right click: call it off
     if (e.button !== 0) return;
+    if (run.arty > 0) return void (hasAim && callStrike(aimPoint.clone()));
     if (run.aiming > 0) firePierce();
     else if (holdFire()) trigger = true;
     else fire();
@@ -1647,6 +1771,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.dilate -= realDt;
         dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
       }
+      if (run.arty > 0 && !(run.aiming > 0)) dt = Math.min(dt, realDt * 0.5); // picking the spot: time slows a little
       if (run.aiming > 0) {
         dt = realDt * AIM_SLOW;
         run.aiming -= realDt;
@@ -1669,6 +1794,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       reload = Math.min(1, reload + dt / stats.reload);
       run.boostCd = Math.max(0, run.boostCd - dt);
       run.abilityCd = Math.max(0, run.abilityCd - dt);
+      run.equipCd = Math.max(0, run.equipCd - dt);
+      if (run.arty > 0) {
+        run.arty -= realDt;
+        if (run.over || run.mode !== 'field') run.arty = 0;
+      }
+      strikeFrame(dt, t);
       run.shield = Math.max(0, run.shield - dt);
       if (run.chain > 0) {
         run.chainT -= dt;
@@ -1904,6 +2035,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         fireOnAim = false;
         fire();
       }
+      if (strikeOnAim) {
+        strikeOnAim = false;
+        if (run.arty > 0 && hasAim) callStrike(aimPoint.clone());
+      }
+      // the strike's ring follows the aim while it's being called in
+      artyRing.visible = run.arty > 0 && hasAim && !run.over;
+      if (artyRing.visible) {
+        artyRing.position.set(aimPoint.x, (level.heightAt ? level.heightAt(aimPoint.x, aimPoint.z) : 0) + 0.05, aimPoint.z);
+        artyRing.scale.setScalar(EQUIPMENT.artillery.radius + EQUIPMENT.artillery.blast * 0.5);
+        artyRing.rotation.y = t * 0.6;
+      }
 
       // machines
       enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit });
@@ -1930,6 +2072,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       autoFire(dt);
       combat.handleTankEvents(tank);
       combat.update(dt);
+      pickups.bounds = run.mode === 'field' ? level.bounds : null;
       pickups.update(dt, t, pos, camera, collect);
       level.update(dt, t, { combat, focus: camTarget, api });
       if (run.mode === 'depot') depotFrame(dt);
@@ -1977,7 +2120,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (client) {
         const reloading = stats.mag && run.magT > 0;
         if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME)); // the ring counts down the aim
-        else hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload);
+        else hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload, !!stats.mag && !reloading);
       }
       if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
@@ -1988,6 +2131,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setPassives(live ? passives() : []);
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
+      const eq = equipId();
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, art: equipmentCanvas(eq, 26, 26) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

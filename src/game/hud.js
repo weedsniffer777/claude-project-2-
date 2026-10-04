@@ -71,6 +71,10 @@ const CSS = `
 .hud-scrap b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
 .hud-scrap i { width: 10px; height: 14px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .hud-scrap.pop { animation: hudpop 0.18s steps(2); }
+.hud-token { padding: 6px 12px; font-size: 14px; display: flex; gap: 8px; align-items: center; color: #d9a8ff; }
+.hud-token b { font-weight: 400; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; }
+.hud-token i { width: 13px; height: 13px; border-radius: 50%; background: #c77dff; box-shadow: inset -2px -2px 0 #8a3fc4, inset 2px 2px 0 #ecd2ff; }
+.hud-token.pop { animation: hudpop 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px #c77dff, 0 0 18px 4px #c77dff88; }
 .hud-scrap.intro { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber), 0 0 18px 4px #ffb34788; }
 @keyframes hudpop { 50% { transform: scale(1.15); } }
 .hud-chain { font: 400 22px/1 'Silkscreen', monospace; color: var(--amber); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; display: grid; justify-items: end; gap: 4px; }
@@ -97,6 +101,11 @@ const CSS = `
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 84px; height: 84px; margin: -42px 0 0 -42px; }
 .hud:not(.touch) .hud-ability canvas { width: 84px; height: 84px; }
+/* the equipment button: smaller, a cyan edge with cut corners */
+.hud-ability.equip, .hud:not(.touch) .hud-ability.equip { width: 68px; height: 68px; margin: -34px 0 0 -34px; }
+.hud-ability.equip canvas, .hud:not(.touch) .hud-ability.equip canvas { width: 68px; height: 68px; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
+.hud-ability.equip.ready canvas { filter: drop-shadow(0 0 4px #bff6ff) drop-shadow(0 0 10px #5fe6ffaa); }
+.hud-ability.equip.ready::before { background: #5fe6ff; }
 /* on a computer the bottom of the screen is the tank's panel: HP in the
    bottom left, the ability buttons bottom right */
 .hud:not(.touch) .hud-hull { position: fixed; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); min-width: 300px; padding: 10px 14px 12px; }
@@ -152,7 +161,8 @@ const CSS = `
   text-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, 2px 2px #000; white-space: nowrap; transform: translate(-50%, -50%); }
 .hud-dmg.big { font-size: 24px; color: var(--amber); }
 .hud-dmg.kill { color: var(--danger); }
-.hud-dmg.heal { color: #5fe6ff; font-size: 18px; }
+.hud-dmg.heal { color: #6bf08a; font-size: 18px; }
+.hud-dmg.token { color: #d9a8ff; font-size: 18px; }
 .hud-dmg.chain { color: var(--amber); font-size: 20px; }
 .hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
@@ -308,6 +318,7 @@ export function createHud() {
     <div class="hud-right">
       <div class="hud-kills panel px" hidden>Destroyed <b>0</b></div>
       <div class="hud-scrap panel px" hidden><i></i>Scraps <b>0</b></div>
+      <div class="hud-token panel px" hidden><i></i>Tokens <b>0</b></div>
       <div class="hud-chain px" hidden><span><small>Multiplier </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
     </div>
     <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip" hidden>Skip</button></div>
@@ -320,6 +331,7 @@ export function createHud() {
     </div>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
+    <div class="hud-ability three equip" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Q</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
@@ -411,9 +423,15 @@ export function createHud() {
     const c = abilityCenter();
     return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
   };
+  // the equipment (Q), smaller, beside them
+  const ability3Center = () => {
+    const c = ability2Center();
+    return touchMode ? { x: c.x - 104, y: c.y + 14 } : { x: c.x - 96, y: c.y + 8 };
+  };
   const abilities = [
     { el: $('.hud-ability.one'), key: '', center: abilityCenter },
     { el: $('.hud-ability.two'), key: '', center: ability2Center },
+    { el: $('.hud-ability.three'), key: '', center: ability3Center },
   ];
   // ammo: a strip of shells under the reticle (magazine guns) and in the HP
   // panel (every gun)
@@ -540,6 +558,17 @@ export function createHud() {
       el.innerHTML = `<span class="zone">${zone}</span>` + names.map((n, i) => `${i ? '<span class="sep">-</span>' : ''}<span class="s ${i < current ? 'done' : i === current ? 'now' : ''}">${i < current ? '✓' : i + 1}</span>`).join('');
       el.title = names[current] || '';
     },
+    // upgrade tokens (the saved total): only shown once there are any
+    setTokens(n, pop = false) {
+      const el = $('.hud-token');
+      el.hidden = !n;
+      el.querySelector('b').textContent = n;
+      if (pop) {
+        el.classList.remove('pop');
+        void el.offsetWidth;
+        el.classList.add('pop');
+      }
+    },
     setScrap(n) {
       const el = $('.hud-scrap');
       if (n !== scrapShown) {
@@ -596,6 +625,7 @@ export function createHud() {
     },
     abilityCenter,
     ability2Center,
+    ability3Center,
     // the whole HUD fades away (the tank's been destroyed); the end panel stays
     setGone(on) {
       root.classList.toggle('gone', on);
@@ -673,12 +703,13 @@ export function createHud() {
     setPassives(list) {
       passives.set(list);
     },
-    // reload: 0 = just fired .. 1 = ready
-    setReticle(x, y, reload01) {
+    // reload: 0 = just fired .. 1 = ready. cycling: an autocannon between
+    // rounds (a dim white ring; the amber one is a real reload)
+    setReticle(x, y, reload01, cycling = false) {
       reticle.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
       const ready = reload01 >= 1;
       reload.setAttribute('stroke-dashoffset', String(RING_LEN * (1 - Math.min(1, reload01))));
-      reload.setAttribute('stroke', ready ? '#f1e9d8' : '#ffb347');
+      reload.setAttribute('stroke', ready ? '#f1e9d8' : cycling ? '#8f887c' : '#ffb347');
       cross.setAttribute('stroke', ready ? '#f1e9d8' : '#8f877a');
     },
     // kind: 'mg' | 'big' | 'kill' | 'heal' | 'chain' (text: what to show)
@@ -687,7 +718,7 @@ export function createHud() {
       el.className = `hud-dmg ${kind}`;
       el.textContent = text ?? (kind === 'kill' ? 'KILL' : kind === 'heal' ? `+${Math.round(amount)}` : Math.round(amount));
       numbersEl.append(el);
-      numbers.push({ el, p: worldPos.clone(), t: 0, vx: (Math.random() - 0.5) * 0.8, life: kind === 'mg' ? 0.55 : kind === 'chain' || kind === 'heal' ? 1.1 : 0.9 });
+      numbers.push({ el, p: worldPos.clone(), t: 0, vx: (Math.random() - 0.5) * 0.8, life: kind === 'mg' ? 0.55 : kind === 'chain' || kind === 'heal' || kind === 'token' ? 1.1 : 0.9 });
       if (numbers.length > 40) numbers.shift().el.remove();
     },
     // parts: [{ name, text, icon }] shown as icons with a hover summary
@@ -824,6 +855,7 @@ export function createHud() {
       this.setChain(0, 0);
       this.setAbility(null);
       this.setAbility(null, 1);
+      this.setAbility(null, 2);
       this.setPassives([]);
       this.setAmmo(null);
       this.setGone(false);

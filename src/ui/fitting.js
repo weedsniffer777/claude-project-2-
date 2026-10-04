@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { PARTS, statsFor, TIERS, tierOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
-import { EQUIPMENT } from '../game/equipment.js';
+import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
 import { save } from '../game/save.js';
 import { snapshotCanvas } from '../render/snapshot.js';
 
@@ -42,6 +42,8 @@ const CSS = `
 .fit .equip .box { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 8px; text-align: left; font-size: 13px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .equip button.box:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .fit .equip .box .none { color: #6d655a; }
+.fit .equip .box .eqi { width: 48px; height: 36px; image-rendering: pixelated; }
+.fit .equip .box:has(.eqi) { justify-content: flex-start; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff; }
 .fit .equip .lock { font-size: 11px; color: #8f877a; }
 .fit .right { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 300px; padding: 14px 16px 16px; display: grid; gap: 10px; }
 .fit .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
@@ -360,8 +362,11 @@ export function createFitting({ renderer, cursor }) {
     const box = document.createElement(hangar ? 'button' : 'div');
     if (hangar) box.type = 'button';
     box.className = 'box';
-    box.innerHTML = item ? '<span></span>' : `<span class="none">${owned.length ? 'Empty' : 'None yet. Found in later levels.'}</span>`;
-    if (item) box.querySelector('span').textContent = item.name;
+    box.innerHTML = item ? `<img class="eqi" alt="" src="${equipmentIcon(id, 48, 36)}"><span></span>` : `<span class="none">${owned.length ? 'Empty' : 'None yet. Found in later levels.'}</span>`;
+    if (item) {
+      box.querySelector('span').textContent = item.name;
+      box.title = item.text;
+    }
     const slot = $('.equip .slotbox');
     slot.innerHTML = '';
     slot.append(box);
@@ -374,7 +379,8 @@ export function createFitting({ renderer, cursor }) {
       for (const e of owned) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.textContent = EQUIPMENT[e].name;
+        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>`;
+        b.querySelector('span').textContent = EQUIPMENT[e].name;
         b.addEventListener('click', () => (save.setEquipment(e, o.tankId), closePop(), render()));
         pop.append(b);
       }
