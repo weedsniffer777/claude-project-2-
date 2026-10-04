@@ -1042,8 +1042,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
-    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
-    showLevel(selLevel);
+    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
+    showLevel(selLevel, true);
   }
   // the Hard mode box; a level whose Hard first clear is a part shows it
   // under the words: its picture in a gold frame, its tier, its description
@@ -1069,8 +1069,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const hardNext = (z) => z.id && save.cleared().includes(clearKey(z.id, 'easy')) && !save.cleared().includes(clearKey(z.id, 'hard'));
   // a level's two stars on the map: Easy cleared (amber), Hard (red)
   const stars = (z) => ['easy', 'hard'].map((d) => `<i class="star ${d} ${save.cleared().includes(clearKey(z.id, d)) ? 'got' : ''}"></i>`).join('');
-  function showLevel(z) {
+  // picked: just picked on the map (not a tab switch). A level already
+  // beaten on Easy then opens on Hard.
+  function showLevel(z, picked = false) {
     selLevel = z;
+    if (picked && z?.id && save.cleared().includes(clearKey(z.id, 'easy'))) save.setDifficulty('hard');
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);
     const info = brief.querySelector('.info');
     const owned = save.owned();
@@ -1305,7 +1308,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
       news.hidden = true;
       go(id);
     });
-    news.querySelector('.yel').addEventListener('click', () => (news.hidden = true));
+    // Back: off to sort the tank out (the map closes too)
+    news.querySelector('.yel').addEventListener('click', () => {
+      news.hidden = true;
+      if (open) closeRoom();
+    });
   }
   function go(id) {
     fade.classList.remove('off');

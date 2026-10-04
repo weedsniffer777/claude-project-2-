@@ -164,41 +164,43 @@ function droneRocket() {
   return g;
 }
 
-// The siege spider: level 4's boss. A huge four-legged walker that is a
-// weapons platform: its beam (like the walker's, slower to line up, harder
-// hitting), mortar barrages, rocket salvos, a chin MG; drones when hurt.
+// The siege mech: level 4's boss. A low, wide four-legged walking tank with
+// two weapons: its main gun (lines up like the walker's beam, a red funnel,
+// but fires a slow explosive shell you can see coming), and rocket
+// artillery from the launchers on its sides (red rings mark exactly where
+// each rocket comes down).
 const SPIDER = {
   ...WALKER,
   model: createSpider,
   spider: true,
+  kinetic: true,
   shatterOnDeath: true,
   hp: 1800,
   runSpeed: 2.0,
   walkSpeed: 1.3,
   turnRate: 1.2,
-  range: 24,
+  range: 26,
   tooClose: 11,
-  charge: 2.6,
-  track: 0.45,
-  lock: 0.6,
-  reload: 5.5,
-  damage: 30,
-  box: { hx: 2.6, hz: 2.6 },
+  charge: 2.2,
+  track: 0.5,
+  lock: 0.55,
+  reload: 4.2,
+  damage: 28, // the shell, a direct hit
+  shellSpeed: 12,
+  shellBlast: 2.4, // its burst
+  shellSplash: 14,
+  box: { hx: 3.0, hz: 3.0 },
   scale: 1,
   modelScale: 1,
-  aimY: 3.2,
-  muzzleY: 3.8,
-  hit: [4.2, 3.6, 3.6, 3.0],
+  aimY: 2.3,
+  muzzleY: 2.4,
+  hit: [5.6, 2.6, 4.8, 1.5],
   scrap: 80,
-  mortarEvery: 8,
-  mortarShells: 5,
-  mortarFall: 1.6,
-  mortarBlast: 1.9,
-  mortarDamage: 14,
-  rocketEvery: 6.5,
-  rocketSalvo: 6,
-  rocketSpeed: 11,
-  rocketDamage: 8,
+  artyEvery: 7.5,
+  artyRockets: 6,
+  artyFall: [1.7, 2.5], // seconds in the air (the first lands soonest)
+  artyBlast: 1.9,
+  artyDamage: 12,
 };
 
 const DRONE = {
@@ -916,7 +918,10 @@ export class Enemies {
       if (e.blind > 0 || e.stun > 0 || e.lostT > 0.6) {
         e.charge = 0; // lost it: the shot's spoiled
         e.fireTimer = 1.2;
-      } else if (e.charge <= 0) this.fireBeam(e, ctx);
+      } else if (e.charge <= 0) {
+        if (S.kinetic) this.fireShell(e, ctx);
+        else this.fireBeam(e, ctx);
+      }
     } else if (e.fireTimer <= 0 && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
       e.charge = S.charge;
       e.lockYaw = want;
@@ -947,131 +952,124 @@ export class Enemies {
     e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k, rockets: e.rocketK || 0 });
   }
 
-  // The siege spider's other weapons, on top of its beam (sniperFrame):
-  //  - a mortar barrage: red rings land round the tank, shells come down on
-  //    them a moment later (drive out of the rings)
-  //  - rocket salvos from its side pods (pods glow first), like a drone's
-  //  - the chin MG: bursts when the tank's close
-  //  - below half health it also launches attack drones (two at a time)
+  // The siege mech's rocket artillery, on top of its main gun (sniperFrame):
+  // the side launchers glow, then a volley goes up; each rocket flies a
+  // high arc that comes down exactly on its red ring (round the tank and
+  // where it's heading). Drive out of the rings.
   spiderWeapons(e, dt, t, ctx, dist) {
     const S = e.stats;
     const { tankPos } = ctx;
-    const hurt = e.hp < e.maxHp * 0.5;
-    const pace = hurt ? 0.7 : 1; // angrier: everything comes round faster
-    e.mortarT = (e.mortarT ?? 4) - dt;
-    e.rocketT = (e.rocketT ?? 2.5) - dt;
-    e.mgT = (e.mgT ?? 1) - dt;
-    e.droneT = (e.droneT ?? 2) - dt;
-    const busy = e.charge > 0; // (not while it's lining up the beam)
+    const pace = e.hp < e.maxHp * 0.5 ? 0.7 : 1; // angrier when hurt
+    e.artyT = (e.artyT ?? 3) - dt;
     const gy = (x, z) => (ctx.heightAt ? ctx.heightAt(x, z) : 0);
-    // mortars
-    if (e.mortarT <= 0 && !busy && dist < S.range + 6) {
-      e.mortarT = S.mortarEvery * pace;
-      e.shells ??= [];
+    if (e.artyT <= 0 && !(e.charge > 0) && !(e.artyLeft > 0) && !ctx.over && dist < S.range + 8) {
+      e.artyT = S.artyEvery * pace;
+      e.artyWind = 0.7;
+      // the volley's rings: one on the tank, one where it's heading, the
+      // rest scattered round them
       const lead = ctx.tankVel || { x: 0, z: 0 };
-      for (let i = 0; i < S.mortarShells; i++) {
+      e.artyAt = [];
+      for (let i = 0; i < S.artyRockets; i++) {
+        const ahead = i % 2 ? 1.4 : 0;
         const a = Math.random() * Math.PI * 2;
-        const r = i ? 1.5 + Math.random() * 3 : 0;
-        const at = new THREE.Vector3(tankPos.x + lead.x * 0.8 + Math.cos(a) * r, 0, tankPos.z + lead.z * 0.8 + Math.sin(a) * r);
-        at.y = gy(at.x, at.z);
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+        const r = i < 2 ? 0 : 2 + Math.random() * 3;
+        const x = tankPos.x + lead.x * ahead + Math.cos(a) * r;
+        const z = tankPos.z + lead.z * ahead + Math.sin(a) * r;
+        e.artyAt.push(new THREE.Vector3(x, gy(x, z), z));
+      }
+      e.artyLeft = S.artyRockets;
+      e.artyGap = 0;
+    }
+    if (e.artyWind > 0) e.artyWind -= dt;
+    e.rocketK = e.artyWind > 0 || e.artyLeft > 0 ? 1 : 0;
+    if (!(e.artyWind > 0) && e.artyLeft > 0) {
+      e.artyGap -= dt;
+      if (e.artyGap <= 0) {
+        e.artyGap = 0.14;
+        const at = e.artyAt[S.artyRockets - e.artyLeft];
+        e.artyLeft--;
+        const from = e.model.rocketMuzzle();
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
         ring.position.set(at.x, at.y + 0.07, at.z);
+        ring.scale.setScalar(S.artyBlast);
         this.scene.add(ring);
-        const from = e.model.mortarMuzzle();
-        this.combat.glow.flash(from, 0xffc070, 0.2, 1.2, 0.1);
-        this.combat.puffs.spawn(from, new THREE.Vector3(0, 3, 0), { color: 0x8d8b86, s0: 0.2, s1: 0.7, life: 0.8, drag: 2, lift: 1, fadeAt: 0.3 });
-        e.shells.push({ at, ring, t: S.mortarFall + i * 0.18, total: S.mortarFall + i * 0.18, from, shell: null });
+        const dot = new THREE.Mesh(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.18, depthWrite: false }));
+        dot.position.set(at.x, at.y + 0.06, at.z);
+        this.scene.add(dot);
+        const mesh = droneRocket();
+        mesh.position.copy(from);
+        this.scene.add(mesh);
+        const total = THREE.MathUtils.lerp(S.artyFall[0], S.artyFall[1], Math.random());
+        const apex = Math.max(from.y, at.y) + 5 + from.distanceTo(at) * 0.35;
+        e.shells ??= [];
+        e.shells.push({ from, at, ring, dot, mesh, t: 0, total, apex });
+        this.combat.glow.flash(from, 0xffb070, 0.2, 1.1, 0.08);
+        this.combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 1.5, 1.2, (Math.random() - 0.5) * 1.5), { color: 0xb8b2a6, s0: 0.2, s1: 0.7, life: 0.8, drag: 2, lift: 0.8, fadeAt: 0.3 });
       }
     }
+    // rockets in the air: along their arcs, onto their rings
+    const arc = (sh, u) => {
+      const p = sh.from.clone().lerp(sh.at, u);
+      // a parabola from the launcher's height to the ring's, peaking at apex
+      const base = THREE.MathUtils.lerp(sh.from.y, sh.at.y, u);
+      const top = sh.apex - THREE.MathUtils.lerp(sh.from.y, sh.at.y, 0.5);
+      p.y = base + 4 * top * u * (1 - u);
+      return p;
+    };
     for (let i = (e.shells?.length || 0) - 1; i >= 0; i--) {
       const sh = e.shells[i];
-      sh.t -= dt;
-      const k = Math.max(0, sh.t / sh.total);
-      sh.ring.scale.setScalar(S.mortarBlast * (0.5 + 0.7 * k));
-      sh.ring.material.opacity = Math.sin(t * (12 + (1 - k) * 30)) > 0 ? 0.95 : 0.4;
-      // the shell itself, the last bit of its fall
-      if (sh.t < 0.45) {
-        if (!sh.shell) {
-          sh.shell = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.2), new THREE.MeshBasicMaterial({ color: 0xffd9a0 }));
-          this.scene.add(sh.shell);
-        }
-        const p = sh.at.clone().add(new THREE.Vector3(-2, 9, 1.5).multiplyScalar(Math.max(0, sh.t) / 0.45));
-        if (sh.last) this.combat.glow.tracer(sh.last, p, 0xffb070, 0.14, 0.12);
-        sh.shell.position.copy(p);
-        sh.last = p;
+      sh.t += dt;
+      const u = Math.min(1, sh.t / sh.total);
+      const p = arc(sh, u);
+      const ahead = arc(sh, Math.min(1, u + 0.02));
+      sh.mesh.position.copy(p);
+      if (ahead.distanceToSquared(p) > 1e-6) {
+        sh.mesh.lookAt(ahead);
+        sh.mesh.rotateY(-Math.PI / 2);
       }
-      if (sh.t <= 0) {
+      sh.mesh.userData.flame.scale.set(0.75 + Math.random() * 0.5, 1, 1);
+      if (sh.last) this.combat.glow.tracer(sh.last, p, 0xffc070, 0.16, 0.16);
+      if (Math.random() < 0.6) this.combat.puffs.spawn(p.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.5, 0.2, (Math.random() - 0.5) * 0.5), { color: 0xd0cabe, s0: 0.12, s1: 0.5, life: 0.7, drag: 2, lift: 0.2, fadeAt: 0.2 });
+      sh.last = p;
+      // the ring tightens and blinks faster as it comes down
+      sh.ring.scale.setScalar(S.artyBlast * (1 + 0.35 * (1 - u)));
+      sh.ring.material.opacity = Math.sin(t * (10 + u * 30)) > 0 ? 0.95 : 0.45;
+      sh.dot.scale.setScalar(S.artyBlast * u);
+      if (u >= 1) {
         sh.ring.removeFromParent();
-        sh.shell?.removeFromParent();
+        sh.dot.removeFromParent();
+        sh.mesh.removeFromParent();
         e.shells.splice(i, 1);
         const at = sh.at.clone().setY(sh.at.y + 0.2);
         this.combat.explode(at);
         this.combat.shake = Math.max(this.combat.shake, 0.25);
         const tb = ctx.tankBox;
-        if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.mortarBlast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(S.mortarDamage, at);
+        if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.artyBlast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(S.artyDamage, at);
       }
     }
-    // rocket salvos: the pods glow, then the rockets come one after another
-    if (e.rocketT <= 0 && !busy && !(e.salvoLeft > 0) && e.los && dist < S.range) {
-      e.rocketT = S.rocketEvery * pace;
-      e.salvoWind = 0.8;
-    }
-    if (e.salvoWind > 0) {
-      e.salvoWind -= dt;
-      e.rocketK = 1;
-      if (e.salvoWind <= 0) {
-        e.salvoLeft = S.rocketSalvo;
-        e.salvoGap = 0;
-      }
-    } else e.rocketK = e.salvoLeft > 0 ? 1 : 0;
-    if (e.salvoLeft > 0) {
-      e.salvoGap -= dt;
-      if (e.salvoGap <= 0) {
-        e.salvoLeft--;
-        e.salvoGap = 0.16;
-        const from = e.model.rocketMuzzle();
-        const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * 2.4, tankPos.y + 0.9, tankPos.z + (Math.random() - 0.5) * 2.4);
-        const to = aim.clone().sub(from);
-        const time = to.length() / S.rocketSpeed;
-        const mesh = droneRocket();
-        mesh.position.copy(from);
-        this.scene.add(mesh);
-        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.6, damage: S.rocketDamage, rocket: mesh });
-        this.combat.glow.flash(from, 0xffb070, 0.15, 0.9, 0.06);
-      }
-    }
-    // the chin MG: bursts at the tank when it's close
-    if (e.mgT <= 0 && e.los && dist < 13) {
-      e.mgT = 2.2 * pace;
-      e.mgLeft = 8;
-      e.mgGap = 0;
-    }
-    if (e.mgLeft > 0) {
-      e.mgGap -= dt;
-      if (e.mgGap <= 0) {
-        e.mgLeft--;
-        e.mgGap = 0.07;
-        const from = e.model.mgMuzzle();
-        const dir = new THREE.Vector3(tankPos.x - from.x, 0, tankPos.z - from.z).normalize();
-        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 0.12);
-        const reach = dist + 4;
-        const time = reach / 24;
-        const vel = dir.multiplyScalar(24);
-        vel.y = (tankPos.y + 0.4 - from.y) / time;
-        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: 1.6 });
-        this.combat.glow.flash(from, 0xff6a3a, 0.08, 0.4, 0.05);
-      }
-    }
-    // hurt: attack drones out of its back, two at a time
-    if (hurt && e.droneT <= 0) {
-      e.droneT = 14;
-      const mine = this.list.filter((d) => d.alive && d.stats.flying).length;
-      for (let i = mine; i < 2; i++) {
-        const d = this.spawnDrone(e.pos.x + (Math.random() - 0.5) * 2, e.pos.z + (Math.random() - 0.5) * 2, { delay: i * 0.5 });
-        d.pos.y = 6;
-      }
-      if (mine < 2) this.onSpawnNote?.('drones');
-    }
+  }
+  // The siege mech's main gun: a slow explosive shell down the locked line
+  // (a glowing slug you can see coming; it bursts on whatever it hits)
+  fireShell(e, ctx) {
+    const S = e.stats;
+    const from = e.model.muzzle();
+    from.y = e.pos.y + HULL_Y + 0.3;
+    const dir = new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw));
+    e.recoil = 1;
+    e.fireTimer = S.reload + Math.random() * 0.8;
+    const mesh = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.26, 0.26), new THREE.MeshBasicMaterial({ color: 0xfff2d8 }));
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff6a2a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+    mesh.add(core, halo);
+    mesh.position.copy(from);
+    this.scene.add(mesh);
+    const range = S.range + 6;
+    this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: dir.multiplyScalar(S.shellSpeed), life: range / S.shellSpeed, damage: S.damage, rocket: mesh, shell: { blast: S.shellBlast, splash: S.shellSplash } });
+    const c = this.combat;
+    c.glow.flash(from, 0xffe0b0, 0.3, 2, 0.12);
+    c.glow.light(from, 0xffa060, 40, 0.15);
+    for (let i = 0; i < 6; i++) c.puffs.spawn(from, new THREE.Vector3(dir.x * 2 + (Math.random() - 0.5) * 2, 0.5 + Math.random(), dir.z * 2 + (Math.random() - 0.5) * 2), { color: 0x8f8b84, s0: 0.3, s1: 1, life: 0.9, drag: 3, lift: 0.6, fadeAt: 0.3 });
+    c.shake = Math.max(c.shake, 0.3);
   }
   // how far a beam from the muzzle along the lock goes before something solid stops it
   // The beam is laid on the hull, not the turret top: it runs along at
@@ -1126,18 +1124,28 @@ export class Enemies {
     if (!b.rocket) return;
     b.rocket.removeFromParent();
     const at = b.pos.clone().setY(Math.max(0.2, b.pos.y));
+    if (b.shell) {
+      // the mech's shell: a big burst, splash on the tank if it's close
+      this.combat.explode(at);
+      this.combat.shake = Math.max(this.combat.shake, 0.35);
+      const tb = ctx.tankBox;
+      if (tb && !b.hitTank && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < b.shell.blast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(b.shell.splash, at);
+      return;
+    }
     this.combat.glow.flash(at, 0xffb070, 0.15, 1.2, 0.08);
     this.combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
     for (let k = 0; k < 3; k++) this.combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
     const tb = ctx.tankBox;
     if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
   }
-  // the spider's mortar rounds still coming down: gone with it
+  // the mech's artillery rockets still in the air: gone with it
   clearShells(e) {
     for (const sh of e.shells || []) {
       sh.ring.removeFromParent();
-      sh.shell?.removeFromParent();
+      sh.dot.removeFromParent();
+      sh.mesh.removeFromParent();
     }
+    e.artyLeft = 0;
     e.shells = [];
   }
   // the run's over: every round and rocket still in the air just goes
@@ -1180,7 +1188,7 @@ export class Enemies {
         b.rocket.lookAt(b.pos.clone().add(b.vel));
         b.rocket.rotateY(-Math.PI / 2); // (its length runs along x)
         const fl = b.rocket.userData.flame;
-        fl.scale.set(0.75 + Math.random() * 0.5, 1, 1);
+        if (fl) fl.scale.set(0.75 + Math.random() * 0.5, 1, 1);
         // the trail, like a real rocket's (and our own missiles'): a bright
         // hot streak, and smoke puffs thrown out unevenly, some bigger, some
         // drifting, that billow and linger

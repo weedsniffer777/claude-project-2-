@@ -1,6 +1,6 @@
 // Level 4: the destroyed stadium, on a grey winter afternoon. A short
 // level: one more city street to a checkpoint, a huge empty plaza, and the
-// ruined stadium standing in it, the siege spider inside.
+// ruined stadium standing in it, the siege mech inside.
 //
 // Layout (world +X runs bottom-left to top-right on screen):
 //  1 The approach: a street of panel blocks and works buildings. Dogs,
@@ -11,7 +11,7 @@
 //    round (deep on the far side under a concourse and a broken canopy,
 //    shallow on the near side), moss and snow on the steps, a few seats
 //    left, whole sections collapsed. In through the west gate onto the
-//    churned-up ground inside; the gate shuts and the siege spider comes.
+//    churned-up ground inside; the gate shuts and the siege mech comes.
 //    Kill it; the east gate opens; out and done.
 import * as THREE from 'three';
 import { addDawn } from '../render/setup.js';
@@ -32,7 +32,7 @@ const WALK = { n: -10, s: 9 };
 const SW = 0.16;
 const SHACK_A = { x0: 90, x1: 97.6 };
 const STREET_END = 106; // the street opens onto the plaza here
-const PLAZA_Z = 24; // how far either side you can drive on the plaza
+const PLAZA_Z = 34; // about how far either side the plaza's barricade lines run
 // the stadium: a pill. Straight sides HL either side of the middle, round
 // ends of radius R. The field inside; terraces outside it.
 const CX = 214;
@@ -42,7 +42,8 @@ const R = 19;
 const W_IN = CX - HL - R; // the inside's west end (the gate's inner mouth)
 const E_IN = CX + HL + R;
 const GATE_HALF = 5.2; // half width of the gates' openings
-const END_X = E_IN + 16;
+const GATE_DEPTH = 1.4 + 8 * 1.15 + 1; // the gatehouses' depth
+const END_X = E_IN + GATE_DEPTH; // out through the east gate: done
 
 // a point on the pill's boundary pushed out by off, at parameter u in
 // [0, 1) going round from the west apex: { x, z, nx, nz } (outward normal)
@@ -101,6 +102,29 @@ function groundTexture(rand) {
   g.fillStyle = '#7c7d81';
   for (let x = STREET_END; x < MAP.x1; x += 4) g.fillRect(X(x), 0, 1, H);
   for (let z = MAP.z0; z < MAP.z1; z += 4) g.fillRect(X(STREET_END), Z(z), W - X(STREET_END), 1);
+  // grass and moss come up in the joints, and in big patches where the
+  // paving's gone
+  for (let x = STREET_END; x < MAP.x1; x += 4)
+    for (let z = MAP.z0; z < MAP.z1; z += 4) {
+      if (rand() < 0.35) {
+        g.fillStyle = rand() < 0.5 ? '#5e6340' : '#6d6a46';
+        if (rand() < 0.5) g.fillRect(X(x) - 1, Z(z), 3, 4 * GPX * (0.3 + rand() * 0.7));
+        else g.fillRect(X(x), Z(z) - 1, 4 * GPX * (0.3 + rand() * 0.7), 3);
+      }
+      if (rand() < 0.08) {
+        // a slab sunk and stained darker
+        g.fillStyle = rand() < 0.5 ? '#828387' : '#77787b';
+        g.fillRect(X(x) + 1, Z(z) + 1, 4 * GPX - 2, 4 * GPX - 2);
+      }
+    }
+  for (let i = 0; i < 160; i++) {
+    const cx = X(STREET_END + rand() * (MAP.x1 - STREET_END));
+    const cz = rand() * H;
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle = ['#59603b', '#686844', '#4d5634', '#77714a'][(rand() * 4) | 0];
+      blob(g, cx + (rand() - 0.5) * 5 * GPX, cz + (rand() - 0.5) * 4 * GPX, (0.8 + rand() * 2.2) * GPX, (0.6 + rand() * 1.5) * GPX, rand, 9);
+    }
+  }
   // cracks with weeds in them, drifts of snow, dark stains
   for (let i = 0; i < 700; i++) {
     let x = X(STREET_END + rand() * (MAP.x1 - STREET_END));
@@ -114,7 +138,7 @@ function groundTexture(rand) {
       z += Math.sin(a);
     }
   }
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 600; i++) {
     g.fillStyle = rand() < 0.6 ? '#d4d8dd' : '#c1c6cb';
     blob(g, X(STREET_END + rand() * (MAP.x1 - STREET_END)), rand() * H, (0.8 + rand() * 4) * GPX, (0.5 + rand() * 2) * GPX, rand, 9);
   }
@@ -140,9 +164,15 @@ function groundTexture(rand) {
   }
   g.closePath();
   g.clip();
-  rect(CX - HL - R - 2, CZ - R - 2, CX + HL + R + 2, CZ + R + 2, '#5a5040');
-  for (let i = 0; i < 500; i++) {
-    g.fillStyle = ['#5f5c42', '#524a3a', '#5c5440', '#65644a'][(rand() * 4) | 0];
+  rect(CX - HL - R - 2, CZ - R - 2, CX + HL + R + 2, CZ + R + 2, '#5f6140');
+  // the old pitch gone to rough grass: dry yellows and dull greens, bare
+  // mud where the machines have churned it
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = ['#6b6a44', '#5a5f3a', '#77724a', '#4f5734', '#62603e'][(rand() * 5) | 0];
+    blob(g, X(CX + (rand() - 0.5) * 2 * (HL + R)), Z(CZ + (rand() - 0.5) * 2 * R), (0.5 + rand() * 2) * GPX, (0.4 + rand() * 1.2) * GPX, rand, 9);
+  }
+  for (let i = 0; i < 260; i++) {
+    g.fillStyle = ['#5f5c42', '#524a3a', '#5c5440'][(rand() * 3) | 0];
     blob(g, X(CX + (rand() - 0.5) * 2 * (HL + R)), Z(CZ + (rand() - 0.5) * 2 * R), (0.6 + rand() * 2.5) * GPX, (0.4 + rand() * 1.4) * GPX, rand, 9);
   }
   for (let i = 0; i < 140; i++) {
@@ -218,7 +248,12 @@ function buildStadium(scene) {
   }
   {
     const R2 = rails(B, rand);
-    for (const z of [-2.25, 1.55]) R2.track(R2.straight(START_X - 1, z, STREET_END + 6, z));
+    // on past the street's end, where the two tracks part: one curving off
+    // north, one south, out beyond the barricades
+    for (const [z, s] of [[-2.25, -1], [1.55, 1]]) {
+      const turnX = STREET_END + 10 + (s < 0 ? 4 : 0);
+      R2.track([...R2.straight(START_X - 1, z, STREET_END, z), ...R2.bend({ x: STREET_END, z }, { x: turnX + 14, z }, { x: turnX + 14, z: z + s * 16 }).slice(1), ...R2.straight(turnX + 14, z + s * 16, turnX + 14, s < 0 ? MAP.z0 + 2 : MAP.z1 - 2).slice(1)]);
+    }
   }
 
   // --------------------------------------------------- 1: the approach
@@ -272,31 +307,141 @@ function buildStadium(scene) {
     for (const s of [-1, 1]) lamp(x, s < 0 ? CURB.n - 0.45 : CURB.s + 0.45, s);
   }
 
-  // ------------------------------------------------------------ the plaza
-  // A huge open square of old paving round the stadium. You can drive the
-  // middle of it, fenced off either side (the open ground goes on beyond
-  // the fences); lamp posts in rows, a few wrecks, barricades, sandbag
-  // positions, a dry fountain, a toppled statue.
-  {
-    // the fences: jersey barriers and wire, either side, out to the stadium
-    for (const s of [-1, 1]) {
-      const z = s * (PLAZA_Z + 0.8);
-      for (let x = STREET_END + 2; x < W_IN - 9; x += 2.6) {
-        if (rand() < 0.12) continue;
-        const j = put(B.root, box(2.2, 0.9, 0.6, 0x9a978f, { r: 0.05 }), x, 0.45, z + (rand() - 0.5) * 0.3);
-        j.rotation.y = (rand() - 0.5) * 0.12;
-        if (rand() < 0.6) for (let k = 0; k < 3; k++) put(B.root, cyl(0.02, 0.9, 0x3a3c3f, { seg: 4 }), x - 0.8 + k * 0.8, 1.3, z); // wire posts
-      }
-      B.block((STREET_END + W_IN) / 2, z, (W_IN - STREET_END) / 2, 0.5);
-      // the corners where the street meets the plaza
-      B.block(STREET_END - 0.5, s * (WALK.n * -s + 6) * 0, 0.5, 0);
+  // ------------------------------------------------------------ overgrowth
+  // dry grass in tufts, low shrubs, bare saplings: the city's been left to it
+  const GRASS = [0x7a7448, 0x8a8250, 0x6b6a44, 0x5e6340];
+  const SHRUB = [0x4f5a34, 0x46502f, 0x56603c, 0x5d5a3a];
+  function tuft(x, y, z, s = 1) {
+    for (let i = 0; i < 4; i++) {
+      const a = rand() * Math.PI * 2;
+      B.piece(0.05 * s, (0.25 + rand() * 0.35) * s, 0.05 * s, GRASS[(rand() * 4) | 0], x + Math.cos(a) * 0.12 * s, y + 0.15 * s, z + Math.sin(a) * 0.12 * s, (rand() - 0.5) * 0.9, rand() * 3, (rand() - 0.5) * 0.9);
     }
-    // lamp posts in rows down the plaza
-    for (let x = STREET_END + 8; x < W_IN - 14; x += 14) for (const s of [-1, 1]) lamp(x, s * (PLAZA_Z - 2), s, 0);
+    B.lump(x, y + 0.03, z, 0.32 * s, 0.1 * s, 0.28 * s, GRASS[(rand() * 4) | 0], rand() * 3);
+  }
+  function shrub(x, y, z, s = 1) {
+    for (let i = 0; i < 4; i++) B.lump(x + (rand() - 0.5) * 0.7 * s, y + (0.15 + rand() * 0.3) * s, z + (rand() - 0.5) * 0.7 * s, (0.4 + rand() * 0.35) * s, (0.3 + rand() * 0.25) * s, (0.4 + rand() * 0.35) * s, SHRUB[(rand() * 4) | 0], rand() * 3);
+  }
+  function sapling(x, y, z, s = 1) {
+    const h = (1.6 + rand() * 1.4) * s;
+    B.piece(0.09 * s, h, 0.09 * s, 0x4a3f34, x, y + h / 2, z, (rand() - 0.5) * 0.15, 0, (rand() - 0.5) * 0.15);
+    for (let i = 0; i < 5; i++) {
+      const a = rand() * Math.PI * 2;
+      const l = (0.5 + rand() * 0.6) * s;
+      B.piece(0.04 * s, l, 0.04 * s, 0x4a3f34, x + Math.cos(a) * l * 0.35, y + h * (0.55 + rand() * 0.4), z + Math.sin(a) * l * 0.35, Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+    }
+    if (rand() < 0.6) shrub(x, y + h * 0.75, z, 0.6 * s);
+  }
+  const overgrow = (x, y, z, s = 1) => {
+    const r = rand();
+    if (r < 0.6) tuft(x, y, z, s);
+    else if (r < 0.9) shrub(x, y, z, s * 0.8);
+    else sapling(x, y, z, s);
+  };
+
+  // ------------------------------------------------------------ the plaza
+  // A huge open square of old paving round the stadium, gone to weeds. You
+  // can drive a wide stretch of it; either side it's closed off by ragged
+  // lines of whatever was to hand (jersey barriers, sandbags, containers,
+  // wrecks, heaps of rubble, tank traps), and the open ground goes on
+  // beyond. Planters with dead trees, lamp posts, a dry fountain, a toppled
+  // statue, sandbag positions, wrecks.
+  // outer edge of the stands at a point: how far out from the pill's
+  // boundary the terraces (and their walls) reach that way
+  const ROW_W = 1.15; // how far each terrace row steps back
+  const ROW_H = 0.62; // and up
+  const rowsAt = (nz) => (nz < -0.6 ? 12 : nz > 0.6 ? 4 : 8); // north deep, south shallow, ends between
+  const outside = (x, z) => {
+    const dx = Math.max(0, Math.abs(x - CX) - HL);
+    const d = Math.hypot(dx, z - CZ);
+    return d - (R + 1.4 + rowsAt((z - CZ) / Math.max(d, 1e-3)) * ROW_W + 0.4);
+  };
+  // a barricade line along a polyline: pieces end to end with no gaps, each
+  // with its own block (nothing invisible)
+  const bags = (x, z, len, yaw, layers = 3) => {
+    const c = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    for (let k = 0; k < layers; k++)
+      for (let i = 0; i < len / 0.5; i++) {
+        const u = -len / 2 + 0.25 + i * 0.5 + (k % 2) * 0.12;
+        if (u > len / 2 - 0.2) continue;
+        B.piece(0.52, 0.22, 0.34, k % 2 ? 0x8a7b5c : 0x7f7254, x + c * u, 0.11 + k * 0.21, z - sn * u, 0, yaw + (rand() - 0.5) * 0.1, 0);
+      }
+    B.block(x, z, len / 2, 0.3, yaw);
+    B.hitBox(x, 0.35, z, len, 0.7, 0.6, yaw);
+  };
+  const hedgehog = (x, z, yaw) => {
+    for (const [rx, rz] of [[0.8, 0], [-0.8, 0], [0, 1.57]]) B.piece(1.9, 0.18, 0.18, 0x4a4c50, x, 0.6, z, rx, yaw + 0.8 + rz, 0.7 * Math.sign(rx || 1));
+    B.block(x, z, 0.75, 0.75, yaw);
+  };
+  function barricade(pts) {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      const L = Math.hypot(b.x - a.x, b.z - a.z);
+      const yaw = -Math.atan2(b.z - a.z, b.x - a.x);
+      const ux = (b.x - a.x) / L;
+      const uz = (b.z - a.z) / L;
+      let u = 0;
+      while (u < L) {
+        const r = rand();
+        const len = r < 0.32 ? 1.9 : r < 0.5 ? 3 : r < 0.64 ? 6 : r < 0.76 ? 4.4 : r < 0.9 ? 3.2 : 1.6;
+        const m = Math.min(len, L - u + 0.4);
+        const cx = a.x + ux * (u + m / 2);
+        const cz = a.z + uz * (u + m / 2);
+        const w = (rand() - 0.5) * 0.2;
+        if (len === 1.9) {
+          K.jersey(B, cx, cz, yaw + w, 0.9, Math.max(1, m));
+          if (rand() < 0.4) for (let k = -1; k <= 1; k++) B.piece(0.04, 0.8, 0.04, 0x3a3c3f, cx + ux * k * 0.6, 1.3, cz + uz * k * 0.6); // wire posts
+        } else if (len === 3) bags(cx, cz, m, yaw + w);
+        else if (len === 6 && m > 5) K.container(B, cx, 0, cz, yaw + w * 0.5, [0x7a4a3a, 0x4f6a5a, 0x6a6f74, 0x8a7a4a][(rand() * 4) | 0]);
+        else if (len === 4.4 && m > 4) P.car(B, cx, cz, yaw + Math.PI * (rand() < 0.5 ? 0 : 1) + w, { kind: ['sedan', 'van', 'hatch'][(rand() * 3) | 0], paint: BURNT_PAINT[(rand() * 6) | 0], flipped: rand() < 0.2 });
+        else if (len === 3.2) {
+          K.rubble(B, cx, cz, 1.7, 1.2, { slabs: 2 });
+          B.block(cx, cz, m / 2, 0.9, yaw);
+        } else hedgehog(cx, cz, yaw);
+        if (rand() < 0.5) overgrow(cx + (rand() - 0.5) * m, 0, cz + (rand() < 0.5 ? -1 : 1) * (0.9 + rand() * 0.5));
+        u += m;
+      }
+    }
+  }
+  // run a line on from its last point till it meets the stands
+  const dock = (pts) => {
+    const p = { ...pts[pts.length - 1] };
+    const tx = THREE.MathUtils.clamp(p.x, CX - HL, CX + HL);
+    const d = Math.hypot(tx - p.x, CZ - p.z);
+    for (let k = 0; k < 80 && outside(p.x, p.z) > -0.8; k++) {
+      p.x += ((tx - p.x) / d) * 0.5;
+      p.z += ((CZ - p.z) / d) * 0.5;
+    }
+    pts.push(p);
+    return pts;
+  };
+  {
+    for (const s of [-1, 1]) {
+      const zs = s < 0 ? -WALK.n : WALK.s; // (the street's buildings end here)
+      const line = [{ x: STREET_END + 1.2, z: s * (zs + 0.2) }, { x: STREET_END + 1.4, z: s * (PLAZA_Z - 3) }];
+      // out along the side, kinking in and out
+      for (let x = STREET_END + 8; x < CX - HL - R - 4; x += 10 + rand() * 6) line.push({ x, z: s * (PLAZA_Z + (rand() - 0.5) * 7) });
+      barricade(dock(line));
+    }
+    // lamp posts in rows down the plaza, planters with dead trees between
+    for (let x = STREET_END + 9; x < W_IN - 16; x += 15) {
+      for (const s of [-1, 1]) {
+        lamp(x, s * (PLAZA_Z - 9), s, 0);
+        const px = x + 7;
+        const pz = s * (PLAZA_Z - 9);
+        put(B.root, box(2.4, 0.6, 2.4, 0x9a978f, { r: 0.05 }), px, 0.3, pz);
+        B.lump(px, 0.6, pz, 1.0, 0.12, 1.0, 0x4d4436);
+        B.block(px, pz, 1.2, 1.2);
+        if (rand() < 0.7) sapling(px, 0.6, pz, 1.3);
+        else shrub(px, 0.6, pz, 1.3);
+      }
+    }
     // a dry fountain, a toppled statue on its plinth
     put(B.root, cyl(3.4, 0.7, 0x9a978f, { seg: 18 }), 128, 0.35, -12);
-    put(B.root, cyl(3.0, 0.72, 0xc7cacf, { seg: 18 }), 128, 0.37, -12);
+    put(B.root, cyl(3.0, 0.72, 0x6d6a4c, { seg: 18 }), 128, 0.37, -12);
     put(B.root, cyl(0.7, 2.2, 0x8a877f, { seg: 10 }), 128, 1.1, -12);
+    for (let i = 0; i < 6; i++) tuft(128 + (rand() - 0.5) * 4, 0.72, -12 + (rand() - 0.5) * 4, 1.2);
     B.block(128, -12, 3.4, 3.4);
     put(B.root, box(2.6, 1.6, 2.6, 0x8d8b86, { r: 0.05 }), 150, 0.8, 12);
     const st = put(B.root, box(0.9, 3.6, 0.9, 0x6f7a74, { r: 0.12 }), 152.4, 0.5, 13);
@@ -304,25 +449,34 @@ function buildStadium(scene) {
     put(B.root, box(0.8, 0.8, 0.8, 0x6f7a74, { r: 0.2 }), 154.8, 0.45, 13.2);
     B.block(151, 12.5, 2.4, 1.6);
     // sandbag positions and wrecks
-    const bags = (x, z, len, yaw) => {
-      for (let i = 0; i < len / 0.5; i++) for (let k = 0; k < 3; k++) B.piece(0.5, 0.22, 0.32, 0x8a7b5c, x + Math.cos(yaw) * (i * 0.5 + k * 0.25), 0.11 + k * 0.22, z - Math.sin(yaw) * (i * 0.5 + k * 0.25), 0, yaw, 0);
-      B.block(x + (Math.cos(yaw) * len) / 2, z - (Math.sin(yaw) * len) / 2, len / 2, 0.25, yaw);
-    };
     bags(118, 6, 4, 0.4);
     bags(140, -6, 5, -0.3);
     bags(158, 4, 4, 1.2);
+    bags(166, -20, 4, 0.2);
+    bags(122, 22, 5, -0.6);
     wreck(124, 14, 0.9, { kind: 'van', paint: 0x6b7458 });
     wreck(146, -16, -0.5, { kind: 'sedan', paint: BURNT_PAINT[3] });
+    wreck(162, 22, 0.3, { kind: 'hatch', paint: BURNT_PAINT[1] });
     B.crushable(() => P.bus(B, 136, 6, 0.25), { kind: 'prop', heavy: true, armored: true });
-    for (const [x, z, yaw] of [[112, -6, 1.5], [132, 16, 1.4], [162, -14, 1.6]]) K.jersey(B, x, z, yaw, 1.0, 1.8);
-    K.rubble(B, 120, -18, 2, 1.3, { slabs: 2, solid: true });
-    // far off beyond the fences: the city's edge, blocks set well back
-    K.building({ x0: 112, x1: 150, zf: -PLAZA_Z - 26, floors: 9 });
-    K.building({ x0: 156, x1: 190, zf: -PLAZA_Z - 34, floors: 8 });
-    K.southBlock(110, 140, 3, PLAZA_Z + 22);
-    // a few abandoned things out on the open ground beyond the fences
-    for (const [x, z, yaw] of [[126, -36, 0.5], [170, 34, -0.3], [150, 38, 1.2], [118, 32, 0.2]]) P.car(B, x, z, yaw, { kind: ['sedan', 'van', 'hatch'][(rand() * 3) | 0], paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false });
-    for (let i = 0; i < 12; i++) K.rubble(B, STREET_END + 10 + rand() * 120, (rand() < 0.5 ? -1 : 1) * (32 + rand() * 20), 1 + rand() * 1.5, 0.8 + rand(), { slabs: 1 });
+    for (const [x, z, yaw] of [[112, -6, 1.5], [132, 16, 1.4], [162, -12, 1.6], [144, 26, 0.3]]) K.jersey(B, x, z, yaw, 1.0, 1.8);
+    K.rubble(B, 120, -20, 2, 1.3, { slabs: 2, solid: true });
+    K.rubble(B, 156, -28, 1.8, 1.1, { slabs: 2, solid: true });
+    // weeds all over
+    for (let i = 0; i < 420; i++) {
+      const x = STREET_END + 2 + rand() * (CX + HL + R - STREET_END);
+      const z = (rand() - 0.5) * 2 * (PLAZA_Z + 20);
+      if (outside(x, z) < 1) continue;
+      if (rand() < 0.75) tuft(x, 0, z, 0.8 + rand() * 0.6);
+      else shrub(x, 0, z, 0.6 + rand() * 0.6);
+    }
+    // far off beyond the barricades: the city's edge, blocks set well back
+    K.building({ x0: 112, x1: 150, zf: -PLAZA_Z - 22, floors: 9 });
+    K.building({ x0: 156, x1: 186, zf: -PLAZA_Z - 30, floors: 8 });
+    K.southBlock(110, 140, 3, PLAZA_Z + 20);
+    // a few abandoned things out on the open ground beyond
+    for (const [x, z, yaw] of [[136, -44, 0.5], [170, 46, -0.3], [150, 50, 1.2], [118, 44, 0.2]]) P.car(B, x, z, yaw, { kind: ['sedan', 'van', 'hatch'][(rand() * 3) | 0], paint: BURNT_PAINT[(rand() * 6) | 0], solidBlock: false });
+    for (let i = 0; i < 12; i++) K.rubble(B, STREET_END + 10 + rand() * 80, (rand() < 0.5 ? -1 : 1) * (PLAZA_Z + 7 + rand() * 14), 1 + rand() * 1.5, 0.8 + rand(), { slabs: 1 });
+    for (let i = 0; i < 30; i++) sapling(STREET_END + 6 + rand() * 90, 0, (rand() < 0.5 ? -1 : 1) * (PLAZA_Z + 5 + rand() * 18), 1 + rand() * 0.5);
   }
 
   // ----------------------------------------------------------- the stadium
@@ -330,9 +484,6 @@ function buildStadium(scene) {
   // Deep on the far (north) side, medium at the ends, shallow on the near
   // side so you can see in. Sections collapsed into rubble here and there.
   // Gaps at the west and east ends for the gates.
-  const ROW_W = 1.15; // how far each row steps back
-  const ROW_H = 0.62; // and up
-  const rowsAt = (nz, nx) => (nz < -0.6 ? 12 : nz > 0.6 ? 4 : 8); // north deep, south shallow, ends between
   const atGate = (p) => Math.abs(p.nz) < 0.3 && Math.abs(p.z - CZ) < GATE_HALF + 0.5;
   const N = Math.round(PILL_LEN / 2.4);
   const segs = [];
@@ -344,53 +495,100 @@ function buildStadium(scene) {
     const a = pillAt(u0);
     const b = pillAt(u1);
     const yaw = -Math.atan2(b.z - a.z, b.x - a.x);
-    const rows = rowsAt(pm.nz, pm.nx);
-    // collapsed: the upper rows gone into a heap at the foot
-    const broken = rand() < 0.1 ? 2 + ((rand() * (rows - 2)) | 0) : rows;
-    segs.push({ pm, a, b, yaw, rows, broken });
+    const rows = rowsAt(pm.nz);
+    segs.push({ pm, a, b, yaw, rows, broken: rows, sag: 0 });
   }
-  const STEP = [0x8d8b86, 0x9a978f, 0x86847f];
-  const SEAT = [0xd84a2a, 0xc0392b, 0x3c63a6];
-  for (const s of segs) {
-    const { pm, a, b, yaw } = s;
-    const len0 = Math.hypot(b.x - a.x, b.z - a.z);
+  // a few whole sections collapsed (the upper rows come down in a heap),
+  // and the sections beside them sagging towards the gap
+  for (let i = 0; i < segs.length; i++) {
+    if (rand() > 0.07) continue;
+    const s = segs[i];
+    s.broken = 1 + ((rand() * Math.max(1, s.rows - 3)) | 0);
+    for (const j of [i - 1, i + 1]) if (segs[j] && segs[j].broken === segs[j].rows) segs[j].sag = j < i ? 1 : -1;
+  }
+  const STEP = [0x8f8d88, 0x8a8883, 0x94928c];
+  // the seats: plastic shells, faded; a colour to each block of sections
+  const SEATS = [0x9c5546, 0x5f6f86, 0x9c5546, 0x8f8a6a];
+  const len = (s, off) => Math.hypot(s.b.x - s.a.x, s.b.z - s.a.z) * (Math.abs(s.pm.nz) === 1 ? 1 : (R + off) / R) + 0.06;
+  segs.forEach((s, si) => {
+    const { pm, yaw } = s;
+    const seat = SEATS[Math.floor(si / 6) % SEATS.length];
+    const c = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    const outer = 1.4 + s.rows * ROW_W;
     for (let k = 0; k < s.broken; k++) {
       const off = 1.4 + k * ROW_W;
+      const L = len(s, off);
+      // sagging: the upper rows dropped a little and tilted, towards the gap
+      const drop = s.sag ? Math.max(0, k - 1) * 0.12 : 0;
+      const h = 0.7 + k * ROW_H - drop;
       const p = { x: pm.x + pm.nx * off, z: pm.z + pm.nz * off };
-      // (longer as they go out round the curves)
-      const len = len0 * (pm.nz === -1 || pm.nz === 1 ? 1 : (R + off) / R) + 0.06;
-      const h = 0.7 + k * ROW_H;
-      const step = put(B.root, box(len, h, ROW_W + 0.02, STEP[k % 3], { r: 0.015 }), p.x, h / 2, p.z);
-      step.rotation.y = yaw;
+      const step = put(B.root, box(L, h, ROW_W + 0.02, STEP[k % 3], { r: 0.015 }), p.x, h / 2, p.z);
+      step.rotation.order = 'YXZ';
+      step.rotation.set(0, yaw, s.sag * Math.min(0.06, drop * 0.08));
       step.castShadow = step.receiveShadow = true;
-      // the bench lip along each row, a little paler and worn
-      if (rand() < 0.85) B.piece(len * (0.6 + rand() * 0.4), 0.08, 0.32, 0xb4b1a9, p.x + pm.nx * 0.3, h + 0.04, p.z + pm.nz * 0.3, 0, yaw, 0);
-      // moss and snow on the treads, a seat or two left
-      if (rand() < 0.35) B.lump(p.x, h + 0.02, p.z, len * 0.35, 0.05, 0.35, rand() < 0.5 ? 0x4f5a34 : 0xd6d9dd, yaw);
-      if (rand() < 0.12) B.piece(0.32, 0.32, 0.3, SEAT[(rand() * 3) | 0], p.x - pm.nx * 0.1, h + 0.18, p.z - pm.nz * 0.1, -0.3, yaw, 0);
+      // the seats along the row: shell and back, many gone, some knocked flat
+      const n = Math.floor(L / 0.62);
+      for (let q = 0; q < n; q++) {
+        if (rand() < 0.42) {
+          if (rand() < 0.15) B.piece(0.08, 0.05, 0.08, 0x4a4c50, p.x + c * (-L / 2 + 0.31 + q * 0.62), h + 0.03, p.z - sn * (-L / 2 + 0.31 + q * 0.62)); // a bare stub
+          continue;
+        }
+        const u = -L / 2 + 0.31 + q * 0.62;
+        const sx = p.x + c * u + pm.nx * 0.05;
+        const sz = p.z - sn * u + pm.nz * 0.05;
+        const col = rand() < 0.1 ? 0xb4b1a9 : seat;
+        B.piece(0.06, 0.26, 0.06, 0x4a4c50, sx, h + 0.13, sz, 0, yaw, 0);
+        B.piece(0.44, 0.07, 0.38, col, sx, h + 0.3, sz, 0, yaw, 0);
+        const knocked = rand() < 0.12;
+        B.piece(0.44, 0.36, 0.06, col, sx + pm.nx * (knocked ? 0.05 : 0.2), h + (knocked ? 0.36 : 0.5), sz + pm.nz * (knocked ? 0.05 : 0.2), knocked ? 1.3 : 0.12, yaw, 0);
+      }
+      // overgrowth on the treads, the odd drift of snow
+      if (rand() < 0.3) tuft(p.x + c * (rand() - 0.5) * L, h, p.z - sn * (rand() - 0.5) * L, 0.8);
+      if (rand() < 0.06) shrub(p.x + c * (rand() - 0.5) * L, h, p.z - sn * (rand() - 0.5) * L, 0.6);
+      if (rand() < 0.12) B.lump(p.x + c * (rand() - 0.5) * L * 0.5, h + 0.02, p.z - sn * (rand() - 0.5) * L * 0.5, L * 0.25, 0.04, 0.3, 0xd6d9dd, yaw);
     }
     if (s.broken < s.rows) {
-      // the rest of the section in a heap of slabs and rubble down its front
+      // collapsed: the broken rows' slabs slid down onto each other, tilted,
+      // rebar out of the break, a heap of rubble down the front
       const off = 1.4 + s.broken * ROW_W;
-      K.rubble(B, pm.x + pm.nx * off, pm.z + pm.nz * off, 2.2, 0.8 + s.broken * ROW_H, { slabs: 3 });
-      for (let i = 0; i < 2; i++) B.chunk(2.2, 0.3, 1.1, STEP[i], pm.x + pm.nx * (off + 0.8), 0.6 + s.broken * ROW_H * 0.5, pm.z + pm.nz * (off + 0.8), (rand() - 0.5) * 0.8, yaw + (rand() - 0.5), (rand() - 0.5) * 0.8);
+      for (let k = s.broken; k < s.rows; k++) {
+        const o = off + (k - s.broken) * ROW_W * 0.7;
+        const m = B.chunk(len(s, o) * (0.5 + rand() * 0.35), 0.35, ROW_W * 1.2, STEP[k % 3], pm.x + pm.nx * o + c * (rand() - 0.5) * 0.8, 0.5 + (k - s.broken) * 0.35 + s.broken * ROW_H * 0.4, pm.z + pm.nz * o - sn * (rand() - 0.5) * 0.8, 0, 0, 0);
+        m.rotation.order = 'YXZ';
+        m.rotation.set((rand() - 0.5) * 0.5, yaw + (rand() - 0.5) * 0.4, (rand() - 0.5) * 0.3);
+      }
+      K.rubble(B, pm.x + pm.nx * (off + 1), pm.z + pm.nz * (off + 1), 2.3, 0.6 + s.broken * ROW_H * 0.7, { slabs: 2 });
+      for (const side of [-1, 1]) B.rebar(pm.x + pm.nx * off + c * side * len(s, off) * 0.45, 0.6 + s.broken * ROW_H, pm.z + pm.nz * off - sn * side * len(s, off) * 0.45, 3);
+      for (let i = 0; i < 3; i++) overgrow(pm.x + pm.nx * (off + rand() * 3) + c * (rand() - 0.5) * 2, 0.3, pm.z + pm.nz * (off + rand() * 3) - sn * (rand() - 0.5) * 2);
     } else {
-      // the back wall behind the top row, a railing along it
-      const off = 1.4 + s.rows * ROW_W;
-      const h = 1.6 + s.rows * ROW_H;
-      const w = put(B.root, box(len0 * (pm.nz === -1 || pm.nz === 1 ? 1 : (R + off) / R) + 0.1, h, 0.45, 0x7d7a73, { r: 0.02 }), pm.x + pm.nx * off, h / 2, pm.z + pm.nz * off);
+      // the back wall behind the top row, its top broken here and there,
+      // ivy up it
+      const h = 1.6 + s.rows * ROW_H - (rand() < 0.2 ? 0.6 + rand() : 0);
+      const w = put(B.root, box(len(s, outer) + 0.1, h, 0.45, 0x7d7a73, { r: 0.02 }), pm.x + pm.nx * outer, h / 2, pm.z + pm.nz * outer);
       w.rotation.y = yaw;
       w.castShadow = true;
-      if (rand() < 0.7) put(B.root, box(0.05, 0.8, 0.05, 0x4a3f38), pm.x + pm.nx * (off - 0.3), h + 0.4, pm.z + pm.nz * (off - 0.3));
+      if (rand() < 0.45) {
+        const ih = 1 + rand() * (h - 1);
+        const iv = put(B.root, box(0.8 + rand() * 1.4, ih, 0.08, SHRUB[(rand() * 4) | 0], { r: 0.03 }), pm.x + pm.nx * (outer + 0.27), ih / 2, pm.z + pm.nz * (outer + 0.27));
+        iv.rotation.y = yaw;
+      }
+      if (rand() < 0.4) overgrow(pm.x + pm.nx * (outer + 0.9), 0, pm.z + pm.nz * (outer + 0.9));
     }
+    // a block over the whole stand, from just behind the pitch-side wall to
+    // its back: no driving into it from either side
+    const mo = (0.75 + outer + 0.3) / 2;
+    B.block(pm.x + pm.nx * mo, pm.z + pm.nz * mo, len(s, outer) / 2 + 0.1, (outer + 0.3 - 0.75) / 2, yaw);
     // the pitch-side wall: a low concrete wall round the inside, solid
-    const w = put(B.root, box(len0 + 0.08, 1.1, 0.4, 0x8d8b86, { r: 0.02 }), pm.x + pm.nx * 0.5, 0.55, pm.z + pm.nz * 0.5);
+    const L0 = Math.hypot(s.b.x - s.a.x, s.b.z - s.a.z);
+    const w = put(B.root, box(L0 + 0.08, 1.1, 0.4, 0x8d8b86, { r: 0.02 }), pm.x + pm.nx * 0.5, 0.55, pm.z + pm.nz * 0.5);
     w.rotation.y = yaw;
     B.solid(w);
-    B.block(pm.x + pm.nx * 0.5, pm.z + pm.nz * 0.5, len0 / 2 + 0.05, 0.25, yaw);
+    B.block(pm.x + pm.nx * 0.5, pm.z + pm.nz * 0.5, L0 / 2 + 0.05, 0.25, yaw);
+    if (rand() < 0.35) tuft(pm.x - pm.nx * 0.3, 0, pm.z - pm.nz * 0.3, 1.1);
     // a run of rusted fence above it here and there
-    if (rand() < 0.4) for (let k = -1; k <= 1; k++) put(B.root, box(0.05, 1.6, 0.05, 0x5a3f30), pm.x + pm.nx * 0.5 + Math.cos(yaw) * k * len0 * 0.4, 1.9, pm.z + pm.nz * 0.5 - Math.sin(yaw) * k * len0 * 0.4);
-  }
+    if (rand() < 0.4) for (let k = -1; k <= 1; k++) put(B.root, box(0.05, 1.6, 0.05, 0x5a3f30), pm.x + pm.nx * 0.5 + c * k * L0 * 0.4, 1.9, pm.z + pm.nz * 0.5 - sn * k * L0 * 0.4);
+  });
   // the north side: a concourse building along the top (brick, rows of
   // windows, graffiti), and a canopy roof cantilevered over the top rows,
   // half of it gone
@@ -404,7 +602,10 @@ function buildStadium(scene) {
     wall.castShadow = true;
     for (let x = x0 + 1.5; x < x1 - 1; x += 2.4) {
       for (const y of [H - 2.2, H - 4.6]) put(B.root, box(1.3, 1.4, 0.06, rand() < 0.3 ? 0x2a2b2e : 0x1d1f22), x, y, zf + 0.02);
-      if (rand() < 0.3) put(B.root, box(1.4 + rand(), 0.7 + rand() * 0.6, 0.04, [0x3c63a6, 0xc42a20, 0xe8e4da, 0x5f7a46][(rand() * 4) | 0]), x + 0.6, 1.1 + rand() * 2, zf + 0.03); // graffiti
+      if (rand() < 0.25) {
+        const ih = 1.5 + rand() * 4;
+        put(B.root, box(1.2 + rand() * 1.5, ih, 0.08, SHRUB[(rand() * 4) | 0], { r: 0.03 }), x + 0.6, ih / 2, zf + 0.05); // ivy
+      }
     }
     put(B.root, box(x1 - x0, 0.3, 3.4, 0x6d6a64, { r: 0.02 }), (x0 + x1) / 2, H + 0.15, zf - 1.5);
     // the canopy: cantilever beams out over the rows, panels on them, many missing
@@ -440,14 +641,17 @@ function buildStadium(scene) {
     }
     put(B.root, box(depth, 1.4, GATE_HALF * 2 + 2.8, 0x6d6a64, { r: 0.04 }), cx, 6.9, CZ); // the lintel
     put(B.root, box(0.2, 0.5, GATE_HALF * 2, 0x2a2b2e), gx + s * depth, 6.0, CZ); // the dark mouth's top
-    for (let i = 0; i < 4; i++) put(B.root, box(1.2 + rand(), 0.8 + rand() * 0.6, 0.04, [0x3c63a6, 0xc42a20, 0xe8e4da][(rand() * 3) | 0]), cx + (rand() - 0.5) * depth * 0.6, 2 + rand() * 2, CZ + (rand() < 0.5 ? -1 : 1) * (GATE_HALF + 1.42));
+    for (let i = 0; i < 2; i++) {
+      const ih = 2 + rand() * 3;
+      put(B.root, box(1.2 + rand(), ih, 0.08, SHRUB[(rand() * 4) | 0], { r: 0.03 }), cx + (rand() - 0.5) * depth * 0.6, ih / 2, CZ + (i ? -1 : 1) * (GATE_HALF + 1.44)); // ivy
+    }
     const shutter = new THREE.Group();
     shutter.position.set(gx + s * 0.6, 0, CZ);
     B.add(shutter);
-    B.keep(shutter);
     put(shutter, box(0.2, 5.8, GATE_HALF * 2, 0x5f6670, { r: 0.02 }), 0, 2.9, 0);
     for (let y = 0.4; y < 5.6; y += 0.34) put(shutter, box(0.24, 0.04, GATE_HALF * 2, 0x4d535b), 0, y, 0);
     put(shutter, box(0.28, 0.3, GATE_HALF * 2, 0xc99a2e), 0, 0.15, 0);
+    B.keep(shutter); // (after its parts are on: the static merge would bake them in place, shut)
     gates.push({ shutter, open: 1, want: 1, block: { x: gx + s * 0.6, z: CZ, hx: 0.4, hz: GATE_HALF, yaw: 0 } });
   }
   // inside: the ground churned up, and the wreckage of the fighting to use
@@ -461,7 +665,13 @@ function buildStadium(scene) {
       B.solid(j);
       B.block(x, z, w / 2, 0.45, yaw);
     };
-    for (const [x, z, yaw] of [[CX - 26, -7, 0.3], [CX - 18, 9, -0.4], [CX - 4, -12, 1.2], [CX + 6, 8, 0.2], [CX + 16, -6, 1.5], [CX + 28, 7, 0.1], [CX - 8, 2, 0.8]]) cover(x, z, yaw);
+    for (const [x, z, yaw] of [[CX - 26, -7, 0.3], [CX - 4, -12, 1.2], [CX + 16, -6, 1.5]]) cover(x, z, yaw);
+    bags(CX - 18, 9, 4, -0.4);
+    bags(CX + 6, 8, 3.5, 0.2);
+    K.container(B, CX + 28, 0, 8, 0.15, 0x4f6a5a);
+    for (const [x, z, yaw] of [[CX - 8, 2, 0.8], [CX - 9.4, 3.6, 0.9]]) K.jersey(B, x, z, yaw, 1.0, 1.8);
+    hedgehog(CX - 30, -12, 0.3);
+    hedgehog(CX + 32, -9, 1.1);
     K.rubble(B, CX + 2, -1, 2.4, 1.6, { solid: true, slabs: 3 });
     K.rubble(B, CX - 30, 10, 1.8, 1.2, { solid: true });
     K.rubble(B, CX + 22, 13, 2, 1.4, { solid: true });
@@ -480,11 +690,18 @@ function buildStadium(scene) {
       const s = 0.1 + rand() * 0.3;
       B.piece(s * (1 + rand()), s * 0.6, s, CONCRETE[(rand() * 5) | 0], x, s * 0.25, z, rand(), rand() * 3, rand());
     }
-    // weeds and dead grass tufts
-    for (let i = 0; i < 90; i++) {
-      const x = CX + (rand() - 0.5) * 2 * (HL + R - 2);
-      const z = CZ + (rand() - 0.5) * 2 * (R - 2);
-      if (inPill(x, z, 1.5)) B.lump(x, 0.05, z, 0.3 + rand() * 0.4, 0.15 + rand() * 0.2, 0.3 + rand() * 0.3, rand() < 0.5 ? 0x5f5a3a : 0x4f5a34, rand() * 3);
+    // the pitch gone wild: grass in tufts and clumps, shrubs, a few
+    // saplings up against the walls
+    for (let i = 0; i < 380; i++) {
+      const x = CX + (rand() - 0.5) * 2 * (HL + R - 1);
+      const z = CZ + (rand() - 0.5) * 2 * (R - 1);
+      if (!inPill(x, z, 1.2)) continue;
+      if (rand() < 0.85) tuft(x, 0, z, 0.8 + rand() * 0.7);
+      else shrub(x, 0, z, 0.6 + rand() * 0.5);
+    }
+    for (let i = 0; i < 14; i++) {
+      const p = pillAt(rand(), -2.2);
+      if (Math.abs(p.z - CZ) > GATE_HALF + 1) sapling(p.x, 0, p.z, 1 + rand() * 0.4);
     }
   }
 
@@ -511,7 +728,7 @@ function buildStadium(scene) {
   // ---------------------------------------------------- the level script
   const SECTORS = ['The approach', 'The stadium'];
   const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
-  const B2 = { minX: shackA.x1 + 1.2, maxX: E_IN - 1, minZ: -PLAZA_Z, maxZ: PLAZA_Z };
+  const B2 = { minX: shackA.x1 + 1.2, maxX: E_IN, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
   const S = { sector: 0, step: 0, t: 0, boss: null, waveT: 0 };
   const bounds = { ...B1 };
   const setBounds = (api, b) => api.setBounds(Object.assign(bounds, b));
@@ -529,15 +746,14 @@ function buildStadium(scene) {
     api.arrow(shack.door, 'Checkpoint');
   }
   const PARTS4 = ['twinmg', 'optics', 'autoloader', 'he', 'era', 'afterburner', 'dozer'];
-  // where the tank can go, by where it is: the street, the plaza between its
-  // fences, the gate tunnel, the inside (its curved ends held by the wall)
-  const GATE_DEPTH = 1.4 + 8 * ROW_W + 1;
+  // where the tank can go: on the plaza, out to just past its barricade
+  // lines (the barricades and the stands hold it, nothing invisible);
+  // inside the stadium, its walls
+  const PLAZA_B = { minZ: -PLAZA_Z - 6, maxZ: PLAZA_Z + 6, maxX: E_IN };
   function zoneBounds(api) {
     const x = api.tankPos.x;
-    if (x < STREET_END) setBounds(api, { minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 });
-    else if (x < W_IN - GATE_DEPTH) setBounds(api, { minZ: -PLAZA_Z, maxZ: PLAZA_Z });
-    else if (x < W_IN + 1 || x > E_IN - 1) setBounds(api, { minZ: CZ - GATE_HALF + 0.6, maxZ: CZ + GATE_HALF - 0.6 });
-    else setBounds(api, { minZ: CZ - R + 1, maxZ: CZ + R - 1 });
+    if (x < STREET_END - 1) setBounds(api, { minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 });
+    else if (S.step < 2) setBounds(api, PLAZA_B);
   }
 
   function start(api) {
@@ -606,7 +822,7 @@ function buildStadium(scene) {
     }
   }
 
-  // 2: the plaza, the stadium, the siege spider
+  // 2: the plaza, the stadium, the siege mech
   function startSector2(api) {
     S.sector = 1;
     go(0);
@@ -631,13 +847,13 @@ function buildStadium(scene) {
         if (x > W_IN + 6) {
           // in: the gate comes down behind, and the spider comes for you
           setGate(gates[0], false);
-          setBounds(api, { minX: W_IN + 1.5 });
+          setBounds(api, { minX: W_IN + 1.5, minZ: CZ - R + 1, maxZ: CZ + R - 1 });
           api.arrow(null);
           if (api.enemiesAlive) api.clearEnemies();
           S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI });
-          api.boss(S.boss, 'Siege spider');
-          api.objective('Destroy the siege spider');
-          api.prompt('Siege spider', 'A <b>siege spider</b>! Watch for its <b>beam</b> (red funnel), its <b>mortar rings</b> and its <b>rocket salvos</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
+          api.boss(S.boss, 'Siege mech');
+          api.objective('Destroy the siege mech');
+          api.prompt('Siege mech', 'A <b>siege mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
           api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 4, S.boss.pos.z) : null)], r: 190 }, () => S.t > 2.4, { maxTime: 3, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
           S.waveT = 18;
           go(2);
@@ -652,8 +868,8 @@ function buildStadium(scene) {
         if (!S.boss.alive) {
           api.clearEnemies();
           setGate(gates[1], true);
-          api.prompt('Siege spider destroyed', 'The east gate is opening. <b>Drive out!</b>', { go: true, seconds: 5 });
-          setBounds(api, { maxX: END_X + 6 });
+          api.prompt('Siege mech destroyed', 'The east gate is opening. <b>Drive out!</b>', { go: true, seconds: 5 });
+          setBounds(api, { maxX: END_X + 4 });
           api.arrow(new THREE.Vector3(E_IN + 6, 1.4, CZ), 'Exit');
           go(3);
         }
@@ -662,7 +878,7 @@ function buildStadium(scene) {
         if (x > END_X) {
           api.arrow(null);
           api.sectors(SECTORS, 2, 'Level 4');
-          api.win('Level clear', { path: [[END_X + 6, CZ], [END_X + 18, CZ]] });
+          api.win('Level clear', { path: [[END_X + 30, CZ], [END_X + 200, CZ]] }); // (on out of the shot)
           go(4);
         }
         break;
@@ -670,6 +886,12 @@ function buildStadium(scene) {
   }
 
   function skipStage(api) {
+    // the boss first (before the rest are cleared away, it with them)
+    if (S.sector === 1 && S.step === 2 && S.boss?.alive) {
+      api.clearSpot();
+      api.blast(S.boss.pos.clone().setY(1), 0.5, 99999);
+      return true;
+    }
     api.clearSpot();
     api.arrow(null);
     api.clearPrompt();
@@ -683,10 +905,6 @@ function buildStadium(scene) {
     if (S.step < 2) {
       go(1);
       api.teleport(W_IN + 7, CZ, 0);
-      return true;
-    }
-    if (S.step === 2 && S.boss?.alive) {
-      api.blast(S.boss.pos.clone().setY(1), 0.5, 99999);
       return true;
     }
     return false;

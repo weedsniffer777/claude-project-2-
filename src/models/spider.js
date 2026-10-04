@@ -1,152 +1,164 @@
-// The siege spider: level 4's boss. A huge four-legged walker built as a
-// weapons platform. A flat armoured body slung between four long legs
-// (each a thigh rising to a high knee, then a shin down to a broad foot)
-// that walk in diagonal pairs; on top a turret that turns to aim, carrying:
-//  - the main gun: a long beam cannon, its charge cells glowing as it lines
-//    up (ctx.charge 0..1)
-//  - a rocket pod either side (six tubes each), glowing as a salvo comes
-//    (ctx.rockets 0..1)
-//  - a battery of mortar tubes on its back, pointing up
-//  - a chin MG under the front of the body
-// and red sensor eyes along its brow. Front is +X. Same interface as the
-// other machines: update, hitFlash, kill, setOutline, muzzle, eyeWorld
-// (plus rocketMuzzle, mortarMuzzle, mgMuzzle for its other weapons).
+// The siege mech: level 4's boss. A low, wide, four-legged walking tank:
+// a long armoured hull slung low between four splayed legs (heavy hip
+// hubs, short thighs out and up to the knee, armoured shins down to broad
+// feet, struts between), an angular turret on top with a very long gun
+// and a big muzzle brake, a searchlight sensor block on the front, a
+// sensor dome and mast at the back, pipes and boxes all over; a rocket
+// artillery launcher on each side of the hull, angled up.
+// Front is +X. Interface as the other machines: update, hitFlash, kill,
+// setOutline, muzzle (the main gun), rocketMuzzle (the launchers),
+// eyeWorld.
 import * as THREE from 'three';
 import { box, cyl, put, toon, glowMat } from './kit.js';
 
 const C = {
-  hull: 0x45494e,
-  panel: 0x5d6369,
-  dark: 0x1f2124,
-  joint: 0x2b2d30,
-  gun: 0x2a2c30,
+  hull: 0x7d7768, // a dusty khaki-grey, like the reference
+  panel: 0x8d8778,
+  dark: 0x3a3833,
+  joint: 0x5a564c,
+  gun: 0x6f6a5d,
   hazard: 0xc99a2e,
   eye: 0xff2a1f,
+  lamp: 0xe8f4ff,
   dead: 0x2a1614,
 };
 
-const BODY_Y = 3.0; // the body's height off the ground
-const HIP = { x: 1.3, z: 1.1 }; // hip joints at the body's corners
-const THIGH = 3.0;
-const SHIN = 3.6;
-const REACH = { x: 3.2, z: 3.0 }; // feet out from the middle
+const BODY_Y = 1.75;
+const THIGH = 1.7;
+const SHIN = 2.1;
+// the legs: hip on the hull's side, the foot planted out wide
+const LEGS = [
+  { hip: [1.5, 0, 1.25], foot: [2.7, 3.0], phase: 0 },
+  { hip: [-1.5, 0, -1.25], foot: [-2.7, -3.0], phase: 0 },
+  { hip: [1.5, 0, -1.25], foot: [2.7, -3.0], phase: Math.PI },
+  { hip: [-1.5, 0, 1.25], foot: [-2.7, 3.0], phase: Math.PI },
+];
 
 export function createSpider() {
   const group = new THREE.Group();
-  const body = new THREE.Group(); // bobs and sways as it walks
+  const body = new THREE.Group();
   body.position.y = BODY_Y;
   group.add(body);
-  const glowy = []; // emissive bits left out of flashes and outlines
+  const glowy = [];
 
-  // ------------------------------------------------------------- the body
-  put(body, box(3.4, 0.9, 2.6, C.hull, { r: 0.12 }), 0, 0, 0);
-  put(body, box(3.0, 0.3, 2.2, C.panel, { r: 0.06 }), -0.1, 0.55, 0); // the top deck
-  put(body, box(0.9, 0.7, 2.0, C.panel, { r: 0.1 }), 1.75, -0.1, 0).rotation.z = -0.35; // a sloped glacis
-  put(body, box(2.8, 0.4, 1.8, C.dark, { r: 0.08 }), -0.2, -0.6, 0); // the belly
+  // ------------------------------------------------------------- the hull
+  // a long low armoured box in layered plates, hard edges, a sloped nose
+  put(body, box(4.4, 0.7, 2.4, C.hull, { r: 0.03 }), 0, 0, 0);
+  put(body, box(4.0, 0.25, 2.6, C.panel, { r: 0.02 }), -0.1, 0.42, 0); // the deck plate, overhanging
+  put(body, box(4.6, 0.12, 2.0, C.dark, { r: 0.01 }), 0, -0.42, 0); // the belly frame
+  const nose = put(body, box(0.8, 0.55, 2.2, C.panel, { r: 0.03 }), 2.35, 0.05, 0);
+  nose.rotation.z = -0.5;
+  put(body, box(0.5, 0.6, 2.3, C.hull, { r: 0.03 }), -2.3, 0.05, 0); // the rear plate
   for (const s of [-1, 1]) {
-    put(body, box(3.0, 0.5, 0.12, C.panel, { r: 0.03 }), -0.1, 0, s * 1.33); // side armour
-    for (let x = -1.3; x <= 1.3; x += 0.65) put(body, box(0.08, 0.08, 0.04, C.dark), x, 0.18, s * 1.4); // bolts
-    put(body, box(2.2, 0.08, 0.05, C.hazard, { r: 0.01 }), -0.2, -0.22, s * 1.4); // a hazard stripe
+    // side armour: a long panel with a slotted cut-out, bolts, a round hub
+    put(body, box(3.2, 0.55, 0.14, C.panel, { r: 0.02 }), 0.1, 0, s * 1.27);
+    put(body, box(1.8, 0.22, 0.06, C.dark, { r: 0.01 }), 0.3, -0.02, s * 1.36);
+    for (let x = -1.3; x <= 1.5; x += 0.47) put(body, box(0.07, 0.07, 0.04, C.dark), x, 0.22, s * 1.35);
+    put(body, box(0.16, 0.16, 0.04, C.eye, { r: 0.02 }), -0.9, 0.05, s * 1.36); // a small marker lamp
+    // pipes along the side under the deck lip
+    put(body, cyl(0.05, 3.4, C.dark, { axis: 'x', seg: 6 }), 0, 0.3, s * 1.22);
+    put(body, cyl(0.04, 2.0, C.joint, { axis: 'x', seg: 6 }), -0.6, -0.28, s * 1.15);
   }
-  // its brow: a row of red sensor eyes across the front
-  const eyes = [];
-  for (const z of [-0.6, -0.2, 0.2, 0.6]) {
-    put(body, box(0.14, 0.2, 0.22, C.dark, { r: 0.03 }), 1.78, 0.22, z);
-    eyes.push(put(body, box(0.04, 0.1, 0.14, C.eye, { r: 0.01, glow: true }), 1.86, 0.22, z));
-  }
-  glowy.push(...eyes);
-  // the chin MG, under the front
-  const mgPivot = new THREE.Group();
-  mgPivot.position.set(1.5, -0.65, 0);
-  body.add(mgPivot);
-  put(mgPivot, box(0.4, 0.3, 0.4, C.joint, { r: 0.06 }), 0, 0, 0);
-  for (const z of [-0.08, 0.08]) put(mgPivot, cyl(0.04, 0.8, C.gun, { axis: 'x', seg: 6 }), 0.55, -0.02, z);
-  // exhausts at the back, with soot
-  for (const s of [-1, 1]) put(body, cyl(0.14, 0.5, C.dark, { seg: 8 }), -1.6, 0.5, s * 0.7).rotation.z = 0.4;
+  // greebles on the deck: hatches, vents, boxes, a cable run
+  put(body, box(0.6, 0.12, 0.6, C.joint, { r: 0.02 }), -1.4, 0.6, 0.6);
+  put(body, box(0.5, 0.18, 0.4, C.dark, { r: 0.02 }), -1.6, 0.62, -0.7);
+  for (let k = 0; k < 5; k++) put(body, box(0.05, 0.08, 0.5, C.dark), -1.95 + k * 0.1, 0.6, -0.05);
+  put(body, box(0.3, 0.25, 0.3, C.panel, { r: 0.02 }), 1.7, 0.6, 0.85);
 
-  // ------------------------------------------------------------ the turret
-  const turret = new THREE.Group();
-  turret.position.set(0.1, 0.7, 0);
-  body.add(turret);
-  put(turret, cyl(0.95, 0.25, C.joint, { seg: 18 }), 0, 0.12, 0); // the ring
-  put(turret, box(2.0, 0.7, 1.5, C.hull, { r: 0.1 }), -0.1, 0.55, 0);
-  put(turret, box(1.6, 0.12, 1.2, C.panel, { r: 0.03 }), -0.2, 0.95, 0);
-  // the main gun: a long beam cannon with a shroud, cells along its breech
-  const gun = new THREE.Group();
-  gun.position.set(0.7, 0.6, 0);
-  turret.add(gun);
-  put(gun, box(1.2, 0.5, 0.6, C.dark, { r: 0.06 }), 0.2, 0, 0);
-  put(gun, cyl(0.24, 1.0, C.gun, { axis: 'x', seg: 12 }), 1.2, 0, 0);
-  put(gun, cyl(0.15, 2.6, C.gun, { axis: 'x', seg: 10 }), 2.9, 0, 0);
-  put(gun, box(0.4, 0.34, 0.34, C.dark, { r: 0.05 }), 4.25, 0, 0); // the muzzle
-  for (const z of [-0.2, 0.2]) put(gun, box(0.26, 0.12, 0.05, C.joint, { r: 0.01 }), 4.25, 0, z);
-  const cells = [-1, 1].map((s) => put(gun, box(0.9, 0.07, 0.03, C.eye, { r: 0.01, glow: true }), 0.15, -0.05, s * 0.31));
-  glowy.push(...cells);
-  const muzzleGlow = put(gun, box(0.2, 0.2, 0.2, 0xffffff, { glow: true, r: 0.04 }), 4.5, 0, 0);
-  muzzleGlow.visible = false;
-  glowy.push(muzzleGlow);
-  // rocket pods either side: boxes with six tube mouths, glow strips
+  // --------------------------------------------- the rocket artillery pods
+  // on each side of the hull, angled up and out, three by two tubes
   const pods = [];
   const podGlow = [];
   for (const s of [-1, 1]) {
     const pod = new THREE.Group();
-    pod.position.set(0.1, 0.75, s * 1.15);
-    turret.add(pod);
-    put(pod, box(1.3, 0.7, 0.6, C.panel, { r: 0.08 }), 0, 0, 0);
-    put(pod, box(0.08, 0.72, 0.62, C.hazard, { r: 0.02 }), -0.5, 0, 0);
+    pod.position.set(-0.6, 0.75, s * 1.05);
+    pod.rotation.set(s * -0.15, 0, 0.45); // tilted up toward the front
+    body.add(pod);
+    put(pod, box(1.4, 0.55, 0.62, C.hull, { r: 0.03 }), 0, 0, 0);
+    put(pod, box(1.42, 0.08, 0.64, C.dark, { r: 0.01 }), 0, 0.3, 0);
+    put(pod, box(0.08, 0.57, 0.64, C.hazard, { r: 0.01 }), -0.55, 0, 0);
     const mouths = [];
-    for (const dy of [-0.18, 0.18]) for (const dz of [-0.18, 0, 0.18]) {
-      put(pod, cyl(0.08, 0.06, C.dark, { axis: 'x', seg: 8 }), 0.66, dy, dz);
-      const m = new THREE.Object3D();
-      m.position.set(0.72, dy, dz);
-      pod.add(m);
-      mouths.push(m);
+    for (const dy of [-0.13, 0.13]) {
+      for (const dz of [-0.19, 0, 0.19]) {
+        put(pod, box(0.04, 0.17, 0.15, 0x161512, { r: 0.01 }), 0.71, dy, dz);
+        const m = new THREE.Object3D();
+        m.position.set(0.78, dy, dz);
+        pod.add(m);
+        mouths.push(m);
+      }
     }
-    const gl = put(pod, box(0.03, 0.62, 0.52, C.eye, { r: 0.01, glow: true }), 0.7, 0, 0);
+    const gl = put(pod, box(0.02, 0.5, 0.56, C.eye, { r: 0.01, glow: true }), 0.735, 0, 0);
     gl.visible = false;
     podGlow.push(gl);
     pods.push({ pod, mouths });
   }
   glowy.push(...podGlow);
-  // the mortar battery on its back: four tubes pointing up and back
-  const mortars = [];
-  for (const [dx, dz] of [[-0.75, -0.3], [-0.75, 0.3], [-1.05, -0.3], [-1.05, 0.3]]) {
-    const t = put(turret, cyl(0.13, 0.9, C.gun, { seg: 10 }), dx, 1.25, dz);
-    t.rotation.z = 0.25;
-    put(turret, cyl(0.15, 0.08, C.dark, { seg: 10 }), dx - 0.11, 1.68, dz).rotation.z = 0.25;
-    const m = new THREE.Object3D();
-    m.position.set(dx - 0.12, 1.75, dz);
-    turret.add(m);
-    mortars.push(m);
-  }
-  put(turret, box(0.5, 0.3, 1.0, C.dark, { r: 0.05 }), -0.9, 0.95, 0); // their base
-  // an antenna mast
-  put(turret, cyl(0.03, 1.6, C.dark, { seg: 5 }), -0.7, 1.7, -0.6);
+
+  // ------------------------------------------------------------ the turret
+  const turret = new THREE.Group();
+  turret.position.set(0.1, 0.55, 0);
+  body.add(turret);
+  put(turret, cyl(0.9, 0.18, C.joint, { seg: 16 }), 0, 0.09, 0); // the ring
+  put(turret, box(2.4, 0.7, 1.6, C.hull, { r: 0.03 }), -0.1, 0.5, 0);
+  put(turret, box(2.0, 0.12, 1.3, C.panel, { r: 0.02 }), -0.2, 0.9, 0);
+  const tn = put(turret, box(0.7, 0.55, 1.4, C.panel, { r: 0.03 }), 1.2, 0.45, 0);
+  tn.rotation.z = -0.4;
+  // the sensor block on the front left: a searchlight lens, glowing
+  put(turret, box(0.6, 0.4, 0.42, C.dark, { r: 0.02 }), 1.25, 0.4, -0.72);
+  const lamp = put(turret, cyl(0.13, 0.05, C.lamp, { axis: 'x', seg: 12, glow: true }), 1.57, 0.4, -0.72);
+  glowy.push(lamp);
+  // greebles: boxes, a pipe loop, bolts
+  put(turret, box(0.5, 0.3, 0.4, C.joint, { r: 0.02 }), -0.6, 1.0, 0.45);
+  put(turret, cyl(0.06, 1.0, C.dark, { axis: 'z', seg: 6 }), -0.9, 0.95, 0);
+  for (const z of [-0.6, 0.6]) put(turret, cyl(0.1, 0.06, C.dark, { axis: 'z', seg: 8 }), 0.4, 0.55, z * 1.38);
+  // the sensor dome at the back, with its red eye, a mast
+  put(turret, box(0.5, 0.4, 0.5, C.joint, { r: 0.04 }), -0.85, 1.1, -0.35);
+  put(turret, new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), toon(C.panel)), -0.85, 1.48, -0.35);
+  const eye = put(turret, cyl(0.1, 0.04, C.eye, { axis: 'x', seg: 10, glow: true }), -0.55, 1.5, -0.35);
+  glowy.push(eye);
+  put(turret, cyl(0.025, 1.6, C.dark, { seg: 5 }), -1.1, 1.8, 0.55);
+  // the main gun: a long barrel out of a heavy mantlet, a big muzzle brake
+  const gun = new THREE.Group();
+  gun.position.set(1.0, 0.6, 0.15);
+  turret.add(gun);
+  put(gun, box(0.6, 0.5, 0.6, C.panel, { r: 0.03 }), 0.2, 0, 0);
+  put(gun, cyl(0.16, 0.8, C.gun, { axis: 'x', seg: 10 }), 0.85, 0, 0);
+  put(gun, cyl(0.1, 4.2, C.gun, { axis: 'x', seg: 10 }), 3.1, 0, 0);
+  put(gun, cyl(0.13, 0.2, C.gun, { axis: 'x', seg: 10 }), 2.4, 0, 0); // a collar part way along
+  for (const dx of [5.15, 5.45]) put(gun, box(0.16, 0.3, 0.34, C.gun, { r: 0.02 }), dx, 0, 0); // the brake
+  put(gun, box(0.46, 0.08, 0.2, C.dark), 5.3, 0, 0);
+  const cells = [-1, 1].map((s) => put(gun, box(0.5, 0.06, 0.03, C.eye, { r: 0.01, glow: true }), 0.2, -0.05, s * 0.31));
+  glowy.push(...cells);
+  const muzzleGlow = put(gun, box(0.2, 0.2, 0.2, 0xffffff, { glow: true, r: 0.04 }), 5.6, 0, 0);
+  muzzleGlow.visible = false;
+  glowy.push(muzzleGlow);
 
   // --------------------------------------------------------------- the legs
-  // each leg: a hip block, a thigh up to the knee, a shin down to the foot;
-  // posed every frame by a two-bone solve between the hip and the foot
+  // each: a big hip hub on the hull's side, a short thigh out and up to the
+  // knee, an armoured shin down to a broad foot, a strut alongside
   const legs = [];
-  const LEG_ORDER = [[1, 1], [-1, -1], [1, -1], [-1, 1]]; // diagonal pairs: 0,1 and 2,3
-  for (const [sx, sz] of LEG_ORDER) {
-    const hip = put(body, box(0.6, 0.6, 0.6, C.joint, { r: 0.1 }), sx * HIP.x, -0.1, sz * HIP.z);
+  for (const L of LEGS) {
+    const [hx, , hz] = L.hip;
+    const sz = Math.sign(hz);
+    put(body, cyl(0.42, 0.3, C.joint, { axis: 'z', seg: 12 }), hx, -0.05, hz + sz * 0.15);
+    put(body, cyl(0.24, 0.34, C.dark, { axis: 'z', seg: 10 }), hx, -0.05, hz + sz * 0.17);
     const thigh = new THREE.Group();
     group.add(thigh);
-    put(thigh, box(0.5, 0.5, THIGH, C.hull, { r: 0.08 }), 0, 0, THIGH / 2);
-    put(thigh, box(0.3, 0.56, THIGH * 0.8, C.panel, { r: 0.04 }), 0, 0.05, THIGH / 2);
-    put(thigh, cyl(0.08, THIGH * 0.7, C.dark, { axis: 'z', seg: 6 }), 0, -0.32, THIGH / 2); // a ram
+    put(thigh, box(0.5, 0.5, THIGH, C.hull, { r: 0.03 }), 0, 0, THIGH / 2);
+    put(thigh, box(0.3, 0.56, THIGH * 0.7, C.panel, { r: 0.02 }), 0, 0.05, THIGH / 2);
     const knee = new THREE.Group();
     group.add(knee);
-    put(knee, box(0.62, 0.62, 0.62, C.joint, { r: 0.12 }), 0, 0, 0);
+    put(knee, cyl(0.34, 0.6, C.joint, { axis: 'z', seg: 12 }), 0, 0, 0);
+    put(knee, cyl(0.18, 0.64, C.dark, { axis: 'z', seg: 8 }), 0, 0, 0);
     const shin = new THREE.Group();
     group.add(shin);
-    put(shin, box(0.42, 0.42, SHIN, C.hull, { r: 0.06 }), 0, 0, SHIN / 2);
-    put(shin, box(0.06, 0.3, SHIN * 0.7, C.hazard, { r: 0.01 }), 0.22, 0, SHIN * 0.4);
-    put(shin, box(0.9, 0.22, 0.9, C.dark, { r: 0.06 }), 0, 0, SHIN); // the foot
-    put(shin, box(0.5, 0.2, 0.5, C.joint, { r: 0.05 }), 0, 0, SHIN - 0.25);
-    legs.push({ sx, sz, hip, thigh, knee, shin, phase: legs.length < 2 ? 0 : Math.PI });
+    put(shin, box(0.6, 0.62, SHIN, C.hull, { r: 0.03 }), 0, 0, SHIN / 2);
+    put(shin, box(0.66, 0.4, SHIN * 0.5, C.panel, { r: 0.02 }), 0, 0.1, SHIN * 0.4); // its armour plate
+    put(shin, cyl(0.05, SHIN * 0.8, C.dark, { axis: 'z', seg: 6 }), 0.36, 0, SHIN * 0.45); // a strut
+    put(shin, box(0.9, 0.3, 0.7, C.joint, { r: 0.03 }), 0, 0, SHIN - 0.1); // the foot
+    put(shin, box(1.0, 0.12, 0.8, C.dark, { r: 0.02 }), 0, 0, SHIN + 0.04);
+    legs.push({ ...L, thigh, knee, shin });
   }
-
   group.traverse((m) => {
     if (m.isMesh && !glowy.includes(m)) m.castShadow = true;
   });
@@ -161,33 +173,31 @@ export function createSpider() {
   const hipW = new THREE.Vector3();
   const footW = new THREE.Vector3();
   const kneeW = new THREE.Vector3();
-  const up = new THREE.Vector3(0, 1, 0);
-  // place a segment group (its local +z along the segment) from a to b
   const bW = new THREE.Vector3();
   const lay = (seg, a, b) => {
     seg.position.copy(a);
-    seg.lookAt(group.localToWorld(bW.copy(b))); // (lookAt takes a world point)
+    seg.lookAt(group.localToWorld(bW.copy(b)));
   };
+  const inv = new THREE.Matrix4();
   function poseLegs(lift) {
     group.updateWorldMatrix(true, true);
-    const inv = new THREE.Matrix4().copy(group.matrixWorld).invert();
+    inv.copy(group.matrixWorld).invert();
     for (const L of legs) {
-      // the hip, in the group's frame
-      L.hip.getWorldPosition(hipW).applyMatrix4(inv);
-      // the foot: out at the corner, stepping fore and aft as it walks,
-      // lifting on the forward swing
+      hipW.set(L.hip[0], L.hip[1], L.hip[2] + Math.sign(L.hip[2]) * 0.3);
+      body.localToWorld(hipW).applyMatrix4(inv);
       const s = Math.sin(walk + L.phase);
       const c = Math.cos(walk + L.phase);
-      footW.set(L.sx * REACH.x + s * 0.7 * lift, Math.max(0, c) * 0.7 * lift + 0.11, L.sz * REACH.z);
-      // the knee: up and out between them (a two-bone solve, bending up)
+      footW.set(L.foot[0] + s * 0.55 * lift, Math.max(0, c) * 0.45 * lift + 0.15, L.foot[1]);
+      // the knee: up and out between them
       const d = hipW.distanceTo(footW);
       const a = Math.min(THIGH, (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d));
       const h = Math.sqrt(Math.max(0.01, THIGH * THIGH - a * a));
       const dir = v.copy(footW).sub(hipW).normalize();
-      const side = new THREE.Vector3().crossVectors(dir, up).normalize();
-      const bendUp = new THREE.Vector3().crossVectors(side, dir).normalize();
-      if (bendUp.y < 0) bendUp.negate();
-      kneeW.copy(hipW).addScaledVector(dir, a).addScaledVector(bendUp, h);
+      const out = new THREE.Vector3(0, 0, Math.sign(L.hip[2])); // bend outward and up
+      const side = new THREE.Vector3().crossVectors(dir, out).normalize();
+      const bend = new THREE.Vector3().crossVectors(side, dir).normalize();
+      if (bend.y < 0) bend.negate();
+      kneeW.copy(hipW).addScaledVector(dir, a).addScaledVector(bend, h);
       lay(L.thigh, hipW, kneeW);
       L.knee.position.copy(kneeW);
       lay(L.shin, kneeW, footW);
@@ -195,34 +205,31 @@ export function createSpider() {
   }
   poseLegs(0);
 
-  // ctx: { speed (0..1), aimYaw (relative), aimPitch, recoil, charge (the
-  // beam lining up), rockets (a salvo coming), mg (firing) }
+  // ctx: { speed, aimYaw, aimPitch, recoil, charge (the gun lining up),
+  // rockets (a salvo coming) }
   function update(dt, t, ctx = {}) {
     if (deadT >= 0) {
       deadT += dt;
       return;
     }
     const speed = ctx.speed || 0;
-    walk += dt * (1.2 + speed * 3.2);
+    walk += dt * (1.4 + speed * 3.4);
     const lift = Math.min(1, speed * 1.6);
-    body.position.y = BODY_Y + Math.abs(Math.sin(walk)) * 0.12 * lift + Math.sin(t * 1.3) * 0.04;
-    body.rotation.z = Math.sin(walk * 2) * 0.02 * lift;
-    body.rotation.x = Math.sin(walk) * 0.03 * lift;
-    // the turret turns to aim, the gun lays
+    body.position.y = BODY_Y + Math.abs(Math.sin(walk)) * 0.08 * lift + Math.sin(t * 1.3) * 0.03;
+    body.rotation.z = Math.sin(walk * 2) * 0.015 * lift;
     let d = (ctx.aimYaw ?? 0) - turret.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     turret.rotation.y += d * Math.min(1, dt * 2.2);
     gun.rotation.z = THREE.MathUtils.lerp(gun.rotation.z, ctx.aimPitch ?? 0, Math.min(1, dt * 4));
-    mgPivot.rotation.y = turret.rotation.y;
     recoil = Math.max(recoil, ctx.recoil || 0);
-    recoil = Math.max(0, recoil - dt * 3);
-    gun.position.x = 0.7 - recoil * 0.4;
+    recoil = Math.max(0, recoil - dt * 2.5);
+    gun.position.x = 1.0 - recoil * 0.45;
     const charge = ctx.charge || 0;
     for (const c of cells) c.scale.set(1, 1 + charge * 2, 1 + charge);
     muzzleGlow.visible = charge > 0.05;
-    muzzleGlow.scale.setScalar(0.4 + charge * 1.6);
+    muzzleGlow.scale.setScalar(0.4 + charge * 1.4);
     for (const g of podGlow) g.visible = (ctx.rockets || 0) > 0.02 && Math.sin(t * 24) > -0.3;
-    for (const e of eyes) e.scale.set(1, 0.8 + Math.sin(t * 6) * 0.2 + charge * 0.6, 1);
+    eye.scale.set(1, 1, 0.8 + Math.sin(t * 6) * 0.2 + charge * 0.6);
     poseLegs(lift);
     if (flash > 0) {
       flash -= dt;
@@ -268,7 +275,7 @@ export function createSpider() {
       group.traverse((m) => m.isMesh && flashMats.has(m) && (m.material = flashMats.get(m)));
     }
     deadT = 0;
-    for (const e of [...eyes, ...cells]) e.material = toon(C.dead);
+    for (const e of [eye, ...cells, lamp]) e.material = toon(C.dead);
     muzzleGlow.visible = false;
     for (const g of podGlow) g.visible = false;
   }
@@ -276,7 +283,7 @@ export function createSpider() {
   const tmp = new THREE.Vector3();
   function muzzle() {
     group.updateWorldMatrix(true, true);
-    return gun.localToWorld(tmp.set(4.5, 0, 0)).clone();
+    return gun.localToWorld(tmp.set(5.6, 0, 0)).clone();
   }
   let podN = 0;
   function rocketMuzzle() {
@@ -286,19 +293,10 @@ export function createSpider() {
     podN++;
     return m.getWorldPosition(new THREE.Vector3());
   }
-  let mortarN = 0;
-  function mortarMuzzle() {
-    group.updateWorldMatrix(true, true);
-    return mortars[mortarN++ % mortars.length].getWorldPosition(new THREE.Vector3());
-  }
-  function mgMuzzle() {
-    group.updateWorldMatrix(true, true);
-    return mgPivot.localToWorld(tmp.set(0.95, -0.02, 0)).clone();
-  }
   function eyeWorld() {
     group.updateWorldMatrix(true, true);
-    return eyes[1].getWorldPosition(new THREE.Vector3());
+    return lamp.getWorldPosition(new THREE.Vector3());
   }
 
-  return { group, update, hitFlash, kill, setOutline, muzzle, rocketMuzzle, mortarMuzzle, mgMuzzle, eyeWorld, events: [] };
+  return { group, update, hitFlash, kill, setOutline, muzzle, rocketMuzzle, eyeWorld, events: [] };
 }

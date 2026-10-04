@@ -476,7 +476,7 @@ export function createFitting({ renderer, cursor }) {
       el.className = `item${id === o.highlight ? ' new' : ''}${id === o.improved ? ' improved' : ''}${id === replacing ? ' on' : ''}${away ? ' isaway' : ''}`;
       el.dataset.tier = tierOf(id);
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
-      const unfit = !fitsTank(id, o.tankId) ? unfitLabel(id, o.tankId, SHORT) : null;
+      const unfit = !fitsTank(id, o.tankId) ? 'Wrong tank' : null;
       if (unfit) el.classList.add('isaway', 'notfor');
       el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${starBadge(id)}${away ? `<span class="away">On ${away}</span>` : unfit ? `<span class="away only">${unfit}</span>` : ''}`;
       if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');

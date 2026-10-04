@@ -126,6 +126,7 @@ export const PARTS = {
     type: 'weapons',
     name: 'Autoloader',
     text: 'Main gun reloads faster (an autocannon fires faster too).',
+    missile: () => new THREE.Group(), // (nothing to see on the missile tank: its pack loads itself)
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
       if (s.mag) {

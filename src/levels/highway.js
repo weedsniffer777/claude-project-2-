@@ -895,7 +895,6 @@ function buildHighway(scene) {
       case 0:
         if (x > RAMP.x0 - 6 || S.t > 3) {
           for (const [dz, d] of [[-3, 0], [2, 0.5], [0, 1]]) deckDog(api, RAMP.x1 + 4, DZ + dz, d);
-          sideDrone(api, RAMP.x0 + 14, -1, 0.8);
           contact(api, 'Coming down the ramp!');
           go(1);
         }

@@ -859,7 +859,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.group.rotation.y = 0;
     speed = 0;
     enemies.retire();
-    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, retreat: 0, magT: 0, mag: stats.mag });
+    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, retreat: 0, magT: 0, mag: stats.mag, mReload: false, trickleT: 0 });
     reload = 1;
     hud.setHull(run.hp, stats.maxHp);
     camTarget.set(pos.x + 0.6, 0.8, pos.z);
@@ -921,8 +921,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the cannon fires the moment it bears (or after a short wait at most), so
   // shots always go where you pointed, never where the barrel happened to be.
   let queued = 0; // seconds left on a queued shot
-  // the camera swung out to show a boss lets go the moment you act
-  const letGoFrame = () => run.spot?.frame && api.clearSpot();
+  // the camera swung out to show a boss lets go when you act: the slow
+  // motion and the spotlight end at once, the camera holds a beat (so a
+  // quick strike on the boss still lands where you see it), then swings back
+  const letGoFrame = () => {
+    if (!run.spot?.frame || run.spot.hold != null) return;
+    run.spot.hold = 0.5;
+    hud.setSpot(null);
+  };
   function fire() {
     letGoFrame();
     if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
@@ -941,6 +947,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.retreat = stats.retreatTime;
       run.shield = stats.retreatTime + 0.1;
       speed = -BOOST_SPEED * stats.retreatSpeed;
+      // and a quick patch-up on the way out
+      if (run.hp < stats.maxHp) {
+        run.hp = Math.min(stats.maxHp, run.hp + 5);
+        hud.setHull(run.hp, stats.maxHp);
+        hud.damage(pos.clone().setY(pos.y + 2.2), 5, 'heal');
+      }
       tank.setRocket(1, true, 0);
       for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.25, 1.4, 0.12);
       combat.shake = Math.max(combat.shake, 0.22);
@@ -1127,7 +1139,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (out) dir.lerp(out, 0.6).setY(Math.max(0.5, out.y + 0.4)).normalize();
     else dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
     if (o.top) dir.set((aim.x - from.x) * 0.04, 1, (aim.z - from.z) * 0.04).normalize(); // straight up first
-    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, apex: from.y + 6 + Math.random() * 2.5 });
+    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, equip: !!o.equip, apex: from.y + 6 + Math.random() * 2.5 });
     // the launch: a hard white flash, a back-blast of smoke, a kick
     combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
     combat.glow.flash(from, 0xffb347, 0.5, 2.6, 0.22);
@@ -1154,7 +1166,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         st.gap -= dt;
         if (st.gap <= 0 && st.fired < st.targets.length) {
           const e = st.targets[st.fired];
-          launchMissile(e.alive ? e : st.targets.find((x) => x.alive) || e, st.fired, { damage: st.damage, blast: st.blast });
+          launchMissile(e.alive ? e : st.targets.find((x) => x.alive) || e, st.fired, { damage: st.damage, blast: st.blast, equip: true });
           st.fired++;
           st.gap = E.salvoGap;
         }
@@ -1506,6 +1518,31 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let trigger = false;
   function autoFire(dt) {
     if (!stats.mag) return;
+    if (def.gun === 'missile') {
+      // the missile tank's pack reloads a missile at a time once it runs dry
+      // or R is pressed (so a partial reload takes only as long as the
+      // missing missiles); whatever's loaded can still fire mid-reload
+      const per = stats.magReload / stats.mag;
+      if (run.mag < 1) run.mReload = true;
+      if (run.mReload && run.mag < stats.mag) {
+        run.trickleT = (run.trickleT || 0) + dt;
+        if (run.trickleT >= per) {
+          run.trickleT -= per;
+          run.mag++;
+        }
+      } else {
+        run.trickleT = 0;
+        run.mReload = false;
+      }
+      if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1 || run.mag < 1) return;
+      if (hasAim && tank.aimError() > 0.12) return;
+      reload = 0;
+      run.shots++;
+      letGoFrame();
+      fireMissileGun();
+      run.mag--;
+      return;
+    }
     if (run.magT > 0) {
       run.magT -= dt;
       if (run.magT <= 0) run.mag = stats.mag;
@@ -1521,6 +1558,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (--run.mag <= 0) run.magT = stats.magReload;
   }
   function reloadMag() {
+    if (def.gun === 'missile') {
+      if (run.mag < stats.mag) run.mReload = true;
+      return;
+    }
     if (stats.mag && run.magT <= 0 && run.mag < stats.mag) run.magT = stats.magReload;
   }
   const holdFire = () => def.gun === 'autocannon' || def.gun === 'missile';
@@ -1960,37 +2001,41 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tk.group.updateWorldMatrix(true, true);
     const nozzle = tk.rocketNozzles().reduce((a, b) => (b.z > a.z ? b : a)); // the near one
     const light = id === 'light';
-    const target = nozzle.clone().add(new THREE.Vector3(light ? (firing ? -0.55 : 0.3) : firing ? 0.15 : 0.45, 0.05, 0));
-    const half = light ? (firing ? 0.85 : 0.5) : firing ? 0.95 : 0.75;
+    const msl = id === 'missile'; // (its exhausts are at the front, firing forward)
+    const target = nozzle.clone().add(new THREE.Vector3(msl ? (firing ? 0.45 : -0.15) : light ? (firing ? -0.55 : 0.3) : firing ? 0.15 : 0.45, 0.05, 0));
+    const half = msl ? (firing ? 0.85 : 0.55) : light ? (firing ? 0.85 : 0.5) : firing ? 0.95 : 0.75;
     const pic = snapshotCanvas(tk.group, W, H, decorate, { target, dir: new THREE.Vector3(0.12, 0.3, 1), half, aspectFit: true });
     boostPics.set(key, pic);
     return pic;
   }
-  // Retreat's icon: a white arrow pointing back
-  let retreatCanvas = null;
-  function retreatArt() {
-    if (retreatCanvas) return retreatCanvas;
-    const c = (retreatCanvas = document.createElement('canvas'));
-    c.width = c.height = 26;
+  // Retreat's icon: the forward-firing exhausts (like the boost's icon),
+  // and a white arrow pointing back on the right of it
+  const retreatPics = new Map();
+  function retreatArt(firing) {
+    if (retreatPics.has(firing)) return retreatPics.get(firing);
+    const base = boostPicture(firing, 'normal');
+    const c = document.createElement('canvas');
+    c.width = base.width;
+    c.height = base.height;
     const g = c.getContext('2d');
-    g.fillStyle = '#1d1b1e';
-    g.fillRect(0, 0, 26, 26);
-    g.fillStyle = '#000';
+    g.drawImage(base, 0, 0);
+    const k = c.width / 32;
     const arrow = (dx, dy, col) => {
       g.fillStyle = col;
       g.beginPath();
-      g.moveTo(4 + dx, 13 + dy);
-      g.lineTo(12 + dx, 5 + dy);
-      g.lineTo(12 + dx, 10 + dy);
-      g.lineTo(22 + dx, 10 + dy);
-      g.lineTo(22 + dx, 16 + dy);
-      g.lineTo(12 + dx, 16 + dy);
-      g.lineTo(12 + dx, 21 + dy);
+      g.moveTo((19 + dx) * k, (16 + dy) * k);
+      g.lineTo((24 + dx) * k, (11 + dy) * k);
+      g.lineTo((24 + dx) * k, (14 + dy) * k);
+      g.lineTo((30 + dx) * k, (14 + dy) * k);
+      g.lineTo((30 + dx) * k, (18 + dy) * k);
+      g.lineTo((24 + dx) * k, (18 + dy) * k);
+      g.lineTo((24 + dx) * k, (21 + dy) * k);
       g.closePath();
       g.fill();
     };
     arrow(1, 1, '#000');
     arrow(0, 0, '#ffffff');
+    retreatPics.set(firing, c);
     return c;
   }
   // Piercing shot's icon: a white-hot trail rising from bottom left to top
@@ -2240,7 +2285,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       } else if (run.hitstop > 0) {
         run.hitstop -= realDt;
         dt = 0;
-      } else if (run.spot) dt = realDt * SLOW_MO;
+      } else if (run.spot && run.spot.hold == null) dt = realDt * SLOW_MO;
       else if (run.dilate > 0) {
         run.dilate -= realDt;
         dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
@@ -2258,7 +2303,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       if (run.spot) {
         run.spot.t += realDt;
-        if (run.spot.until() || run.spot.t > run.spot.maxTime || run.over) {
+        if (run.spot.hold != null) run.spot.hold -= realDt;
+        if (run.spot.hold != null ? run.spot.hold <= 0 || run.over : run.spot.until() || run.spot.t > run.spot.maxTime || run.over) {
           run.spot = null;
           hud.setSpot(null);
         }
@@ -2645,13 +2691,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
       if (!run.gun || !live) hud.setAmmo(null);
-      else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null, kind: def.gun === 'missile' ? 'missile' : null });
+      else if (def.gun === 'missile') hud.setAmmo({ n: run.mag, max: stats.mag, load: run.mReload && run.mag < stats.mag ? (run.mag + (run.trickleT || 0) / (stats.magReload / stats.mag)) / stats.mag : null, kind: 'missile' }); // (the next one filling as it reloads)
+      else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
-      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt() : boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
+      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt(boosting || run.retreat > 0) : boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || !!(run.msl && !run.msl.salvo), active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : def.ability === 'salvo' ? equipmentArt('atgm') : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
