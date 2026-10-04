@@ -351,9 +351,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // Slow the game and darken the screen except round the targets until
     // `until()` says the player has done the thing.
     // frame: () => a world point the camera leans toward meanwhile (so a boss
-    // spotlit off screen comes into view, not necessarily centred)
-    spotlight(spec, until, { maxTime = 3, frame = null } = {}) {
-      run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3), frame }; // never holds the game up for long
+    // spotlit off screen comes into view, not necessarily centred);
+    // frameK: how far it leans (1: all the way, for something far off)
+    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45 } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, 3), frame, frameK }; // never holds the game up for long
       hud.setSpot(spec);
     },
     get spotlit() {
@@ -1864,7 +1865,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // camera follows; the aim is re-cast every frame so it tracks while driving
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
       const lean = run.spot?.frame?.();
-      if (lean) camWant.lerp(lean.setY(camWant.y), 0.45);
+      if (lean) camWant.lerp(lean.setY(camWant.y), run.spot.frameK);
       // in the checkpoint: frame the room and its pallets (or the part
       // hovered) while there's a pick to make; for the refit, the tank
       const refit = run.depot && ['edit', 'fit', 'opening'].includes(run.depot.step) && !run.depot.focus;

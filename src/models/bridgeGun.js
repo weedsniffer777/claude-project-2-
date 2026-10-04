@@ -57,6 +57,60 @@ export function createBridgeGun() {
   gun.add(muzzleGlow);
   const antenna = put(turret, cyl(0.015, 1.4, C.dark, { seg: 4 }), -0.8, 1.4, 0.5);
 
+  // --- detail: the emplacement
+  put(group, cyl(1.68, 0.1, 0x8d8a83, { seg: 16 }), 0, 0.62, 0); // the ring's worn lip
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2 + 0.09;
+    if (Math.cos(a) > 0.6) continue;
+    const bag = put(group, box(0.5, 0.2, 0.3, 0x7d6f52, { r: 0.08 }), Math.cos(a) * 1.85, 0.52, Math.sin(a) * 1.85); // a third row of bags
+    bag.rotation.y = -a;
+  }
+  for (const a of [2.2, 2.9, 3.6, 4.1]) put(group, cyl(0.025, 0.35, 0x5a4a3c, { seg: 4 }), Math.cos(a) * 1.55, 0.75, Math.sin(a) * 1.55).rotation.z = 0.3; // rebar stubs
+  // ammo crates stacked behind, a generator with its exhaust, cables
+  for (const [x, z, y, yaw] of [[-2.5, 0.9, 0.2, 0.2], [-2.6, 1.6, 0.2, 0.1], [-2.55, 1.2, 0.6, 0.35]]) {
+    const crate = put(group, box(0.7, 0.4, 0.45, 0x55603f, { r: 0.03 }), x, y, z);
+    crate.rotation.y = yaw;
+    put(crate, box(0.72, 0.05, 0.47, 0x434c32, { r: 0.01 }), 0, 0.2, 0);
+    put(crate, box(0.08, 0.1, 0.48, 0x2b2d30, { r: 0.01 }), 0.2, 0, 0);
+  }
+  put(group, box(0.8, 0.6, 0.6, 0x4a5058, { r: 0.05 }), -2.4, 0.3, -1.1); // generator
+  put(group, box(0.6, 0.06, 0.5, 0x2b2d30, { r: 0.01 }), -2.4, 0.62, -1.1);
+  for (let i = 0; i < 4; i++) put(group, box(0.03, 0.04, 0.5, 0x1f2124, { r: 0 }), -1.99, 0.15 + i * 0.1, -1.1); // vent slats
+  put(group, cyl(0.05, 0.5, 0x2a2c30, { seg: 6 }), -2.6, 0.85, -1.25); // exhaust
+  for (let i = 0; i < 6; i++) put(group, box(0.6, 0.05, 0.05, 0x1d1f22, { r: 0.02 }), -1.85 + i * 0.32, 0.03, -0.9 - Math.sin(i) * 0.1).rotation.y = Math.sin(i * 1.7) * 0.4; // the cable to the gun
+  // spent cases round the front of the pit
+  for (let i = 0; i < 9; i++) {
+    const a = 0.9 + i * 0.5;
+    const r = 2.3 + (i % 3) * 0.3;
+    const cs = put(group, cyl(0.07, 0.42, 0xb08a3e, { axis: 'x', seg: 6 }), Math.cos(a) * r * 0.6 + 1.2, 0.07, Math.sin(a) * r * 0.7);
+    cs.rotation.y = a * 2.3;
+  }
+
+  // --- detail: the turret
+  for (const s of [-1, 1]) {
+    // bolt rows along the side plates, smoke dischargers, grab rails
+    for (let i = 0; i < 5; i++) put(turret, box(0.05, 0.05, 0.03, C.dark, { r: 0.01 }), -0.55 + i * 0.22, 0.6, s * 0.81);
+    for (let i = 0; i < 3; i++) put(turret, cyl(0.05, 0.22, C.dark, { seg: 6 }), 0.1 + i * 0.12, 0.85, s * 0.66).rotation.x = s * 0.6;
+    put(turret, box(0.7, 0.04, 0.04, C.panel, { r: 0.01 }), -0.3, 0.86, s * 0.7);
+    // skirts low down, with a gap at the front
+    put(turret, box(1.4, 0.24, 0.05, C.hull, { r: 0.02 }), -0.25, 0.06, s * 0.82);
+  }
+  // a roof hatch with its handle, rear vents
+  put(turret, cyl(0.24, 0.06, C.panel, { seg: 10 }), -0.55, 0.84, 0.25);
+  put(turret, box(0.18, 0.04, 0.03, C.dark, { r: 0.01 }), -0.55, 0.88, 0.25);
+  for (let i = 0; i < 4; i++) put(turret, box(0.03, 0.04, 0.55, C.dark, { r: 0 }), -1.16, 0.32 + i * 0.09, 0);
+  // the sensor mast: a pole with a head on it, the lens array below
+  put(turret, cyl(0.04, 0.4, C.dark, { seg: 6 }), 0.1, 1.15, -0.3);
+  put(turret, box(0.22, 0.14, 0.18, C.panel, { r: 0.03 }), 0.1, 1.38, -0.3);
+  lenses.push(put(turret, box(0.02, 0.06, 0.12, C.eye, { r: 0.005, glow: true }), 0.22, 1.38, -0.3));
+
+  // --- detail: the gun
+  put(gun, cyl(0.17, 0.35, C.gun, { axis: 'x', seg: 10 }), 1.6, 0, 0); // fume extractor
+  for (const x of [0.9, 2.3, 2.9]) put(gun, cyl(0.13, 0.07, C.panel, { axis: 'x', seg: 10 }), x, 0, 0); // thermal sleeve bands
+  for (const z of [-0.08, 0.08]) put(gun, cyl(0.04, 0.9, C.panel, { axis: 'x', seg: 6 }), 0.75, 0.16, z); // recoil cylinders over it
+  for (const x of [3.45, 3.57, 3.69]) put(gun, box(0.04, 0.32, 0.36, C.dark, { r: 0.01 }), x, 0, 0); // muzzle brake baffles
+  put(turret, cyl(0.05, 0.45, C.panel, { seg: 6 }), 0.75, 0.2, -0.22).rotation.z = 0.5; // the elevating ram
+
   group.traverse((m) => {
     if (m.isMesh && !m.material.transparent) m.castShadow = true;
   });

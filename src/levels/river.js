@@ -31,8 +31,8 @@ const SQUARE = { x0: 41.6, x1: 96, n: -22, s: 17 };
 const SHACKS = [{ x0: 34, x1: 41.6 }, { x0: 104, x1: 111.6 }];
 const RIVER = { x0: 116, x1: 182, y: -3.4 };
 const BRIDGE = { n: -9.4, s: 8.4 };
-const GUN_X = 176; // the bridge gun, dug in at the far end of the deck
-const END_X = 188; // past it: the level's done
+const GUN_X = 172; // the bridge gun, dug in near the far end of the deck
+const END_X = 196; // past it: the level's done
 
 const COLD = 0xcfe8ff;
 const SODIUM = [0xffa245, 0xff9636, 0xffb15a];
@@ -577,7 +577,7 @@ function buildRiver(scene) {
   wreck(127, 3.5, 0.4, { kind: 'sedan', paint: BURNT_PAINT[1] });
   wreck(151, 4.5, -0.3, { kind: 'van', paint: 0x6b7458 });
   wreck(163, -4.5, 0.6, { kind: 'hatch', paint: BURNT_PAINT[3], flipped: true });
-  for (const [x, z, yaw] of [[122, -5, 0.2], [133, 1.5, 1.4], [134.8, 2.2, 1.3], [147, -1.5, 0.1], [156, -6, 0.5], [158, 1, 1.6], [168, 4.5, -0.3], [169.5, 5.2, -0.4]]) jersey(x, z, yaw);
+  for (const [x, z, yaw] of [[122, -5, 0.2], [133, 1.5, 1.4], [134.8, 2.2, 1.3], [147, -1.5, 0.1], [156, -6, 0.5], [158, 1, 1.6], [163, 4.6, -0.3], [164.5, 5.3, -0.4], [180, -5.5, 0.4]]) jersey(x, z, yaw);
   function sandbags(x, z, len, yaw) {
     for (let i = 0; i < len; i++) {
       for (let k = 0; k < 2; k++) {
@@ -590,6 +590,7 @@ function buildRiver(scene) {
     B.block(cx, cz, len * 0.25, 0.25, yaw);
     B.hitBox(cx, 0.25, cz, len * 0.5, 0.5, 0.4);
   }
+  B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement
   sandbags(143, 3.5, 5, Math.PI / 2);
   sandbags(160, -2.5, 4, Math.PI / 2);
 
@@ -619,7 +620,8 @@ function buildRiver(scene) {
   const [shackA, shackB] = shacks;
   const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
   const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: SQUARE.n + 0.6, maxZ: SQUARE.s - 0.6 };
-  const B3 = { minX: shackB.x1 + 1.2, maxX: GUN_X - 5, minZ: BRIDGE.n + 0.6, maxZ: BRIDGE.s - 0.6 };
+  // the bridge: room to drive right round the gun, out onto the far bank
+  const B3 = { minX: shackB.x1 + 1.2, maxX: END_X - 2, minZ: BRIDGE.n + 0.6, maxZ: BRIDGE.s - 0.6 };
   const S = { sector: 0, step: 0, t: 0, n: 0, boss: null, waveT: 0, walkerT: 0 };
   const bounds = { ...B1 };
   const setBounds = (api, b) => api.setBounds(Object.assign(bounds, b));
@@ -766,18 +768,19 @@ function buildRiver(scene) {
     S.boss = api.spawnBridgeGun(GUN_X, 0, { yaw: Math.PI });
     api.boss(S.boss, 'Bridge gun');
     api.prompt('Warning', 'A heavy gun holds the far end of the bridge. Use the wrecks for cover and <b>destroy it</b>!', { danger: true, seconds: 7 });
-    api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 1.6, { maxTime: 2.5, frame: () => (S.boss.alive ? S.boss.pos.clone() : null) });
+    // the camera swings right out over the bridge to the gun, then back
+    api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null)], r: 150 }, () => S.t > 2.4, { maxTime: 3, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
     S.waveT = 6;
     S.walkerT = 14;
   }
   // machines come over from behind the gun
-  const fromFar = (api, dz, delay = 0) => api.spawnDog(GUN_X + 6, dz, { delay, via: [[GUN_X - 4, dz * 1.4]], noclip: true });
+  const fromFar = (api, dz, delay = 0) => api.spawnDog(END_X + 8, dz, { delay, via: [[GUN_X + 4, dz * 1.4]], noclip: true });
   function sector3(api, dt) {
     switch (S.step) {
       case 0:
         if (!S.boss.alive) {
           api.prompt('Bridge gun destroyed', 'The way is open. <b>Drive across!</b>', { go: true, seconds: 5 });
-          setBounds(api, { maxX: MAP.x1 - 4, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 });
+          setBounds(api, { maxX: MAP.x1 - 4 });
           api.arrow(new THREE.Vector3(END_X + 2, 0.6, 0), 'Exit');
           go(1);
           break;
@@ -791,14 +794,14 @@ function buildRiver(scene) {
         }
         if (S.walkerT <= 0 && api.enemiesAlive < 6) {
           S.walkerT = 24;
-          api.spawnWalker(GUN_X + 6, (Math.random() < 0.5 ? -1 : 1) * 4, { via: [[GUN_X - 8, (Math.random() - 0.5) * 8]], noclip: true });
+          api.spawnWalker(END_X + 8, (Math.random() < 0.5 ? -1 : 1) * 4, { via: [[GUN_X + 6, (Math.random() - 0.5) * 8]], noclip: true });
         }
         break;
       case 1:
         if (api.tankPos.x > END_X) {
           api.arrow(null);
           api.sectors(SECTORS, 3, 'Level 2');
-          api.win('Level clear', { path: [[END_X + 8, 0], [END_X + 40, 0]] });
+          api.win('Level clear', { path: [[END_X + 8, 0], [END_X + 30, 0]] });
           go(2);
         }
         break;

@@ -1,6 +1,7 @@
-// Anti-tank walker: a tall two-legged machine carrying one long gun. Legs
-// with backward knees under a boxy armoured cab, the gun slung along its
-// right side, a red visor slit. Front is +X. While it lines up a shot it
+// Anti-tank walker: a tall two-legged machine that is mostly gun. Legs with
+// backward knees carry a small pelvis, and on it a yoke holding the gun:
+// receiver, heavy breech, a very long barrel; a small sensor box with a red
+// slit for sights. Front is +X. While it lines up a shot it
 // crouches and braces, and the gun's muzzle glows hotter (ctx.charge 0..1).
 // Same interface as the dog: update, hitFlash, kill, setOutline, muzzle.
 import * as THREE from 'three';
@@ -28,34 +29,41 @@ export function createWalker() {
   const cab = new THREE.Group(); // turns on the hips to aim
   body.add(cab);
 
-  // the cab: a sloped armoured box, a lighter roof plate, side skirts
-  put(cab, box(0.9, 0.5, 0.7, C.hull, { r: 0.06 }), 0, 0.25, 0);
-  put(cab, box(0.5, 0.18, 0.62, C.hull, { r: 0.05 }), 0.38, 0.12, 0).rotation.z = -0.35; // sloped nose
-  put(cab, box(0.7, 0.06, 0.6, C.panel, { r: 0.02 }), -0.05, 0.53, 0);
-  for (const s of [-1, 1]) put(cab, box(0.62, 0.24, 0.04, C.panel, { r: 0.01 }), -0.05, 0.18, s * 0.37);
-  put(cab, box(0.3, 0.22, 0.4, C.dark, { r: 0.04 }), -0.5, 0.3, 0); // power pack
-  put(cab, cyl(0.06, 0.3, C.dark, { seg: 6 }), -0.58, 0.6, -0.15); // exhaust stack
-  const antenna = put(cab, cyl(0.012, 0.7, C.dark, { seg: 4 }), -0.45, 0.85, 0.18);
-  // the visor: one long red slit
-  const visor = put(cab, box(0.04, 0.07, 0.42, C.eye, { r: 0.01, glow: true }), 0.47, 0.36, 0);
-  put(cab, box(0.06, 0.14, 0.5, C.dark, { r: 0.02 }), 0.45, 0.36, 0);
-
-  // the gun: a long barrel on a cradle along the right side, a fat breech
-  // behind, a muzzle brake, a shield plate
+  // the pelvis: a small joint block the gun sits on
+  put(body, box(0.34, 0.2, 0.62, C.joint, { r: 0.04 }), 0, -0.02, 0);
+  put(body, box(0.22, 0.12, 0.4, C.dark, { r: 0.03 }), -0.12, -0.14, 0);
+  // a yoke: two side plates holding the gun's trunnions
+  for (const s of [-1, 1]) {
+    put(cab, box(0.34, 0.36, 0.06, C.panel, { r: 0.02 }), 0, 0.16, s * 0.24);
+    put(cab, cyl(0.07, 0.08, C.joint, { axis: 'z', seg: 8 }), 0, 0.3, s * 0.29);
+  }
+  // the gun is the whole top half: a long receiver, a heavy breech behind
+  // the trunnions as a counterweight, a very long barrel with a shroud,
+  // recoil cylinders under it and a big muzzle brake
   const gun = new THREE.Group();
-  gun.position.set(0.1, 0.32, 0.5);
+  gun.position.set(0, 0.3, 0);
   cab.add(gun);
-  put(gun, box(0.6, 0.22, 0.2, C.gun, { r: 0.04 }), -0.1, 0, 0); // breech
-  put(gun, cyl(0.06, 1.7, C.gun, { axis: 'x', seg: 8 }), 1.0, 0.02, 0); // barrel
-  put(gun, box(0.16, 0.12, 0.16, C.dark, { r: 0.02 }), 1.9, 0.02, 0); // muzzle brake
-  put(gun, box(0.04, 0.34, 0.3, C.panel, { r: 0.01 }), 0.3, 0.05, 0); // shield
-  put(gun, box(0.2, 0.08, 0.08, C.dark, { r: 0.01 }), 0.0, 0.16, 0); // sight
+  put(gun, box(1.0, 0.34, 0.4, C.hull, { r: 0.05 }), 0.05, 0, 0); // receiver
+  put(gun, box(0.8, 0.08, 0.3, C.panel, { r: 0.02 }), 0.05, 0.2, 0); // top plate
+  put(gun, box(0.42, 0.4, 0.44, C.dark, { r: 0.05 }), -0.6, 0.02, 0); // breech block
+  put(gun, box(0.12, 0.22, 0.46, C.joint, { r: 0.02 }), -0.84, 0.04, 0); // breech cap
+  const cells = [-1, 1].map((s) => put(gun, box(0.5, 0.05, 0.02, C.eye, { r: 0.005, glow: true }), -0.55, -0.04, s * 0.225)); // the charge cells
+  put(gun, cyl(0.13, 0.5, C.gun, { axis: 'x', seg: 10 }), 0.75, 0.02, 0); // shroud
+  put(gun, cyl(0.075, 2.0, C.gun, { axis: 'x', seg: 8 }), 1.75, 0.02, 0); // barrel
+  for (const z of [-0.07, 0.07]) put(gun, cyl(0.03, 0.75, C.joint, { axis: 'x', seg: 6 }), 0.85, -0.12, z); // recoil cylinders
+  put(gun, box(0.24, 0.17, 0.22, C.dark, { r: 0.03 }), 2.78, 0.02, 0); // muzzle brake
+  for (const z of [-0.12, 0.12]) put(gun, box(0.16, 0.08, 0.03, C.joint, { r: 0.01 }), 2.78, 0.02, z); // its side vents
+  // the sights, secondary: a small sensor box up on the left with a red
+  // slit, a stub antenna
+  put(gun, box(0.3, 0.16, 0.18, C.panel, { r: 0.03 }), 0.15, 0.32, -0.15);
+  put(gun, box(0.05, 0.12, 0.05, C.joint, { r: 0.01 }), 0.15, 0.22, -0.15);
+  const visor = put(gun, box(0.03, 0.05, 0.13, C.eye, { r: 0.01, glow: true }), 0.31, 0.33, -0.15);
+  const antenna = put(gun, cyl(0.012, 0.6, C.dark, { seg: 4 }), -0.55, 0.5, 0.15);
   const glowMatHot = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false });
-  const muzzleGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), glowMatHot);
-  muzzleGlow.position.set(2.0, 0.02, 0);
+  const muzzleGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(0.17, 1), glowMatHot);
+  muzzleGlow.position.set(2.92, 0.02, 0);
   muzzleGlow.userData.outline = true; // (no outline, no flash)
   gun.add(muzzleGlow);
-  put(cab, box(0.22, 0.16, 0.16, C.joint, { r: 0.03 }), 0.1, 0.3, 0.38); // its mount
 
   // legs: hip -> thigh (forward and down) -> knee (bending back) -> shin ->
   // a splayed foot
@@ -80,7 +88,7 @@ export function createWalker() {
   }
 
   group.traverse((m) => {
-    if (m.isMesh && !m.material.transparent && m !== visor) m.castShadow = true;
+    if (m.isMesh && !m.material.transparent && m !== visor && !cells.includes(m)) m.castShadow = true;
   });
 
   let gait = 0;
@@ -125,12 +133,13 @@ export function createWalker() {
     d = Math.atan2(Math.sin(d), Math.cos(d));
     cab.rotation.y += d * Math.min(1, dt * 6);
     gun.rotation.z = THREE.MathUtils.clamp(ctx.aimPitch ?? 0, -0.3, 0.3);
-    gun.position.x = 0.1 - (ctx.recoil ?? 0) * 0.3;
+    gun.position.x = -(ctx.recoil ?? 0) * 0.35;
     antenna.rotation.z = Math.sin(t * 7 + gait) * 0.12 * (0.3 + speed);
     // the muzzle heats up through the charge
     muzzleGlow.material.opacity = charge * (0.6 + Math.random() * 0.4);
     muzzleGlow.scale.setScalar(0.4 + charge * 1.3);
     visor.scale.set(1, 0.8 + Math.sin(t * 6) * 0.2 + charge * 0.6, 1);
+    for (const c of cells) c.scale.set(1 + charge * 0.3, 1 + charge * 1.6, 1);
     if (flash > 0) {
       flash -= dt;
       if (flash <= 0) group.traverse((m) => m.isMesh && flashMats.has(m) && (m.material = flashMats.get(m)));
@@ -142,7 +151,7 @@ export function createWalker() {
     if (flash <= 0) {
       const white = glowMat(0xb9b3a8);
       group.traverse((m) => {
-        if (!m.isMesh || m === visor || m.material.visible === false || m.userData.outline) return;
+        if (!m.isMesh || m === visor || cells.includes(m) || m.material.visible === false || m.userData.outline) return;
         flashMats.set(m, m.material);
         m.material = white;
       });
@@ -153,7 +162,7 @@ export function createWalker() {
   const outlineMat = new THREE.MeshBasicMaterial({ color: 0xf1e9d8, side: THREE.BackSide });
   const outlines = [];
   group.traverse((m) => {
-    if (!m.isMesh || m === visor || m.userData.outline) return;
+    if (!m.isMesh || m === visor || cells.includes(m) || m.userData.outline) return;
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
     const size = m.geometry.boundingBox.getSize(new THREE.Vector3());
     const o = new THREE.Mesh(m.geometry, outlineMat);
@@ -176,13 +185,14 @@ export function createWalker() {
     }
     deadT = 0;
     visor.material = toon(C.dead);
+    for (const c of cells) c.material = toon(C.dead);
     muzzleGlow.visible = false;
   }
 
   const tmp = new THREE.Vector3();
   function muzzle() {
     group.updateWorldMatrix(true, true);
-    return gun.localToWorld(tmp.set(2.0, 0.02, 0)).clone();
+    return gun.localToWorld(tmp.set(2.92, 0.02, 0)).clone();
   }
   function eyeWorld() {
     group.updateWorldMatrix(true, true);

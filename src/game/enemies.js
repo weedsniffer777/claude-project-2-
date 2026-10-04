@@ -66,6 +66,7 @@ const WALKER = {
   tooClose: 9,
   charge: 2.2, // seconds lining up a shot
   track: 0.55, // how fast (rad/s) its aim creeps after the tank meanwhile
+  lock: 0.55, // the last seconds of the charge its aim holds still (the line goes solid white): the moment to dodge
   reload: 3.2,
   damage: 24,
   box: { hx: 0.6, hz: 0.4 },
@@ -87,6 +88,7 @@ const BRIDGE_GUN = {
   tooClose: 0,
   charge: 2.4,
   track: 0.9,
+  lock: 0.6,
   reload: 1.7,
   damage: 28,
   box: { hx: 1.9, hz: 1.9 },
@@ -516,8 +518,8 @@ export class Enemies {
         e.markMesh.material.opacity = Math.min(1, e.markT * 2);
       }
       // keep out of walls, wrecks and each other
-      if (!(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
-      for (const o of this.list) {
+      if (!DOG.static && !(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
+      for (const o of DOG.static ? [] : this.list) {
         if (o === e || !o.alive || o.delay > 0) continue;
         const ox = e.pos.x - o.pos.x;
         const oz = e.pos.z - o.pos.z;
@@ -623,10 +625,13 @@ export class Enemies {
     if (e.blind > 0) e.blind -= dt;
     const want = Math.atan2(-(tankPos.z - e.pos.z), tankPos.x - e.pos.x);
     if (e.charge > 0) {
-      // its aim creeps after the tank: keep moving across the line and it misses
-      let d = want - e.lockYaw;
-      d = Math.atan2(Math.sin(d), Math.cos(d));
-      e.lockYaw += THREE.MathUtils.clamp(d, -S.track * dt, S.track * dt);
+      // its aim creeps after the tank, until the last moment when it holds
+      // still: keep moving across the line and it misses
+      if (e.charge > S.lock) {
+        let d = want - e.lockYaw;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        e.lockYaw += THREE.MathUtils.clamp(d, -S.track * dt, S.track * dt);
+      }
       e.lostT = e.los ? 0 : (e.lostT || 0) + dt;
       e.charge -= dt;
       if (e.blind > 0 || e.stun > 0 || e.lostT > 0.6) {
@@ -651,7 +656,7 @@ export class Enemies {
       e.funnel.rotation.y = e.lockYaw;
       e.funnel.scale.set(len, 1, width);
       const freq = 2 + k * k * 16;
-      const white = Math.sin(t * freq * Math.PI * 2) > 0 && k > 0.15;
+      const white = (e.charge > 0 && e.charge <= S.lock) || (Math.sin(t * freq * Math.PI * 2) > 0 && k > 0.15); // solid white: locked, about to fire
       e.funnel.material.color.set(white ? 0xffffff : 0xff3b2f);
       e.funnelEdge.material.color.set(white ? 0xffffff : 0xff2a1a);
       e.funnel.material.opacity = e.funnelK * (0.2 + 0.3 * k);
