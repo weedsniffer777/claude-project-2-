@@ -446,13 +446,13 @@ export const PARTS = {
       const g = vulcanBarrels();
       g.position.set(0.5, 0, 0);
       (t.gunPivot || t.turret).add(g);
-      // the ammo drum rides on the gun's left, under the barrels, with a
-      // feed chute up into the motor housing
+      // the ammo drum sits on the gun mount, left of the gun's base, its
+      // feed chute running into the breech
       const drum = new THREE.Group();
-      put(drum, cyl(0.12, 0.18, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
-      put(drum, cyl(0.125, 0.03, 0xc99a2e, { seg: 12 }), 0, 0, -0.08).rotation.x = Math.PI / 2;
-      put(drum, box(0.06, 0.12, 0.05, 0x2b2d30, { r: 0.01 }), 0.05, 0.1, 0.08);
-      drum.position.set(0.2, -0.12, -0.2);
+      put(drum, cyl(0.11, 0.16, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
+      put(drum, cyl(0.115, 0.025, 0x3a4430, { seg: 12 }), 0, 0, -0.08).rotation.x = Math.PI / 2;
+      put(drum, box(0.12, 0.05, 0.06, 0x2b2d30, { r: 0.01 }), 0.12, 0.02, 0.06); // the feed chute into the gun
+      drum.position.set(-0.55, 0.02, -0.2); // on the mount, left of the gun's base
       g.add(drum);
       return g;
     },
