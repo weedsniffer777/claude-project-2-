@@ -50,12 +50,12 @@ const CSS = `
   color: var(--amber); background: rgba(12, 11, 13, 0.75); box-shadow: 0 0 0 2px #000; white-space: nowrap; pointer-events: auto; cursor: var(--cursor); }
 .base-tag.hot { color: #111; background: var(--amber); }
 /* over the Levels room: the next tank, waiting at the end of level 2 */
-.base-promo { position: absolute; left: 0; top: 0; display: grid; gap: 6px; justify-items: center; padding: 10px 14px 12px; pointer-events: auto; cursor: var(--cursor);
+.base-promo { position: absolute; left: 0; top: 0; display: grid; gap: 4px; justify-items: center; padding: 7px 10px 9px; pointer-events: auto; cursor: var(--cursor);
   box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 4px 4px 0 4px #000; animation: basePromo 1.4s steps(2) infinite; }
-.base-promo .t { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 3px 6px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
-.base-promo img { width: 192px; height: 112px; image-rendering: pixelated; }
-.base-promo b { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: #f1e9d8; text-align: center; }
-.base-promo i { position: absolute; left: 50%; top: 100%; margin-left: -10px; width: 20px; height: 12px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.base-promo .t { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 3px 6px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.base-promo img { width: 120px; height: 70px; image-rendering: pixelated; }
+.base-promo b { max-width: 150px; font: 400 10px/1.15 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: #f1e9d8; text-align: center; }
+.base-promo i { position: absolute; left: 50%; top: 100%; margin-left: -7px; width: 14px; height: 9px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 @keyframes basePromo { 0%, 100% { transform: translate(-50%, calc(-100% - 22px)); } 50% { transform: translate(-50%, calc(-100% - 27px)); } }
 .base-tag.alert::after { content: 'Upgrade!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 @keyframes baseAlert { 50% { background: #b6ffc4; } }
@@ -152,7 +152,7 @@ const CSS = `
 .base-brief .node .hardtag .rw img { width: 100%; height: 100%; image-rendering: pixelated; }
 .base-brief .node .hardtag em { margin-top: 3px; padding: 2px 5px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
-.base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
+.base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
 .base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
@@ -987,7 +987,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function refreshPromo() {
     promoOn = promoTank();
     if (!promoOn) return;
-    promo.querySelector('img').src = tankPicture(renderer, promoOn.tank, 192, 112);
+    promo.querySelector('img').src = tankPicture(renderer, promoOn.tank, 120, 70);
     promo.querySelector('b').textContent = `Beat level ${promoOn.n} for a new tank!`;
   }
   const fitting = createFitting({ renderer, cursor: CURSOR });
@@ -1445,7 +1445,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         tag.style.top = `${Math.round(rect.top + ((1 - v.y) / 2) * rect.height)}px`;
         tag.classList.toggle('hot', r === lit);
         if (r.id === 'briefing') {
-          promo.hidden = !promoOn || !!open || v.z > 1 || !news.hidden;
+          promo.hidden = !promoOn || !!open || v.z > 1; // (stays up under any popup: no flicker on the way in)
           promo.style.left = tag.style.left;
           promo.style.top = tag.style.top;
         }
