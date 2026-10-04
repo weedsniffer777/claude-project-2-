@@ -2019,7 +2019,7 @@ function buildAvenue(scene) {
           if (x > BARRICADE_X + 2) {
             api.arrow(null);
             api.objective('Destroy all enemies');
-            if (api.lesson('ram')) api.prompt('Contact', `Enemies! ${api.tank.moveName === 'Dash' ? 'Dashing' : 'Boosting'} rams them too.`, { danger: true, seconds: 4 });
+            if (api.lesson('ram')) api.prompt('Contact', 'Enemies! Boosting rams them too.', { danger: true, seconds: 4 });
             else if (!api.cleared) api.prompt('Contact', 'Enemies!', { danger: true, seconds: 4 });
             api.spawnDog(94, -3);
             api.spawnDog(95, 2, { delay: 0.4 });

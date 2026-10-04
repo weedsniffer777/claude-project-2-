@@ -640,6 +640,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.dash = stats.dashTime;
       run.shield = stats.dashTime + 0.15;
       speed = BOOST_SPEED * stats.dashSpeed;
+      tank.setRocket(1, true, 0); // the exhausts light at full flame at once
       for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.25, 1.4, 0.12);
       combat.shake = Math.max(combat.shake, 0.22);
       return launch(0.8);
@@ -726,7 +727,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     g.userData.fx = true;
     const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
     const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.3, 14, 1, true), mat);
-    cone.rotation.z = Math.PI / 2; // apex forward (+x)
+    cone.rotation.z = -Math.PI / 2; // apex forward (+x)
     cone.position.x = -0.65;
     g.add(cone);
     const rings = [];
@@ -736,7 +737,18 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       g.add(r);
       rings.push(r);
     }
-    g.userData = { fx: true, cone, rings };
+    // a white-hot glow right at the apex
+    const glow = [
+      [0.16, 1],
+      [0.32, 0.55],
+      [0.6, 0.22],
+    ].map(([r, o]) => {
+      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: o, depthWrite: false }));
+      m.userData.base = o;
+      g.add(m);
+      return m;
+    });
+    g.userData = { fx: true, cone, rings, glow };
     g.visible = false;
     return g;
   }
@@ -748,7 +760,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!bowShock.visible) return;
     bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 0.35, 0.75, 0);
     bowShock.scale.setScalar(TANK_BOX.hz * 0.95);
-    bowShock.userData.cone.material.opacity = (0.22 + Math.random() * 0.12) * k;
+    bowShock.userData.cone.material.opacity = (0.32 + Math.random() * 0.14) * k;
+    for (const m of bowShock.userData.glow) {
+      m.material.opacity = m.userData.base * k * (0.8 + Math.random() * 0.3);
+      m.scale.setScalar(0.9 + Math.random() * 0.25);
+    }
     bowShock.userData.rings.forEach((r, i) => {
       const u = (t * 2.6 + i / 4) % 1; // sliding back from the apex
       r.position.x = -u * 1.3;

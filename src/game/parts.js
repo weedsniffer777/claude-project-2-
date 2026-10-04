@@ -30,8 +30,8 @@ export const BASE_STATS = {
   pierceDamage: 140,
   pierceCooldown: 12,
   // the light tank's Dash (Shift): seconds, x the boost speed
-  dashTime: 0.3,
-  dashSpeed: 1.6,
+  dashTime: 0.55,
+  dashSpeed: 1.5,
   // its Breakthrough (E): a slower, longer charge, and its recharge
   breakTime: 1.5,
   breakSpeed: 1.0,
