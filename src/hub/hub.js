@@ -1017,6 +1017,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
   let selLevel = CAMPAIGN[0];
   const mapCanvas = campaignMap();
   function openBriefing() {
+    // start on the furthest level you can play
+    selLevel = [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
     brief.hidden = false;
     brief.innerHTML = `
       <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? '<span class="hardtag">Hard mode</span>' : ''}</button>`).join('')}</div>

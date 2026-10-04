@@ -318,7 +318,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // first time (and marks it seen); seen(id) just asks.
     // On a level's first playthrough the tips seen are only kept if it's
     // finished: quit halfway and they all come up again next time.
-    seen: (id) => save.tips().includes(id) || run.pendingTips.includes(id),
+    // The tutorial only runs on the very first playthrough, on Easy: on
+    // Hard, or once the level's been beaten, every tip counts as seen (and
+    // everything it would hand out is there from the start).
+    seen: (id) => run.hard || api.cleared || save.tips().includes(id) || run.pendingTips.includes(id),
     // this level beaten before (either difficulty): the generic callouts
     // ("Enemies!") stay quiet, the level's own ones still show
     get cleared() {
