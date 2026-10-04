@@ -108,8 +108,23 @@ const CSS = `
 .fit .store { display: flex; flex-wrap: wrap; gap: 8px; }
 .fit .storehead { display: flex; align-items: center; gap: 6px; }
 .fit .storehead .label { margin-right: auto; }
-.fit .storehead select { padding: 3px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; background: #1d1b1e; border: 0; box-shadow: 0 0 0 2px #000, 0 0 0 3px #6d655a; cursor: var(--cursor); pointer-events: auto; }
-.fit .storehead select option { color: #111; background: #f1e9d8; }
+.fit .storehead .dd { position: relative; }
+.fit .storehead .ddbtn { position: relative; display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 7px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; background: #1d1b1e; border: 0; box-shadow: 0 0 0 2px #000, 0 0 0 3px #6d655a; cursor: var(--cursor); pointer-events: auto; }
+.fit .storehead .ddbtn:hover, .fit .storehead .ddbtn.on { box-shadow: 0 0 0 2px #000, 0 0 0 3px var(--amber, #ffb347); }
+.fit .storehead .chev { width: 7px; height: 4px; background: currentColor; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.fit .storehead .filterby { width: 22px; padding: 0; justify-content: center; }
+.fit .storehead .funnel { width: 12px; height: 11px; background: #f1e9d8; clip-path: polygon(0 0, 100% 0, 62% 48%, 62% 100%, 38% 85%, 38% 48%); }
+.fit .storehead .fdot { position: absolute; right: -4px; top: -4px; width: 7px; height: 7px; background: var(--amber, #ffb347); box-shadow: 0 0 0 2px #000; }
+.fit .ddmenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; display: grid; gap: 2px; min-width: 120px; padding: 6px; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a, 0 6px 0 4px #0008; pointer-events: auto; }
+.fit .ddmenu button { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; background: none; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; text-align: left; white-space: nowrap; cursor: var(--cursor); }
+.fit .ddmenu button:hover { color: #f1e9d8; background: #2a2420; }
+.fit .ddmenu button.sel { color: var(--amber, #ffb347); }
+.fit .ddmenu .tick { width: 10px; height: 10px; flex: none; box-shadow: inset 0 0 0 2px #6d655a; }
+.fit .ddmenu button.sel .tick { background: var(--amber, #ffb347); box-shadow: inset 0 0 0 2px #000; }
+.fit .ddmenu.cols { grid-template-columns: auto auto; gap: 4px 14px; padding: 8px 8px 6px; }
+.fit .ddmenu .col { display: grid; gap: 2px; align-content: start; }
+.fit .ddmenu .col > span { padding: 0 8px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #6d655a; }
+.fit .ddmenu .reset { grid-column: 1 / -1; justify-content: center; margin-top: 4px; color: #f1e9d8; box-shadow: 0 0 0 2px #4a4446; }
 .fit .store .none { font-size: 13px; color: #6d655a; }
 .fit .item { position: relative; padding: 0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .item img { display: block; width: 60px; height: 40px; image-rendering: pixelated; }
@@ -198,7 +213,7 @@ export function createFitting({ renderer, cursor }) {
   root.innerHTML = `
     <svg></svg>
     <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Cannot change in battle.</span></div></div>
-    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><div class="storehead"><span class="label">Storage</span><select class="sortby" title="Sort"><option value="rarity">By rarity</option><option value="name">By name</option><option value="type">By type</option></select><select class="filterby" title="Filter"></select></div><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
+    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><div class="storehead"><span class="label">Storage</span><div class="dd sortdd"><button type="button" class="ddbtn sortby"><span></span><i class="chev"></i></button></div><div class="dd filterdd"><button type="button" class="ddbtn filterby" title="Filter"><i class="funnel"></i><b class="fdot" hidden></b></button></div></div><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
   const $ = (s) => root.querySelector(s);
@@ -213,7 +228,7 @@ export function createFitting({ renderer, cursor }) {
 
   // the slot or stored part a popup belongs to; clicking it again closes it
   let popOwner = null;
-  const view = { sort: 'rarity', filter: 'all' }; // the storage's sort and filter
+  const view = { sort: 'rarity', tanks: null, types: null }; // the storage's sort, and the filter's checked tanks and types (null: all)
   let justClosed = null;
   function closePop() {
     pop?.remove();
@@ -238,6 +253,90 @@ export function createFitting({ renderer, cursor }) {
       justClosed = owner && owner.contains(e.target) ? owner : null;
     }
   }, true); // (capture: the screen's own panels stop clicks bubbling, and a click on any of them closes it too)
+  // The storage's controls: a sort menu, and a filter button opening a
+  // checklist (tanks one column, part kinds the other). Our own menus,
+  // closed by a click anywhere else.
+  const SORTS = [['rarity', 'By rarity'], ['name', 'By name'], ['type', 'By type']];
+  let menu = null;
+  function closeMenu() {
+    menu?.remove();
+    menu = null;
+    for (const b of root.querySelectorAll('.storehead .ddbtn')) b.classList.remove('on');
+  }
+  document.addEventListener('pointerdown', (e) => menu && !menu.contains(e.target) && !e.target.closest?.('.storehead .ddbtn') && closeMenu(), true);
+  function storeControls() {
+    const sortBtn = $('.storehead .sortby');
+    const filterBtn = $('.storehead .filterby');
+    sortBtn.querySelector('span').textContent = SORTS.find(([k]) => k === view.sort)[1];
+    const filtered = (view.tanks && view.tanks.length < TANK_ORDER.length) || (view.types && view.types.length < Object.keys(PART_TYPES).length);
+    filterBtn.querySelector('.fdot').hidden = !filtered;
+    sortBtn.onclick = () => {
+      const was = sortBtn.classList.contains('on');
+      closeMenu();
+      if (was) return;
+      sortBtn.classList.add('on');
+      menu = document.createElement('div');
+      menu.className = 'ddmenu';
+      for (const [k, label] of SORTS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = view.sort === k ? 'sel' : '';
+        b.innerHTML = `<i class="tick"></i>${label}`;
+        b.onclick = () => {
+          view.sort = k;
+          closeMenu();
+          render();
+        };
+        menu.append(b);
+      }
+      sortBtn.parentElement.append(menu);
+    };
+    filterBtn.onclick = () => {
+      const was = filterBtn.classList.contains('on');
+      closeMenu();
+      if (was) return;
+      filterBtn.classList.add('on');
+      menu = document.createElement('div');
+      menu.className = 'ddmenu cols';
+      const fill = () => {
+        menu.innerHTML = '';
+        const col = (title, all, key, label) => {
+          const c = document.createElement('div');
+          c.className = 'col';
+          c.innerHTML = `<span>${title}</span>`;
+          const on = view[key] || all;
+          for (const k of all) {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = on.includes(k) ? 'sel' : '';
+            b.innerHTML = `<i class="tick"></i>${label(k)}`;
+            b.onclick = () => {
+              const now = on.includes(k) ? on.filter((x) => x !== k) : [...on, k];
+              view[key] = now.length === all.length ? null : now;
+              fill();
+              render();
+            };
+            c.append(b);
+          }
+          menu.append(c);
+        };
+        col('Tanks', TANK_ORDER, 'tanks', (t) => TANKS[t].name.replace(' tank', ''));
+        col('Kind', Object.keys(PART_TYPES), 'types', (k) => PART_TYPES[k]);
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.className = 'reset';
+        reset.textContent = 'Show all';
+        reset.onclick = () => {
+          view.tanks = view.types = null;
+          fill();
+          render();
+        };
+        menu.append(reset);
+      };
+      fill();
+      filterBtn.parentElement.append(menu);
+    };
+  }
   function showTip(el, id) {
     const r = el.getBoundingClientRect();
     tip.hidden = false;
@@ -336,21 +435,16 @@ export function createFitting({ renderer, cursor }) {
     const store = $('.store');
     store.innerHTML = '';
     // sort and filter (they stay as set while the screen's in use)
-    const sortEl = $('.storehead .sortby');
-    const filterEl = $('.storehead .filterby');
-    const filters = [['all', 'All tanks'], ...TANK_ORDER.map((t) => [`tank:${t}`, TANKS[t].name.replace(' tank', '')]), ...Object.entries(PART_TYPES).map(([k, v]) => [`type:${k}`, v])];
-    if (filterEl.options.length !== filters.length) filterEl.innerHTML = filters.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-    sortEl.value = view.sort;
-    filterEl.value = view.filter;
-    sortEl.onchange = () => ((view.sort = sortEl.value), render());
-    filterEl.onchange = () => ((view.filter = filterEl.value), render());
+    storeControls();
     const typeOrder = Object.keys(PART_TYPES);
+    const tanksOn = view.tanks || TANK_ORDER;
+    const typesOn = view.types || typeOrder;
     const sp = spare()
       .filter((id) => {
-        const [k, v] = view.filter.split(':');
-        if (k === 'tank') return !PARTS[id].only || PARTS[id].only === v;
-        if (k === 'type') return PARTS[id].type === v;
-        return true;
+        const p = PARTS[id];
+        // usable by one of the checked tanks, and one of the checked kinds
+        if (p.only ? !tanksOn.includes(p.only) : !tanksOn.length) return false;
+        return !p.type || typesOn.includes(p.type);
       })
       .sort((a, b) => {
         // what this tank can't take, or another tank has on, goes to the back
@@ -630,6 +724,7 @@ export function createFitting({ renderer, cursor }) {
     },
     hide() {
       closePop();
+      closeMenu();
       hideTip();
       replacing = null;
       root.hidden = true;
