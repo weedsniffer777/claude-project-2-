@@ -77,6 +77,8 @@ const CSS = `
 .hud-chain.pop { animation: hudpop 0.2s steps(2); }
 .hud-spot { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0; transition: opacity 0.25s; }
 .hud-spot.on { opacity: 1; }
+.hud > * { transition: opacity 0.5s; }
+.hud.gone > :not(.hud-end):not(.hud-fade) { opacity: 0 !important; }
 .hud-speed { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .hud-fade { position: absolute; inset: 0; background: #070609; opacity: 0; transition: opacity 0.35s steps(5); }
 .hud-fade.on { opacity: 1; }
@@ -580,6 +582,10 @@ export function createHud() {
     },
     abilityCenter,
     ability2Center,
+    // the whole HUD fades away (the tank's been destroyed); the end panel stays
+    setGone(on) {
+      root.classList.toggle('gone', on);
+    },
     // k: 0..1 how hard the speed lines show
     setSpeed(k) {
       if (k <= 0.01 && !speedOn) return;
@@ -798,6 +804,7 @@ export function createHud() {
       this.setChain(0, 0);
       this.setAbility(null);
       this.setAbility(null, 1);
+      this.setGone(false);
       this.fade(false);
       for (const n of numbers) n.el.remove();
       numbers.length = 0;

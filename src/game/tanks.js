@@ -9,7 +9,7 @@ export const TANKS = {
     id: 'battle',
     name: 'Battle tank',
     create: createTank,
-    slots: 3,
+    slots: 4,
     gun: 'cannon',
     move: 'boost',
     moveName: 'Boost',
@@ -31,14 +31,13 @@ export const TANKS = {
       afterburner: [-2.05, 0.95, 0.55],
       optics: [0.25, 1.7, 0.45],
       he: [2.6, 1.42, 0],
-      plating: [0, 0.85, 1.1],
     },
   },
   light: {
     id: 'light',
     name: 'Light tank',
     create: createLightTank,
-    slots: 2,
+    slots: 3,
     gun: 'autocannon',
     move: 'dash', // its boost: a short, snappy one that recharges fast
     moveName: 'Boost',
@@ -48,7 +47,7 @@ export const TANKS = {
     unlockText: 'Beat level 1 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
     // Shift: a quick, hard dash that recharges fast (boostCooldown)
-    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.6, boostCooldown: 3 },
+    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },
     box: { cx: 0.2, hx: 1.55, hz: 0.88 },
     pic: { target: [0.15, 0.8, 0], half: 1.0 },
     anchors: {
@@ -59,7 +58,6 @@ export const TANKS = {
       afterburner: [-1.4, 0.78, 0.84],
       optics: [-0.95, 1.5, 0],
       he: [1.0, 0.92, 0.1],
-      plating: [0.6, 0.6, 0.95],
     },
   },
 };

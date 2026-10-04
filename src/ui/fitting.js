@@ -11,6 +11,8 @@ import * as THREE from 'three';
 import { PARTS, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
+import { EQUIPMENT } from '../game/equipment.js';
+import { save } from '../game/save.js';
 import { snapshotCanvas } from '../render/snapshot.js';
 
 const CSS = `
@@ -32,9 +34,14 @@ const CSS = `
 .fit .bar i.pre.down { background: var(--red); }
 .fit .kit { display: grid; gap: 5px; font-size: 13px; }
 .fit .kit div { display: flex; justify-content: space-between; gap: 8px; padding: 5px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000; }
-.fit .kit kbd { font: 400 10px/1 'Silkscreen', monospace; padding: 3px 5px; background: #f1e9d8; color: #111; }
+.fit .kit kbd, .fit .equip kbd { font: 400 10px/1 'Silkscreen', monospace; padding: 3px 5px; background: #f1e9d8; color: #111; }
 .fit .kit span:last-child { color: var(--amber); text-align: right; }
 .fit .kit .none { color: #6d655a !important; }
+.fit .equip { display: grid; gap: 6px; }
+.fit .equip .box { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 8px; text-align: left; font-size: 13px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.fit .equip button.box:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.fit .equip .box .none { color: #6d655a; }
+.fit .equip .lock { font-size: 11px; color: #8f877a; }
 .fit .right { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 300px; padding: 14px 16px 16px; display: grid; gap: 10px; }
 .fit .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
 .fit .slots { display: grid; gap: 8px; }
@@ -135,7 +142,7 @@ export function createFitting({ renderer, cursor }) {
   root.style.setProperty('--cursor', cursor);
   root.innerHTML = `
     <svg></svg>
-    <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div></div>
+    <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Change it in the hangar.</span></div></div>
     <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
@@ -197,6 +204,8 @@ export function createFitting({ renderer, cursor }) {
       <div><span>Gun</span><span>${def.gun === 'autocannon' ? 'Autocannon' : 'Cannon'}</span></div>
       <div><span><kbd>Shift</kbd></span><span>${def.moveName}</span></div>
       <div><span><kbd>E</kbd></span><span class="${def.ability ? '' : 'none'}">${def.abilityName || 'None yet'}</span></div>`;
+    // the equipment slot (an active item on Q): swapped in the hangar only
+    renderEquipment();
     // all slots taken: the count goes red; picking a part from storage then
     // asks (in red, on the slots themselves) which one it replaces
     const full = list.length >= def.slots;
@@ -284,6 +293,47 @@ export function createFitting({ renderer, cursor }) {
       });
       btns.append(b);
     }
+  }
+
+  function renderEquipment() {
+    const hangar = !!o.tanks;
+    const id = save.equipment(o.tankId);
+    const item = id && EQUIPMENT[id];
+    const owned = save.ownedEquipment().filter((e) => EQUIPMENT[e]);
+    const box = document.createElement(hangar ? 'button' : 'div');
+    if (hangar) box.type = 'button';
+    box.className = 'box';
+    box.innerHTML = item ? '<span></span>' : `<span class="none">${owned.length ? 'Empty' : 'None yet. Found in later levels.'}</span>`;
+    if (item) box.querySelector('span').textContent = item.name;
+    const slot = $('.equip .slotbox');
+    slot.innerHTML = '';
+    slot.append(box);
+    $('.equip .lock').hidden = hangar || !owned.length;
+    if (!hangar || !owned.length) return;
+    box.addEventListener('click', () => {
+      closePop();
+      pop = document.createElement('div');
+      pop.className = 'pop pnl';
+      for (const e of owned) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = EQUIPMENT[e].name;
+        b.addEventListener('click', () => (save.setEquipment(e, o.tankId), closePop(), render()));
+        pop.append(b);
+      }
+      if (item) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'remove';
+        b.textContent = 'Remove';
+        b.addEventListener('click', () => (save.setEquipment(null, o.tankId), closePop(), render()));
+        pop.append(b);
+      }
+      root.append(pop);
+      const r = box.getBoundingClientRect();
+      pop.style.left = `${Math.round(r.left)}px`;
+      pop.style.top = `${Math.round(r.bottom + 10)}px`;
+    });
   }
 
   // the bars, and with a part hovered in storage, what it would change

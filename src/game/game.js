@@ -117,6 +117,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     blocks = level.blocks;
     for (const m of partMeshes) m.removeFromParent();
     partMeshes.length = 0;
+    if (run.dying) tankId = null; // it was blown apart: a fresh one
     useTank(save.tank());
     scene.add(tank.group);
     combat = new CombatFx(scene);
@@ -160,8 +161,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       won: false,
       scrap: 0,
       parts: [...loadout],
+      pendingTips: [], // tips shown this run, saved when it's finished
       found: [], // parts picked at checkpoints this run
       hard: save.difficulty() === 'hard',
+      dying: null,
       rockets: false,
       ability: false, // the signature ability (E), once the level hands it over
       abilityCd: 0,
@@ -286,15 +289,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     // tutorial tips: each one shows once, ever. lesson(id) is true the
     // first time (and marks it seen); seen(id) just asks.
-    seen: (id) => save.tips().includes(id),
+    // On a level's first playthrough the tips seen are only kept if it's
+    // finished: quit halfway and they all come up again next time.
+    seen: (id) => save.tips().includes(id) || run.pendingTips.includes(id),
     // this level beaten before (either difficulty): the generic callouts
     // ("Enemies!") stay quiet, the level's own ones still show
     get cleared() {
       return save.cleared().some((k) => k === levelDef.id || k === `${levelDef.id}:hard`);
     },
     lesson(id) {
-      if (save.tips().includes(id)) return false;
-      save.seeTip(id);
+      if (api.seen(id)) return false;
+      run.pendingTips.push(id);
       return true;
     },
     // the tank being driven: { name, moveName, ability, abilityName, gun }
@@ -418,6 +423,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
+      // no rockets into the shack: the tank rolls in at driving speed and stops on the pad
+      run.boost = run.dash = run.brk = 0;
+      speed = Math.min(speed, MAX_SPEED * stats.speed);
       hud.setArrow(null);
       hud.setSpot(null);
       hud.clearPrompt();
@@ -431,7 +439,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         room.reset();
         room.setOffers(offers);
         level.bounds = room.bounds;
-        const keep = speed;
+        const keep = Math.min(speed, MAX_SPEED * stats.speed);
         api.teleport(room.entry.x - 2, room.entry.z, room.entry.yaw);
         speed = Math.max(keep, 4);
         run.depot.step = 'in';
@@ -479,6 +487,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // first clears pay out: the level's tank, and on Hard its bonus
       const lvl = campaignLevel(levelDef.id);
       const rewards = [];
+      for (const id of run.pendingTips) save.seeTip(id);
       const diff = run.hard ? 'hard' : 'easy';
       const first = lvl?.first?.[diff];
       if (save.clear(clearKey(levelDef.id, diff)) && first) {
@@ -525,6 +534,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let mgActive = false;
   let hardCount = 0;
   let speedK = 0; // eased 0..1 while boosting (camera and speed lines)
+  let deathK = 0; // eased 0..1 while the tank goes up
 
   // A machine died: kill chain, scrap and the odd repair spark, and a
   // freeze-frame when the cannon blew it apart.
@@ -569,9 +579,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     for (const c of level.crushables || []) {
       if (c.armored || c.done) continue;
       const f = c.footprint;
-      const reach = small ? 0.35 : c.breakable ? 1.2 : 0.7;
+      const reach = c.breakable ? (small ? 0.9 : 1.2) : 0.7;
       if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) {
-        if (small && c.breakable && (c.chips = (c.chips || 0) + 1) < 3) continue; // a barricade or the gate takes three
+        if (small && (c.chips = (c.chips || 0) + 1) < (c.shots || 1)) continue; // (the gate takes two autocannon rounds)
         crushing.crush(c, { x: at.x - (f.x - at.x || 0.5), z: at.z - (f.z - at.z), yaw: 0 });
         if (c.scrap) pickups.spawn(new THREE.Vector3(f.x, 0.8, f.z), c.scrap, 'scrap', 1);
       }
@@ -579,27 +589,83 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     level.onImpact?.(at, mesh, api);
   }
 
+  // Destroyed: the HUD fades away, the camera leans in, and in slow motion
+  // the tank goes up, its turret and parts thrown off; then the results.
   function lose() {
     run.over = true;
+    run.dying = { t: 0, bangs: 0, flung: [] };
     hud.clearPrompt();
     hud.setMarker(null);
     hud.setSpot(null);
     hud.setBoss(null, null);
+    hud.setGone(true);
     run.spot = null;
-    const kept = Math.floor(run.scrap / 2);
-    const total = bank(kept);
-    hud.showEnd(
-      'lose',
-      'Tank disabled',
-      [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
-      'Retry',
-      () => loadLevel(levelDef.id),
-      `Half recovered: +${kept} scraps${total != null ? ` · ${total} total` : ''}`,
-      partCards(),
-      onExit ? ['Exit', () => onExit()] : null,
-    );
-    setCursor();
+    run.aiming = 0;
+    aimBeam.visible = false;
+    trigger = false;
     combat.explode(pos.clone().setY(1.2));
+    // the turret and the parts come away and fly
+    const fling = (obj, up, spread) => {
+      scene.attach(obj);
+      run.dying.flung.push({ obj, vel: new THREE.Vector3((Math.random() - 0.5) * spread, up, (Math.random() - 0.5) * spread), spin: new THREE.Vector3((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6) });
+    };
+    tank.group.updateMatrixWorld(true);
+    fling(tank.turret, 9, 3);
+    for (const m of partMeshes) if (m.parent && m.parent !== tank.turret) fling(m, 5 + Math.random() * 4, 6);
+    // what's left: scorched
+    tank.group.traverse((o) => {
+      if (o.isMesh && o.material?.color) {
+        o.material = o.material.clone();
+        o.material.color.multiplyScalar(0.35);
+      }
+    });
+  }
+  function dyingFrame(realDt) {
+    const d = run.dying;
+    d.t += realDt;
+    // a chain of blasts going off through the hull
+    if (d.bangs < 4 && d.t > d.bangs * 0.35) {
+      d.bangs++;
+      combat.explode(pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0.8 + Math.random() * 0.8, (Math.random() - 0.5) * 1.6)));
+      combat.shake = Math.max(combat.shake, 0.5);
+    }
+    if (Math.random() < realDt * 20) combat.puffs.spawn(pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, 1.0, (Math.random() - 0.5) * 1.2)), new THREE.Vector3((Math.random() - 0.5) * 0.6, 1.6, (Math.random() - 0.5) * 0.6), { color: Math.random() < 0.5 ? 0x3a393d : 0x2a292c, s0: 0.3, s1: 0.9, life: 2.2, drag: 0.6, lift: 0.4, fadeAt: 0.35 });
+    if (Math.random() < realDt * 10) combat.glow.light(pos.clone().setY(1.2), 0xff8a35, 30, 0.12);
+    if (d.t > 2.4 && !d.shown) {
+      d.shown = true;
+      const kept = Math.floor(run.scrap / 2);
+      const total = bank(kept);
+      hud.showEnd(
+        'lose',
+        'Destroyed',
+        [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
+        'Retry',
+        () => loadLevel(levelDef.id),
+        `Half recovered: +${kept} scraps${total != null ? ` · ${total} total` : ''}`,
+        partCards(),
+        onExit ? ['Exit', () => onExit()] : null,
+      );
+      setCursor();
+    }
+  }
+  function flungFrame(dt) {
+    for (const f of run.dying?.flung || []) {
+      if (f.rest) continue;
+      f.vel.y -= 16 * dt;
+      f.obj.position.addScaledVector(f.vel, dt);
+      f.obj.rotation.x += f.spin.x * dt;
+      f.obj.rotation.y += f.spin.y * dt;
+      f.obj.rotation.z += f.spin.z * dt;
+      if (f.obj.position.y < 0.2 && f.vel.y < 0) {
+        f.obj.position.y = 0.2;
+        if (Math.abs(f.vel.y) < 2.5) f.rest = true;
+        f.vel.y *= -0.3;
+        f.vel.x *= 0.5;
+        f.vel.z *= 0.5;
+        f.spin.multiplyScalar(0.4);
+        combat.puffs.spawn(f.obj.position.clone(), new THREE.Vector3(0, 0.5, 0), { color: 0x8f8a80, s0: 0.2, s1: 0.6, life: 0.6, drag: 3, lift: 0.3, fadeAt: 0.3 });
+      }
+    }
   }
 
   function tankHit(damage) {
@@ -708,70 +774,80 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     enemies.breakLocks(pos, 10);
     combat.shake = Math.max(combat.shake, 0.3);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xfff0c8, 0.3, 1.6, 0.14);
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      combat.puffs.spawn(pos.clone().add(new THREE.Vector3(Math.cos(a) * 0.9, 0.4 + Math.random() * 0.5, Math.sin(a) * 0.9)), new THREE.Vector3(Math.cos(a) * 2.5, 0.4 + Math.random() * 0.6, Math.sin(a) * 2.5), {
-        color: [0xcfd0c8, 0xb9bbb3, 0xdedfd8][i % 3],
-        s0: 0.3,
-        s1: 1.0 + Math.random() * 0.5,
-        life: 1.6 + Math.random() * 0.8,
-        drag: 2.5,
-        lift: 0.3,
-        fadeAt: 0.6,
+    // a ragged bank of smoke left where it set off, thinning away slowly
+    const yaw = tank.group.rotation.y;
+    const back = new THREE.Vector3(-Math.cos(yaw), 0, Math.sin(yaw));
+    const side = new THREE.Vector3(-back.z, 0, back.x);
+    for (let i = 0; i < 14; i++) {
+      const at = pos.clone().addScaledVector(back, 0.5 + Math.random() * 2.5).addScaledVector(side, (Math.random() - 0.5) * 3.5).setY(0.3 + Math.random() * 0.9);
+      combat.puffs.spawn(at, side.clone().multiplyScalar((Math.random() - 0.5) * 2.5).addScaledVector(back, 0.5 + Math.random() * 1.5).setY(0.3 + Math.random() * 0.5), {
+        color: [0xd8d9d2, 0xc4c6be, 0xe6e7e1][i % 3],
+        s0: 0.25 + Math.random() * 0.2,
+        s1: 0.8 + Math.random() * 0.9,
+        life: 2.2 + Math.random() * 1.6,
+        drag: 2,
+        lift: 0.25,
+        delay: Math.random() * 0.15,
+        fadeAt: 0.2 + Math.random() * 0.15, // a long, gentle thinning out
       });
     }
   }
-  // the shock cone off the nose while it charges: a pale wedge with rings
-  // of pressure sliding back over it, like a body breaking the sound barrier
+  // The shock cone Breakthrough drives in front of it: a big pale wedge
+  // reaching back past the nose, brightest down its middle (nested cones,
+  // each smaller and whiter), rings of pressure sliding back over it, and
+  // white sparks streaming off it.
   function makeBowShock() {
     const g = new THREE.Group();
-    g.userData.fx = true;
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide });
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.15, 1.3, 14, 1, true), mat);
-    cone.rotation.z = -Math.PI / 2; // apex forward (+x)
-    cone.position.x = -0.65;
-    g.add(cone);
+    const cone = (r, h, opacity) => {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      m.rotation.z = -Math.PI / 2; // apex forward (+x)
+      m.position.x = -h / 2;
+      m.userData.base = opacity;
+      g.add(m);
+      return m;
+    };
+    const cones = [cone(1.25, 2.2, 0.16), cone(0.8, 1.9, 0.24), cone(0.42, 1.6, 0.42)];
     const rings = [];
-    for (let i = 0; i < 4; i++) {
-      const r = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
+    for (let i = 0; i < 5; i++) {
+      const r = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 22), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
       r.rotation.y = Math.PI / 2;
       g.add(r);
       rings.push(r);
     }
-    // a white-hot glow right at the apex
-    const glow = [
-      [0.16, 1],
-      [0.32, 0.55],
-      [0.6, 0.22],
-    ].map(([r, o]) => {
-      const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: o, depthWrite: false }));
-      m.userData.base = o;
-      g.add(m);
-      return m;
-    });
-    g.userData = { fx: true, cone, rings, glow };
+    g.userData = { fx: true, cones, rings };
     g.visible = false;
     return g;
   }
-  function updateBowShock(t, on) {
+  const bowTmp = new THREE.Vector3();
+  function updateBowShock(t, on, dt) {
     if (!bowShock) return;
     bowShock.userData.k = THREE.MathUtils.clamp((bowShock.userData.k || 0) + (on ? 0.12 : -0.08), 0, 1);
     const k = bowShock.userData.k;
     bowShock.visible = k > 0.01;
     if (!bowShock.visible) return;
-    bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 0.35, 0.75, 0);
-    bowShock.scale.setScalar(TANK_BOX.hz * 0.95);
-    bowShock.userData.cone.material.opacity = (0.32 + Math.random() * 0.14) * k;
-    for (const m of bowShock.userData.glow) {
-      m.material.opacity = m.userData.base * k * (0.8 + Math.random() * 0.3);
-      m.scale.setScalar(0.9 + Math.random() * 0.25);
-    }
+    const size = TANK_BOX.hz * 1.9; // wider than the tank
+    bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 0.6, 0.8, 0);
+    bowShock.scale.setScalar(size);
+    for (const c of bowShock.userData.cones) c.material.opacity = c.userData.base * k * (0.85 + Math.random() * 0.3);
     bowShock.userData.rings.forEach((r, i) => {
-      const u = (t * 2.6 + i / 4) % 1; // sliding back from the apex
-      r.position.x = -u * 1.3;
-      r.scale.setScalar(0.08 + u * 1.15);
-      r.material.opacity = (1 - u) * 0.6 * k;
+      const u = (t * 2.4 + i / 5) % 1; // sliding back from the apex
+      r.position.x = -u * 2.2;
+      r.scale.setScalar(0.05 + u * 1.25);
+      r.material.opacity = (1 - u) * 0.55 * k;
     });
+    // white sparks streaming back off the cone
+    if (on && dt > 0) {
+      bowShock.updateWorldMatrix(true, false);
+      for (let i = 0; i < 3; i++) {
+        const u = Math.random();
+        const a = Math.random() * Math.PI * 2;
+        bowTmp.set(-u * 2.2, Math.cos(a) * u * 1.25, Math.sin(a) * u * 1.25);
+        bowShock.localToWorld(bowTmp);
+        const yaw = tank.group.rotation.y;
+        const vel = new THREE.Vector3(-Math.cos(yaw) * (4 + Math.random() * 4), 1 + Math.random() * 2, Math.sin(yaw) * (4 + Math.random() * 4)).add(new THREE.Vector3((Math.random() - 0.5) * 3, 0, (Math.random() - 0.5) * 3));
+        combat.fx.spawn(bowTmp.clone(), vel, { color: i ? 0xffffff : 0xfff3c4, life: 0.25 + Math.random() * 0.2, size: 0.06, gravity: 4, glow: true });
+      }
+    }
   }
   // the end of the dash: a ring of force, machines knocked away and hurt
   function shockwave() {
@@ -1098,27 +1174,30 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       st.t = 0;
       speed = 0;
     }
-    if (st.step === 'repair') {
-      // Easy: a repair of up to half the hull (shown, so its absence on Hard
-      // is noticed); Hard: none
-      if (st.repairTo == null) {
-        st.repairTo = run.hard ? run.hp : Math.min(stats.maxHp, run.hp + stats.maxHp * REPAIR_SHARE);
-        st.repaired = st.repairTo - run.hp;
-      }
-      if (run.hp < st.repairTo) {
-        run.hp = Math.min(st.repairTo, run.hp + dt * 80);
-        hud.setHull(run.hp, stats.maxHp);
-      }
+    // Easy: a repair of up to half the hull, said out loud; Hard: none (and
+    // that's said too). It runs on while the screens are up.
+    if (st.step !== 'enter' && st.step !== 'in' && st.repairTo == null) {
+      st.repairTo = run.hard ? run.hp : Math.min(stats.maxHp, run.hp + stats.maxHp * REPAIR_SHARE);
+      st.repaired = st.repairTo - run.hp;
+      if (run.hard) hud.prompt('Repairs', 'No repairs in hard mode.', { danger: true, seconds: 3 });
+    }
+    if (st.repairTo != null && run.hp < st.repairTo) {
+      run.hp = Math.min(st.repairTo, run.hp + dt * 80);
+      hud.setHull(run.hp, stats.maxHp);
       if (Math.random() < dt * 30) combat.fx.spawn(new THREE.Vector3(pos.x + (Math.random() - 0.5) * 3.5, 0.1, pos.z + (Math.random() - 0.5) * 2), new THREE.Vector3((Math.random() - 0.5) * 2, 3 + Math.random() * 3, (Math.random() - 0.5) * 2), { color: 0xffd36b, life: 0.4, size: 0.06, gravity: 12, glow: true });
-      if (st.t > 0.8 && run.hp >= st.repairTo - 0.01) {
+      if (run.hp >= st.repairTo - 0.01 && st.repaired > 0.5) {
+        hud.damage(pos.clone().setY(2.4), st.repaired, 'heal');
+        hud.prompt('Repairs', `Repaired <b>+${Math.round(st.repaired)}</b> HP`, { go: true, seconds: 3 });
+      }
+    }
+    if (st.step === 'repair') {
+      // parts on the pallets: a beat for the repair to show first; none:
+      // the fitting screen comes up the moment it's parked
+      if (!st.offers.length || st.t > 0.8) {
         if (st.gift === 'boost') run.rockets = true; // the drums get rigged as boosters
-        if (st.repaired > 0.5) {
-          hud.damage(pos.clone().setY(2.4), st.repaired, 'heal');
-          hud.prompt('Repairs', `Repaired <b>+${Math.round(st.repaired)}</b> HP`, { go: true, seconds: 3 });
-        }
         st.step = 'pick';
         if (st.offers.length) showPicker();
-        else openFit(); // nothing new here: straight to the fitting screen
+        else openFit();
       }
     }
     // leaving: start the fade while still rolling for the door
@@ -1484,7 +1563,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // world time: frozen for a beat on a cannon kill, crawling under a
       // tutorial spotlight
       let dt = realDt;
-      if (run.hitstop > 0) {
+      if (run.dying) {
+        dyingFrame(realDt);
+        dt = realDt * 0.3; // the end, in slow motion
+        flungFrame(dt);
+      } else if (run.hitstop > 0) {
         run.hitstop -= realDt;
         dt = 0;
       } else if (run.spot) dt = realDt * SLOW_MO;
@@ -1582,7 +1665,23 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         accel = 40;
         if (run.brk <= 0) shockwave();
       }
-      updateBowShock(t, run.brk > 0);
+      updateBowShock(t, run.brk > 0, dt);
+      // Breakthrough's burn: big white clouds pouring out of the exhausts
+      if (run.brk > 0 && dt > 0) {
+        for (const n of tank.rocketNozzles()) {
+          if (Math.random() > dt * 22) continue;
+          const back = new THREE.Vector3(-Math.cos(tank.group.rotation.y), 0, Math.sin(tank.group.rotation.y));
+          combat.puffs.spawn(n.clone().addScaledVector(back, 0.4), back.multiplyScalar(2 + Math.random() * 2).add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.4 + Math.random() * 0.4, (Math.random() - 0.5) * 1.5)), {
+            color: [0xe6e7e1, 0xd8d9d2, 0xf2f2ee][(Math.random() * 3) | 0],
+            s0: 0.3,
+            s1: 0.9 + Math.random() * 0.6,
+            life: 1.6 + Math.random() * 0.8,
+            drag: 2.5,
+            lift: 0.4,
+            fadeAt: 0.25,
+          });
+        }
+      }
       speed += THREE.MathUtils.clamp(want - speed, -accel * dt, accel * dt);
       const yaw = tank.group.rotation.y;
       const before = tmp.copy(pos);
@@ -1613,14 +1712,22 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
       // rocket ram and dozer blade: machines in the way take a beating
       if (run.mode === 'field' && !run.over) {
+        enemies.nudge(tankBox(), vel); // and anything it drives into is shoved aside
         const ramDmg = boosting ? RAM_DAMAGE : Math.abs(speed) > 3 ? stats.ramDamage : 0;
         if (ramDmg > 0) {
-          for (const h of enemies.ram({ ...tankBox(), hx: TANK_BOX.hx + 0.3 }, ramDmg, vel)) {
+          // Breakthrough ploughs them on ahead of the tank, knocked senseless;
+          // a boost or the blade throws them aside
+          const brk = run.brk > 0;
+          const opts = brk ? { push: 1.3, side: 2, stun: 1.2 } : stats.dozerStun && !boosting ? { push: 0.8, side: 4, stun: stats.dozerStun } : { push: 0.5, side: 5 };
+          for (const h of enemies.ram({ ...tankBox(), hx: TANK_BOX.hx + (brk ? 1.2 : 0.3) }, ramDmg, vel, opts)) {
             const p = new THREE.Vector3(h.e.pos.x, 1.3, h.e.pos.z);
             hud.damage(p, h.amount, 'big');
             if (h.killed) hud.damage(p.clone().setY(2), 0, 'kill');
-            combat.fx.burst(p, { count: 12, speed: 6, color: 0xffd36b, life: 0.3, size: 0.07, gravity: 12 });
-            combat.shake = Math.max(combat.shake, 0.25);
+            if (brk) {
+              combat.sparkBlast(p);
+              run.dilate = Math.max(run.dilate || 0, 0.3);
+            } else combat.fx.burst(p, { count: 12, speed: 6, color: 0xffd36b, life: 0.3, size: 0.07, gravity: 12 });
+            combat.shake = Math.max(combat.shake, brk ? 0.45 : 0.25);
             if (h.killed) run.hitstop = Math.max(run.hitstop, 0.06);
           }
         }
@@ -1686,18 +1793,24 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
       const lean = run.spot?.frame?.();
       if (lean) camWant.lerp(lean.setY(camWant.y), 0.45);
-      if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter') camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5); // frame the room (or the part hovered)
+      // in the checkpoint: frame the room and its pallets (or the part
+      // hovered) while there's a pick to make; for the refit, the tank
+      const refit = run.depot && ['edit', 'fit', 'opening'].includes(run.depot.step) && !run.depot.focus;
+      if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter' && !refit) camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5);
       if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : 6))); // once the zone's won the camera stays put
       // boosting: the view pulls back a touch (and punches out as it kicks
       // in), speed lines rush in from the edges
       speedK += ((boosting ? 1 : 0) - speedK) * (1 - Math.exp(-realDt * (boosting ? 8 : 4)));
       run.punch = Math.max(0, (run.punch || 0) - realDt * 3);
-      const zoom = 1 / (1 + 0.06 * speedK + 0.05 * run.punch);
+      deathK += ((run.dying ? 1 : 0) - deathK) * (1 - Math.exp(-realDt * 2));
+      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch); // and leaning in on the wreck
       if (Math.abs(camera.zoom - zoom) > 1e-4) {
         camera.zoom = zoom;
         camera.updateProjectionMatrix();
       }
-      hud.setSpeed(run.over ? 0 : Math.min(1, speedK * 0.22 + run.punch * 1.2)); // a rush at the kick, then just a few faint streaks
+      // a rush at the kick, then just a few faint streaks; Breakthrough's
+      // streak the whole way
+      hud.setSpeed(run.over ? 0 : Math.min(1, Math.max(speedK * 0.22, run.brk > 0 ? 0.7 : 0) + run.punch * 1.2));
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       camera.updateMatrixWorld();
@@ -1873,6 +1986,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       },
       press: (code, down) => (down ? keys.add(code) : keys.delete(code)),
       skipStage: () => game.skipStage(),
+      hurt: (n) => tankHit(n),
     }),
   };
   return game;

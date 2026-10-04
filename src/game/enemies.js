@@ -182,6 +182,7 @@ export class Enemies {
   // machine apart instead of dropping it.
   damage(e, amount, blastFrom = null) {
     if (!e.alive) return false;
+    if (e.markT > 0) amount *= this.markBonus || 1.25; // spotted (Spotter): takes extra
     e.hp -= amount;
     e.model.hitFlash();
     if (e.hp > 0) return false;
@@ -208,8 +209,10 @@ export class Enemies {
   }
 
   // Ram: machines the tank's box touches take damage and are thrown aside.
+  // push: how hard they're shoved along the tank's way (Breakthrough
+  // ploughs them ahead of it); stun: seconds they're knocked senseless.
   // Returns [{ e, amount, killed }].
-  ram(tankBox, amount, tankVel) {
+  ram(tankBox, amount, tankVel, { push = 0.5, side = 5, stun = 0 } = {}) {
     const hits = [];
     const now = performance.now();
     for (const e of this.list) {
@@ -225,13 +228,42 @@ export class Enemies {
       if (Math.abs(lx) > tankBox.hx + r || Math.abs(lz) > tankBox.hz + r) continue;
       e.rammedAt = now;
       const killed = this.damage(e, amount, e.stats.scale < 1.5 ? new THREE.Vector3(tankBox.x, 0, tankBox.z) : null);
-      if (!killed) {
-        e.pos.x += tankVel.x * 0.12 + Math.sign(lz || 1) * -sn * 1.2;
-        e.pos.z += tankVel.z * 0.12 + Math.sign(lz || 1) * -c * 1.2;
+      if (!killed && e.stats.scale < 1.5) {
+        // knocked back: thrown along the way the tank's going and off to its side
+        e.kb ??= new THREE.Vector3();
+        e.kb.x += tankVel.x * push + Math.sign(lz || 1) * -sn * side;
+        e.kb.z += tankVel.z * push + Math.sign(lz || 1) * -c * side;
+        if (stun) {
+          e.stun = Math.max(e.stun || 0, stun);
+          e.windup = 0;
+          e.burstLeft = 0;
+        }
       }
       hits.push({ e, amount, killed });
     }
     return hits;
+  }
+
+  // The tank's body: machines it drives into are nudged out of its way
+  // (they never stop it), harder the faster it's going.
+  nudge(tankBox, tankVel) {
+    const c = Math.cos(tankBox.yaw);
+    const sn = Math.sin(tankBox.yaw);
+    for (const e of this.list) {
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5) continue;
+      const r = e.stats.box.hx * 0.8;
+      const dx = e.pos.x - tankBox.x;
+      const dz = e.pos.z - tankBox.z;
+      const lx = dx * c - dz * sn;
+      const lz = dx * sn + dz * c;
+      if (Math.abs(lx) > tankBox.hx + r || Math.abs(lz) > tankBox.hz + r) continue;
+      // out the nearer side, plus a little of the tank's way
+      const s = Math.sign(lz || 1);
+      const k = 2 + Math.hypot(tankVel.x, tankVel.z) * 0.5;
+      e.kb ??= new THREE.Vector3();
+      e.kb.x += (-sn * s * k + tankVel.x * 0.15) * 0.3;
+      e.kb.z += (-c * s * k + tankVel.z * 0.15) * 0.3;
+    }
   }
 
   // Smoke (the light tank's Breakthrough): machines within radius lose
@@ -396,8 +428,19 @@ export class Enemies {
       }
       const len = Math.hypot(vx, vz) || 1;
       const before = e.pos.clone();
+      if (e.stun > 0) {
+        e.stun -= dt;
+        speed = 0; // knocked senseless: it just stands there
+      }
       e.pos.x += (vx / len) * speed * dt;
       e.pos.z += (vz / len) * speed * dt;
+      // knockback, dying away
+      if (e.kb) {
+        e.pos.addScaledVector(e.kb, dt);
+        e.kb.multiplyScalar(Math.exp(-dt * 6));
+        if (e.kb.lengthSq() < 0.01) e.kb = null;
+      }
+      if (e.markT > 0) e.markT -= dt;
       // keep out of walls, wrecks and each other
       if (!(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
       for (const o of this.list) {
@@ -445,7 +488,7 @@ export class Enemies {
         e.fireTimer = 0.3;
       }
       if (e.blind > 0) e.blind -= dt;
-      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5 && e.los && !(e.blind > 0)) {
+      if (e.burstLeft <= 0 && e.windup <= 0 && e.fireTimer <= 0 && dist < DOG.range + 1.5 && e.los && !(e.blind > 0) && !(e.stun > 0)) {
         e.windup = DOG.windup;
         const lead = ctx.tankVel || { x: 0, z: 0 };
         e.lock = new THREE.Vector3(tankPos.x + lead.x * 0.2, 0, tankPos.z + lead.z * 0.2);

@@ -80,11 +80,14 @@ export const PARTS = {
   },
   autoloader: {
     name: 'Fast reload',
-    text: 'Main gun reloads 40% faster.',
+    text: 'Main gun reloads faster (an autocannon fires faster too).',
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
-      if (s.mag) s.magReload *= 0.6; // an autocannon: the magazine change
-      else s.reload *= 0.6;
+      if (s.mag) {
+        // an autocannon: faster firing and a quicker magazine change
+        s.reload *= 0.8;
+        s.magReload *= 0.6;
+      } else s.reload *= 0.6;
     },
     // an ammo can strapped on the turret's left bin
     light(t) {
@@ -374,34 +377,6 @@ export const PARTS = {
       const g = new THREE.Group();
       put(g, box(0.62, 0.3, 0.42, 0x6b5a3e, { r: 0.03 }), -1.25, 1.2, 0.45);
       put(g, box(0.63, 0.06, 0.43, 0xc99a2e, { r: 0.01 }), -1.25, 1.24, 0.45);
-      t.chassis.add(g);
-      return g;
-    },
-  },
-  plating: {
-    name: 'Scrap plating',
-    text: '+30 max HP, and repairs 30 now.',
-    icon: ['................', '.#########......', '.#+#+++#+#......', '.#########......', '.#+++#+++#......', '.#########......', '................', '................', '................', '................'],
-    apply(s) {
-      s.maxHp += 30;
-    },
-    heal: 30,
-    build(t) {
-      const g = new THREE.Group();
-      for (const z of [-1.2, 1.2]) {
-        put(g, box(1.5, 0.42, 0.05, RUST, { r: 0.01 }), 0.5, 0.72, z).rotation.x = z > 0 ? 0.08 : -0.08;
-        put(g, box(1.3, 0.38, 0.05, 0x5d6650, { r: 0.01 }), -0.95, 0.7, z).rotation.x = z > 0 ? 0.05 : -0.05;
-      }
-      t.chassis.add(g);
-      return g;
-    },
-    light(t) {
-      const g = new THREE.Group();
-      for (const s of [-1, 1]) {
-        const z = s * 0.95;
-        put(g, box(0.95, 0.3, 0.04, RUST, { r: 0.01 }), 0.75, 0.58, z).rotation.x = s * 0.06;
-        put(g, box(0.75, 0.26, 0.04, 0x5d6650, { r: 0.01 }), -0.2, 0.56, z).rotation.x = s * 0.04;
-      }
       t.chassis.add(g);
       return g;
     },

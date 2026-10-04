@@ -1555,7 +1555,7 @@ function buildAvenue(scene) {
     });
 
     // the gate is a breakable like the barricades: one shell or a boost ram
-    B.crushable(() => {}, { kind: 'prop', heavy: true, breakable: true, footprint: { x: GX, z: 0, hx: 0.4, hz: 2.5, yaw: 0 }, onBreak: () => (S.api ? breakGate(S.api) : false) });
+    B.crushable(() => {}, { kind: 'prop', heavy: true, breakable: true, shots: 2, footprint: { x: GX, z: 0, hx: 0.4, hz: 2.5, yaw: 0 }, onBreak: () => (S.api ? breakGate(S.api) : false) });
     function breakGate(api) {
       if (gate.down) return true;
       gate.hp = 0;

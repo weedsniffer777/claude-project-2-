@@ -12,6 +12,8 @@ const K = {
   seen: 'scavenger.seen',
   tutorial: 'scavenger.tutorial',
   tips: 'scavenger.tips',
+  equipment: 'scavenger.equipment.',
+  ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
 };
 function read(key, fallback) {
@@ -62,6 +64,14 @@ export const save = {
   },
   clearNews: () => write(K.seen, []),
   // tutorial tips already shown (each shows once)
+  // the equipment slot: one active item per tank (set in the hangar)
+  equipment: (tank = 'battle') => read(K.equipment + tank, null),
+  setEquipment: (id, tank = 'battle') => write(K.equipment + tank, id),
+  ownedEquipment: () => read(K.ownedEquipment, []),
+  ownEquipment(id) {
+    const list = save.ownedEquipment();
+    if (!list.includes(id)) write(K.ownedEquipment, [...list, id]);
+  },
   tips: () => read(K.tips, []),
   seeTip(id) {
     const list = save.tips();
