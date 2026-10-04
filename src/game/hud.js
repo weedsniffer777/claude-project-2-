@@ -164,6 +164,9 @@ const CSS = `
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
+.hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+  color: #111; background: var(--go, #6be08a); box-shadow: 0 0 0 3px #000, 6px 6px 0 3px #000; pointer-events: none; }
+.hud.touch .hud-banner { font-size: 20px; }
 .hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 10px var(--danger), inset 0 0 160px 20px rgba(255, 40, 30, 0.6); background: rgba(255, 40, 30, 0.12); opacity: 0; }
 .hud-hull.hit { animation: hudhit 0.3s steps(3); box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--danger), 4px 4px 0 4px #000; }
 .hud-hull.hit .val { color: var(--danger); }
@@ -366,6 +369,7 @@ export function createHud() {
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
     <div class="hud-pause panel" hidden><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div>
+    <div class="hud-banner px" hidden></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -535,6 +539,23 @@ export function createHud() {
       for (const x of nodes) x.n.textContent = '';
       text.querySelectorAll('kbd').forEach((k) => (k.style.visibility = 'hidden'));
       typed = { nodes, shown: 0, total: nodes.reduce((a, x) => a + x.full.length, 0), text };
+    },
+    // a big strip across the screen for a moment ("Checkpoint reached")
+    banner(text) {
+      const el = $('.hud-banner');
+      el.textContent = text;
+      el.hidden = false;
+      el.getAnimations().forEach((a) => a.cancel());
+      el.animate(
+        [
+          { opacity: 0, transform: 'translate(-50%, -50%) scale(1.6)' },
+          { opacity: 1, transform: 'translate(-50%, -50%) scale(0.95)', offset: 0.12 },
+          { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.2 },
+          { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.8 },
+          { opacity: 0, transform: 'translate(-50%, -70%) scale(1)' },
+        ],
+        { duration: 1800, easing: 'ease-out' },
+      ).finished.then(() => (el.hidden = true), () => {});
     },
     clearPrompt() {
       prompt.hidden = true;

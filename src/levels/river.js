@@ -19,6 +19,7 @@ import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
 import * as P from './props.js';
 import { buildShack } from './depot.js';
 import { buildDepotRoom } from './depotRoom.js';
+import { rails } from './rails.js';
 import { FH, glyphSign, sidewalkTexture, facadeTextures, endTexture, cutawayTexture, facadeMat, mapMat } from './cityTextures.js';
 
 const GPX = 10; // ground texels per world unit
@@ -102,16 +103,6 @@ function roadTexture(rand, craters) {
   g.fillStyle = '#9c9a92';
   for (let x = SQUARE.x0 + 4; x < SQUARE.x1 - 2; x += 5) {
     for (let z = SQUARE.n + 3; z < SQUARE.s - 2; z += 0.5) if (rand() > 0.35) g.fillRect(X(x), Z(z), 2, 0.5 * GPX);
-  }
-  // ruts
-  g.fillStyle = '#45464b';
-  for (const z of [-6.2, -5.1, -2.8, -1.7, 1.0, 2.1, 4.1, 5.2]) {
-    let x = MAP.x0;
-    while (x < MAP.x1) {
-      const len = 2 + rand() * 9;
-      if (rand() < 0.55 && !inSquare(x)) g.fillRect(X(x), Z(z + (rand() - 0.5) * 0.2), len * GPX, 2);
-      x += len + rand() * 2;
-    }
   }
   for (const { x, z, r } of craters) {
     g.fillStyle = '#3b3836';
@@ -597,7 +588,49 @@ function buildRiver(scene) {
     B.block(cx, cz, len * 0.25, 0.25, yaw);
     B.hitBox(cx, 0.45, cz, len * 0.5, 0.9, 0.4, yaw);
   }
-  const gunBlock = B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement (gone once it's destroyed)
+  B.block(GUN_X, 0, 2.3, 2.3); // the bridge gun's emplacement: still solid once it's destroyed
+  // Behind the gun, right across the bridge: road barriers, yellow and black
+  // striped bars on trestles with sandbags. They won't break while the gun
+  // stands; once it's destroyed, a shell or a ram knocks them flat.
+  const gate = [];
+  const BAR_X = GUN_X + 6;
+  for (const [z0, z1] of [[BRIDGE.n + 0.3, -3.2], [-3.2, 2.4], [2.4, BRIDGE.s - 0.3]]) {
+    const zc = (z0 + z1) / 2;
+    const len = z1 - z0;
+    B.crushable(
+      () => {
+        const stripes = (() => {
+          const [c, g] = canvas(16, 2);
+          for (let i = 0; i < 16; i++) {
+            g.fillStyle = (i >> 1) % 2 ? '#1d1b1e' : '#e8b030';
+            g.fillRect(i, 0, 1, 2);
+          }
+          const t = tex(c);
+          t.wrapS = THREE.RepeatWrapping;
+          t.repeat.set(len / 2.5, 1);
+          return t;
+        })();
+        for (const h of [0.55, 1.05]) {
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.26, len - 0.3), new THREE.MeshToonMaterial({ map: stripes, gradientMap }));
+          bar.position.set(BAR_X, h, zc);
+          bar.castShadow = true;
+          B.add(bar);
+        }
+        for (const zz of [z0 + 0.4, zc, z1 - 0.4]) {
+          for (const s of [-1, 1]) {
+            const leg = put(B.root, box(0.08, 1.25, 0.08, 0x8a8678, { r: 0.01 }), BAR_X + s * 0.22, 0.6, zz);
+            leg.rotation.z = -s * 0.32;
+          }
+          put(B.root, box(0.5, 0.22, 0.34, 0x8a7b5c, { r: 0.08 }), BAR_X, 0.11, zz); // a sandbag on its feet
+        }
+        put(B.root, box(0.16, 0.16, 0.16, 0xff9a40, { glow: true }), BAR_X, 1.25, zc); // a warning lamp
+        B.hitBox(BAR_X, 0.7, zc, 0.6, 1.4, len);
+        B.block(BAR_X, zc, 0.35, len / 2);
+      },
+      { kind: 'prop', heavy: true, breakable: true, armored: true, scrap: 1 },
+    );
+    gate.push(B.crushables[B.crushables.length - 1]);
+  }
   sandbags(151, 2.5, 5, Math.PI / 2);
 
   // the far bank: the street runs on between blocks, a heap of rubble or two
@@ -607,6 +640,12 @@ function buildRiver(scene) {
   southBlock(210, MAP.x1, 3, 'west');
   rubble(200, -8.4, 2.0, 1.4, { slabs: 2 });
   rubble(224, 7.8, 2.4, 1.6, { slabs: 2 });
+
+  // tram rails down the street, over the square and across the bridge
+  {
+    const R = rails(B, rand);
+    for (const z of [-2.25, 1.55]) R.track(R.straight(START_X + 1, z, MAP.x1 - 1, z));
+  }
 
   // the checkpoints
   const shacks = SHACKS.map((k) => buildShack(B, { x0: k.x0, x1: k.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt }));
@@ -667,6 +706,12 @@ function buildRiver(scene) {
   // 1: the street
   function sector1(api) {
     const x = api.tankPos.x;
+    // drive on up to the checkpoint and it opens, whatever's still about
+    // (left behind at the door)
+    if (S.step < 3 && x > shackA.x0 - 9) {
+      openShack(api, shackA, null);
+      go(3);
+    }
     switch (S.step) {
       case 0:
         if (x > START_X + 10 || S.t > 4) {
@@ -693,6 +738,7 @@ function buildRiver(scene) {
       case 3:
         if (atDoor(api, shackA)) {
           go(4);
+          if (api.enemiesAlive) api.clearEnemies(); // left behind
           api.depot(shackA, { offers: [], onLeave: () => startSector2(api) }); // a repair stop: no parts here
         }
         break;
@@ -712,7 +758,7 @@ function buildRiver(scene) {
   // past the square, into the street to the bridge: made it through. The
   // checkpoint opens; whatever's still about is left behind at its door.
   function brokeThrough(api) {
-    if (S.step > 2 || api.tankPos.x < SQUARE.x1 + 3) return false;
+    if (S.step > 3 || api.tankPos.x < SQUARE.x1 + 3) return false;
     openShack(api, shackB, 'Area cleared.');
     go(4);
     return true;
@@ -789,8 +835,7 @@ function buildRiver(scene) {
     switch (S.step) {
       case 0:
         if (!S.boss.alive) {
-          const gi = B.blocks.indexOf(gunBlock);
-          if (gi >= 0) B.blocks.splice(gi, 1); // the wreck's flattened: drive straight over it
+          for (const c of gate) c.armored = false; // the barriers can be broken now
           api.prompt('Bridge gun destroyed', 'The way is open. <b>Drive across!</b>', { go: true, seconds: 5 });
           setBounds(api, { maxX: MAP.x1 - 4 });
           api.arrow(new THREE.Vector3(END_X + 2, 0.6, 0), 'Exit');

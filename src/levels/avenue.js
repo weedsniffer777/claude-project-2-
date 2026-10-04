@@ -1619,6 +1619,12 @@ function buildAvenue(scene) {
     function sector1(api) {
       const x = api.tankPos.x;
       const run = api.run;
+      // past the tutorial: drive on up to the checkpoint and it opens,
+      // whatever's still about (left behind at the door)
+      if (api.seen('push') && S.step >= 3 && S.step < 7 && x > 40) {
+        openShack(api, shackA, null);
+        go(8);
+      }
       switch (S.step) {
         // 1: crush the wreck ahead -> scraps are introduced
         case 0:
@@ -1753,6 +1759,7 @@ function buildAvenue(scene) {
         case 8:
           if (atDoor(api, shackA)) {
             go(9);
+            if (api.enemiesAlive) api.clearEnemies(); // left behind
             api.depot(shackA, { offers: ['dozer', 'autoloader', 'era'], onLeave: () => startSector2(api) });
           }
           break;
@@ -1827,6 +1834,7 @@ function buildAvenue(scene) {
         case 6:
           if (atDoor(api, shackB)) {
             go(7);
+            if (api.enemiesAlive) api.clearEnemies(); // left behind
             api.depot(shackB, { offers: [], onLeave: () => startSector3(api) }); // a repair stop: these parts turn up in level 2 now
           }
           break;
@@ -1889,13 +1897,15 @@ function buildAvenue(scene) {
           }
           break;
         case 1:
-          // the first time through, the tank's own ability comes online for
-          // the boss (played before, it's had it all along)
-          if (S.t > 3 && !S.taught && api.tank.ability === 'pierce' && S.boss.alive && api.lesson('ability-pierce')) {
+          // the first time through, once the boss is down to half, the
+          // tank's own ability comes online to finish it (that shot always
+          // kills it). Played before, it's had the ability all along.
+          if (!S.taught && api.tank.ability === 'pierce' && S.boss.alive && S.boss.hp <= S.boss.maxHp * 0.5 && api.lesson('ability-pierce')) {
             S.taught = true;
+            S.boss.finisher = true;
             api.giveAbility();
-            const how = api.touch ? 'Tap the <b>E</b> button, drag to aim and let go' : 'Press <kbd>E</kbd>, aim and click';
-            api.prompt('Ability', `Your tank's ability is ready! ${how} to fire a <b>piercing shot</b> straight through the boss!`, { go: true, seconds: 9 });
+            const how = api.touch ? 'tap the <b>E</b> button, drag to aim and let go' : 'press <kbd>E</kbd>, aim and click';
+            api.prompt('Ability', `The boss is damaged! Finish it off with your <b>Piercing shot</b>: ${how}!`, { go: true, seconds: 9 });
             api.spotlight({ targets: [api.ability2Screen(), () => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null)], r: 110 }, () => (api.run.abilities || 0) > 0, { maxTime: 2.5 });
           }
           if (!S.boss.alive) {

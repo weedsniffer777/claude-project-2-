@@ -22,12 +22,18 @@ export function createBridgeGun() {
   // the emplacement: a concrete ring, sandbags stacked round it
   put(group, cyl(1.6, 0.6, C.concrete, { seg: 16 }), 0, 0.3, 0);
   put(group, cyl(1.3, 0.08, C.dark, { seg: 16 }), 0, 0.62, 0);
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2;
-    if (Math.cos(a) > 0.6) continue; // the front is open for the gun
-    for (let k = 0; k < 2; k++) {
-      const bag = put(group, box(0.5, 0.2, 0.3, C.sand, { r: 0.08 }), Math.cos(a + k * 0.17) * 1.85, 0.12 + k * 0.2, Math.sin(a + k * 0.17) * 1.85);
-      bag.rotation.y = -a;
+  // sandbags heaped round it, not laid out: each a little off, some slumped,
+  // the rows uneven, colours varying
+  const jit = (i, k) => Math.sin(i * 12.9898 + k * 78.233) * 0.5; // -0.5..0.5, fixed per bag
+  const SAND = [C.sand, 0x7d6f52, 0x968566, 0x857656];
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2 + jit(i, 0) * 0.12;
+    if (Math.cos(a) > 0.62) continue; // the front is open for the gun
+    const rows = 2 + (jit(i, 1) > 0.1 ? 1 : 0);
+    for (let k = 0; k < rows; k++) {
+      const r = 1.82 + jit(i, k + 2) * 0.12 + k * -0.05;
+      const bag = put(group, box(0.5 + jit(i, k) * 0.08, 0.2, 0.3, SAND[(i + k) % 4], { r: 0.09 }), Math.cos(a + k * 0.14) * r, 0.11 + k * 0.19, Math.sin(a + k * 0.14) * r);
+      bag.rotation.set(jit(i, k + 5) * 0.25, -a + jit(i, k + 3) * 0.35, jit(i, k + 7) * 0.2);
     }
   }
   // the turret: a squat armoured block that turns
@@ -59,12 +65,6 @@ export function createBridgeGun() {
 
   // --- detail: the emplacement
   put(group, cyl(1.68, 0.1, 0x8d8a83, { seg: 16 }), 0, 0.62, 0); // the ring's worn lip
-  for (let i = 0; i < 18; i++) {
-    const a = (i / 18) * Math.PI * 2 + 0.09;
-    if (Math.cos(a) > 0.6) continue;
-    const bag = put(group, box(0.5, 0.2, 0.3, 0x7d6f52, { r: 0.08 }), Math.cos(a) * 1.85, 0.52, Math.sin(a) * 1.85); // a third row of bags
-    bag.rotation.y = -a;
-  }
   for (const a of [2.2, 2.9, 3.6, 4.1]) put(group, cyl(0.025, 0.35, 0x5a4a3c, { seg: 4 }), Math.cos(a) * 1.55, 0.75, Math.sin(a) * 1.55).rotation.z = 0.3; // rebar stubs
   // ammo crates stacked behind, a generator with its exhaust, cables
   for (const [x, z, y, yaw] of [[-2.5, 0.9, 0.2, 0.2], [-2.6, 1.6, 0.2, 0.1], [-2.55, 1.2, 0.6, 0.35]]) {

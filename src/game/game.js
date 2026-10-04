@@ -180,6 +180,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       won: false,
       scrap: 0,
       parts: [...loadout],
+      checkpoint: null, // the last checkpoint entered (an Easy revive goes back there)
+      revived: false,
       pendingTips: [], // tips shown this run, saved when it's finished
       found: [], // parts picked at checkpoints this run
       hard: save.difficulty() === 'hard',
@@ -457,6 +459,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
       offers = offers.filter((id) => !save.owned().includes(id)).slice(0, count); // only parts not found yet
+      hud.banner('Checkpoint reached');
+      run.checkpoint = shack; // where an Easy revive puts you back
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
@@ -717,6 +721,22 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (Math.random() < realDt * 10) combat.glow.light(pos.clone().setY(1.2), 0xff8a35, 30, 0.12);
     if (d.t > 2.4 && !d.shown) {
       d.shown = true;
+      // Easy, past a checkpoint, the first death: back to that checkpoint
+      // instead (Retry starts the level over)
+      if (!run.hard && run.checkpoint && !run.revived) {
+        hud.showEnd(
+          'lose',
+          'Destroyed',
+          [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
+          'Revive at checkpoint',
+          () => revive(),
+          'One revive per level',
+          [],
+          ['Retry level', () => (bank(Math.floor(run.scrap / 2)), loadLevel(levelDef.id))],
+        );
+        setCursor();
+        return;
+      }
       const kept = Math.floor(run.scrap / 2);
       const total = bank(kept);
       hud.showEnd(
@@ -731,6 +751,30 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       );
       setCursor();
     }
+  }
+  // Back at the last checkpoint's door: a fresh tank with its parts, full
+  // hull, the machines that got you gone. Once per level.
+  function revive() {
+    const shack = run.checkpoint;
+    hud.hideEnd();
+    hud.setGone(false);
+    for (const f of run.dying?.flung || []) f.obj.removeFromParent();
+    run.dying = null;
+    tank.group.removeFromParent();
+    tankId = null;
+    useTank(save.tank());
+    scene.add(tank.group);
+    fitParts(run.parts);
+    tank.group.position.set(shack.outside.x - 2.5, 0, shack.outside.z);
+    tank.group.rotation.y = 0;
+    speed = 0;
+    enemies.retire();
+    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, magT: 0, mag: stats.mag });
+    reload = 1;
+    hud.setHull(run.hp, stats.maxHp);
+    camTarget.set(pos.x + 0.6, 0.8, pos.z);
+    hud.banner('Revived');
+    setCursor();
   }
   function flungFrame(dt) {
     for (const f of run.dying?.flung || []) {
@@ -787,13 +831,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the cannon fires the moment it bears (or after a short wait at most), so
   // shots always go where you pointed, never where the barrel happened to be.
   let queued = 0; // seconds left on a queued shot
+  // the camera swung out to show a boss lets go the moment you act
+  const letGoFrame = () => run.spot?.frame && api.clearSpot();
   function fire() {
+    letGoFrame();
     if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
     queued = 0.7;
   }
   // Shift: boost. The battle tank's drums swing round and light, the light
   // tank's exhausts flare; either way it charges.
   function boost() {
+    letGoFrame();
     if (!run.rockets || run.over || run.mode !== 'field' || run.locked || run.boostCd > 0) return;
     if (def.move === 'dash') {
       // the light tank's Dash: an instant, hard burst, over in a moment
@@ -845,6 +893,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   // E: the tank's signature ability.
   function ability() {
+    letGoFrame();
     if (!run.ability || run.over || run.mode !== 'field' || run.locked) return;
     if (def.ability === 'pierce') {
       if (run.aiming > 0) return firePierce(); // E again: fire now
@@ -862,6 +911,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     return id && EQUIPMENT[id] && save.ownedEquipment().includes(id) ? id : null;
   };
   function equipment() {
+    letGoFrame();
     const id = equipId();
     if (!id || !run.gun || run.over || run.mode !== 'field' || run.locked) return;
     if (run.arty > 0) return void (run.arty = 0);
@@ -1112,9 +1162,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           if (along < a0 - 0.6 || along > a1 + 0.6) continue;
           if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
           hit.add(e);
-          const killed = enemies.damage(e, stats.pierceDamage, from.clone());
+          const dmg = e.finisher ? Math.max(stats.pierceDamage, e.hp + 1) : stats.pierceDamage; // (the tutorial boss: the shot that finishes it)
+          const killed = enemies.damage(e, dmg, from.clone());
           const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
-          hud.damage(p, stats.pierceDamage, 'big');
+          hud.damage(p, dmg, 'big');
           if (killed) hud.damage(p.clone().setY(p.y + 0.7), 0, 'kill');
           combat.sparkBlast(p);
           combat.shake = Math.max(combat.shake, 0.5);
@@ -1157,6 +1208,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (hasAim && tank.aimError() > 0.12) return;
     reload = 0;
     run.shots++;
+    letGoFrame();
     combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
     if (--run.mag <= 0) run.magT = stats.magReload;
   }

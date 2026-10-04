@@ -99,7 +99,7 @@ const BRIDGE_GUN = {
   modelScale: 1,
   aimY: 1.3,
   muzzleY: 2.4,
-  hit: [3.4, 1.8, 3.4, 0.9],
+  hit: [4.4, 1.9, 4.4, 0.95], // the whole emplacement, sandbags and all: a shell into the bags is a hit
   scrap: 40,
 };
 

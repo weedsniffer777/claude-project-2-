@@ -1062,7 +1062,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         <span class="tagline px">Level ${z.n}</span>
         <h2>${z.name}</h2>
         <div class="steps">${z.steps.map((t, i) => `${i ? '<i></i>' : ''}<b class="${t === 'Boss' ? 'boss' : ''}">${t}</b>`).join('')}</div>
-        <div class="diffs">${tab('easy', 'Easy', 'Checkpoints repair you')}${tab('hard', 'Hard', 'More enemies, no repairs')}</div>
+        <div class="diffs">${tab('easy', 'Easy', 'Checkpoints repair you, one revive')}${tab('hard', 'Hard', 'More enemies, no repairs, no revive')}</div>
         ${done('easy') && !done('hard') && diff === 'easy' ? '<span class="callout">Beat it on Hard for extra rewards!</span>' : ''}
         ${firstTile ? `<span class="label">First clear reward${diff === 'hard' ? ' (Hard)' : ''}</span><div class="rewards">${firstTile}</div>` : ''}
         <span class="label">Possible parts</span>

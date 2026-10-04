@@ -193,7 +193,9 @@ window.addEventListener('keydown', (e) => {
   else if (mode === viewer) setMode(game);
 });
 
-setMode(params.get('devkit') === 'viewer' ? viewer : params.has('base') ? hub : game);
+// straight into level 1 until it's been beaten once; after that, the base
+const beatenOne = save.cleared().some((k) => k === 'avenue' || k === 'avenue:hard');
+setMode(params.get('devkit') === 'viewer' ? viewer : params.has('base') || (beatenOne && !params.has('level')) ? hub : game);
 window.__game = game.debug; // dev/test hook
 window.__hub = hub;
 
