@@ -145,7 +145,7 @@ const devkit = createDevKit({
           const gear = l.first?.easy?.equipment;
           if (gear && !save.ownedEquipment().includes(gear)) {
             save.ownEquipment(gear);
-            for (const t of save.tanks()) if (!save.equipment(t)) save.setEquipment(gear, t);
+            if (!save.equipment(save.tank())) save.setEquipment(gear, save.tank());
             save.addNews([{ kind: 'equipment', id: gear }]);
           }
           const tank = l.first?.easy?.tank;

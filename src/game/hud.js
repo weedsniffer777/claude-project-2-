@@ -229,7 +229,9 @@ function drawStick(base, knob) {
 // Boost ability icon (32x32 canvas, pixel art): a close-up picture of the
 // boost on the tank (idle, or firing while it burns) in a frame; while it
 // recharges the part still to fill stays dark, filling from the bottom.
-function drawAbility(c, k, lit, art) {
+// active: while a timed ability runs, the share of it left (1 .. 0): the
+// button stays bright and the brightness drains down as it runs out
+function drawAbility(c, k, lit, art, active = null) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, 32, 32);
   g.fillStyle = '#000';
@@ -239,6 +241,17 @@ function drawAbility(c, k, lit, art) {
   g.fillStyle = '#1d1b1e';
   g.fillRect(3, 3, 26, 26);
   if (art) g.drawImage(art, 3, 3, 26, 26);
+  if (lit && active != null) {
+    // the frame and picture bright, a dark tide rising as it runs out
+    g.fillStyle = '#f1e9d8';
+    g.fillRect(1, 1, 30, 2);
+    const used = Math.round(26 * (1 - Math.max(0, Math.min(1, active))));
+    if (used > 0) {
+      g.fillStyle = '#000000a0';
+      g.fillRect(3, 3, 26, used);
+    }
+    return;
+  }
   const h = Math.round(26 * (1 - Math.min(1, k)));
   if (h > 0 && !lit) {
     g.fillStyle = '#000000b0';
@@ -267,18 +280,29 @@ function drawIcon(c, rows) {
 
 // The pointer outside of combat: a chunky pixel arrow, bone with a black
 // edge, drawn at 2x.
+// The pointer outside of combat (menus, the base): the same cross as the
+// one inside the aiming circle: four short arms with a gap in the middle and
+// a dot, bone on a black edge.
 export const CURSOR = (() => {
-  const rows = ['X.........', 'XX........', 'XoX.......', 'XooX......', 'XoooX.....', 'XooooX....', 'XoooooX...', 'XooooooX..', 'XoooooooX.', 'XooooXXXXX', 'XooXoX....', 'XoX.XoX...', 'XX..XoX...', 'X....XoX..', '.....XXX..'];
+  const N = 25;
+  const C = 12; // the centre pixel
   const c = document.createElement('canvas');
-  c.width = 20;
-  c.height = 30;
+  c.width = c.height = N;
   const g = c.getContext('2d');
-  rows.forEach((r, y) => [...r].forEach((ch, x) => {
-    if (ch === '.') return;
-    g.fillStyle = ch === 'X' ? '#000' : '#f1e9d8';
-    g.fillRect(x * 2, y * 2, 2, 2);
-  }));
-  return `url(${c.toDataURL()}) 0 0, default`;
+  const arms = (pad, color) => {
+    g.fillStyle = color;
+    for (const [x, y, w, h] of [
+      [C - 11, C - 1, 7, 3], // left
+      [C + 5, C - 1, 7, 3], // right
+      [C - 1, C - 11, 3, 7], // up
+      [C - 1, C + 5, 3, 7], // down
+      [C - 1, C - 1, 3, 3], // the dot
+    ])
+      g.fillRect(x - pad, y - pad, w + pad * 2, h + pad * 2);
+  };
+  arms(1, '#000');
+  arms(0, '#f1e9d8');
+  return `url(${c.toDataURL()}) ${C} ${C}, crosshair`;
 })();
 
 let injected = false;
@@ -606,10 +630,10 @@ export function createHud() {
       const el = a.el;
       el.hidden = !state;
       if (!state) return;
-      const key = `${Math.round(state.k * 26)}|${state.k >= 1}|${state.lit}|${state.art?.width}|${state.art && artId(state.art)}`;
+      const key = `${Math.round(state.k * 26)}|${state.k >= 1}|${state.lit}|${state.active == null ? '' : Math.round(state.active * 26)}|${state.art?.width}|${state.art && artId(state.art)}`;
       if (key !== a.key) {
         a.key = key;
-        drawAbility(el.querySelector('canvas'), state.k, state.lit, state.art);
+        drawAbility(el.querySelector('canvas'), state.k, state.lit, state.art, state.active);
       }
       el.classList.toggle('ready', state.k >= 1 && !state.lit);
       const cooling = state.left > 0 && !state.lit;

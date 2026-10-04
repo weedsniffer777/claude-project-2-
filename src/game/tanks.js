@@ -16,7 +16,7 @@ export const TANKS = {
     ability: 'pierce',
     abilityName: 'Piercing shot',
     blurb: 'Heavy and slow, with a big gun. Boost to ram, Piercing shot to punch through a line of enemies.',
-    stats: {},
+    stats: { boostTime: 0.65 }, // a short, heavy shove
     // footprint for collisions (hull, covers, the rear drums), tank-local
     box: { cx: -0.25, hx: 2.25, hz: 1.15 },
     // its picture (carousel, rewards): framed on the hull, antennas aside

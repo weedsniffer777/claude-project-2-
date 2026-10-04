@@ -37,9 +37,10 @@ export const BASE_STATS = {
   breakTime: 1.5,
   breakSpeed: 1.0,
   breakCooldown: 8,
+  breakShield: 0.25, // damage cut while it (or the dash) runs: grows with the tank's level to 0.5
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
-  spotter: 0, // Legendary Wider view: enemies marked every few seconds (how many)
+  spotter: 0, // Legendary Optics: enemies marked every few seconds (how many)
   hotLoader: false, // Legendary Fast reload: a kill reloads the main gun
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
   dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
@@ -363,7 +364,7 @@ export const PARTS = {
     },
   },
   optics: {
-    name: 'Wider view',
+    name: 'Optics',
     text: 'See further around you. Machine gun reaches further.',
     icon: ['................', '....######......', '...#------#.....', '..#--****--#####', '..#--*##*--#....', '..#--****--#####', '...#------#.....', '....######......', '................', '................'],
     apply(s) {
@@ -445,12 +446,14 @@ export const PARTS = {
       const g = vulcanBarrels();
       g.position.set(0.5, 0, 0);
       (t.gunPivot || t.turret).add(g);
+      // the ammo drum rides on the gun's left, under the barrels, with a
+      // feed chute up into the motor housing
       const drum = new THREE.Group();
-      put(drum, cyl(0.2, 0.26, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
-      put(drum, cyl(0.21, 0.04, 0xc99a2e, { seg: 12 }), 0, 0, 0.11).rotation.x = Math.PI / 2;
-      drum.position.set(-0.25, 1.32, 0.62);
-      t.chassis.add(drum);
-      g.userData.extra = [drum];
+      put(drum, cyl(0.12, 0.18, 0x4a5638, { seg: 12 }), 0, 0, 0).rotation.x = Math.PI / 2;
+      put(drum, cyl(0.125, 0.03, 0xc99a2e, { seg: 12 }), 0, 0, -0.08).rotation.x = Math.PI / 2;
+      put(drum, box(0.06, 0.12, 0.05, 0x2b2d30, { r: 0.01 }), 0.05, 0.1, 0.08);
+      drum.position.set(0.2, -0.12, -0.2);
+      g.add(drum);
       return g;
     },
     build(t) {
@@ -563,6 +566,7 @@ export function applyTankLevel(s, lvl) {
   s.cannonDamage *= 1 + 0.012 * k;
   s.mgDamage *= 1 + 0.01 * k;
   s.speed *= 1 + 0.003 * k;
+  s.breakShield = 0.25 + (0.25 * k) / (TANK_MAX - 1); // the ability gets better with the tank
 }
 
 const INT_KEYS = new Set(['mag', 'extraMgs', 'view']); // (view: the camera; it only widens by tier)

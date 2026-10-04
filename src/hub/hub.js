@@ -1241,7 +1241,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const onDown = (e) => {
     if (open?.id === 'hangar' && !workshop.isOpen && tank) {
       turning = { x: e.clientX, id: e.pointerId };
-      canvasEl.style.cursor = 'grabbing';
       return;
     }
     if (open || !news.hidden) return;
@@ -1251,10 +1250,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
     if (r) return clickRoom(r);
     walkTo = hit.point.clone().setY(0);
   };
-  // (on the window: the drag keeps turning it when the pointer passes over
-  // the panels)
+  // (watched on the window, so a drag that wanders onto a panel or is let
+  // go anywhere ends there)
   const onTurn = (e) => {
     if (!turning || e.pointerId !== turning.id) return;
+    // the button's up, or the pointer's gone onto a panel: the drag's over
+    if (!e.buttons || e.target !== canvasEl) return void (turning = null);
     tank.group.rotation.y += (e.clientX - turning.x) * 0.012;
     turning.x = e.clientX;
   };
@@ -1267,7 +1268,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const onUp = (e) => {
     if (!turning || e.pointerId !== turning.id) return;
     turning = null;
-    canvasEl.style.cursor = CURSOR;
   };
 
   // ----------------------------------------------------------- frame

@@ -640,7 +640,7 @@ function buildRiver(scene) {
   function openShack(api, shack, text) {
     shack.openIn();
     api.objective('Enter the checkpoint');
-    api.prompt('Zone clear', text, { go: true });
+    if (text) api.prompt('Zone clear', text, { go: true });
     api.arrow(shack.door, 'Checkpoint');
   }
   const atDoor = (api, shack) => shack.inDoor > 0.6 && Math.hypot(api.tankPos.x - shack.door.x, api.tankPos.z - shack.door.z) < 5;
@@ -660,8 +660,8 @@ function buildRiver(scene) {
     api.giveRockets();
     if (api.tank.ability) api.giveAbility();
     api.sectors(SECTORS, 0, 'Level 2');
-    api.objective('Push through to the bridge');
-    api.prompt('Dawn', 'Push through to the river. The bridge is the only way across.', { seconds: 5 });
+    api.objective('Cross the river');
+    api.prompt('Dawn', 'Cross the river.', { seconds: 4 });
   }
 
   // 1: the street
@@ -686,7 +686,7 @@ function buildRiver(scene) {
         break;
       case 2:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
-          openShack(api, shackA, 'Drive into the <b>checkpoint</b> for repairs.');
+          openShack(api, shackA, null);
           go(3);
         }
         break;
@@ -707,13 +707,13 @@ function buildRiver(scene) {
     go(0);
     setBounds(api, B2);
     api.sectors(SECTORS, 1, 'Level 2');
-    api.objective('Clear the square, or break through to the checkpoint');
+    api.objective('');
   }
   // past the square, into the street to the bridge: made it through. The
   // checkpoint opens; whatever's still about is left behind at its door.
   function brokeThrough(api) {
     if (S.step > 2 || api.tankPos.x < SQUARE.x1 + 3) return false;
-    openShack(api, shackB, 'Made it through! Drive into the <b>checkpoint</b> before the bridge.');
+    openShack(api, shackB, 'Area cleared.');
     go(4);
     return true;
   }
@@ -722,7 +722,7 @@ function buildRiver(scene) {
     switch (S.step) {
       case 0:
         if (S.t > 1.5) {
-          contact(api, 'The square is full of them!');
+          contact(api, 'The square is full of enemies!');
           fromNorth(api, -1.5);
           fromNorth(api, 1.5, 0.5);
           fromNorth(api, 0, 1.0);
@@ -754,7 +754,7 @@ function buildRiver(scene) {
         break;
       case 3:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
-          openShack(api, shackB, 'Square clear! Drive into the <b>checkpoint</b> before the bridge.');
+          openShack(api, shackB, 'Area cleared.');
           go(4);
         }
         break;

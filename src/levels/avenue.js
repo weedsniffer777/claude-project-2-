@@ -1586,7 +1586,7 @@ function buildAvenue(scene) {
     function openShack(api, shack, text) {
       shack.openIn();
       api.objective('Enter the checkpoint');
-      api.prompt('Zone clear', text, { go: true });
+      if (text) api.prompt('Zone clear', text, { go: true }); // (the tutorial's words; after that, just the arrow)
       api.arrow(shack.door, 'Checkpoint');
     }
     const atDoor = (api, shack) => shack.inDoor > 0.6 && Math.hypot(api.tankPos.x - shack.door.x, api.tankPos.z - shack.door.z) < 5;
@@ -1674,9 +1674,6 @@ function buildAvenue(scene) {
               api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
               api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
               api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
-            } else if (api.tank.ability === 'breakthrough' && api.lesson('ability-breakthrough')) {
-              api.prompt('Ability', api.touch ? 'Enemies incoming! Tap the <b>E</b> button to <b>Breakthrough</b>: charge through them, shielded, smashing anything in your way!' : 'Enemies incoming! Press <kbd>E</kbd> to <b>Breakthrough</b>: charge through them, shielded, smashing anything in your way!', { danger: true, seconds: 8 });
-              api.spotlight({ targets: [api.ability2Screen(), onEnemy(api)], r: 110 }, () => (run.abilities || 0) > 0, { maxTime: 2.5 });
             } else if (!api.cleared) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
             go(3);
           } else if (!e && S.t > 3) {
@@ -1749,7 +1746,7 @@ function buildAvenue(scene) {
           break;
         case 7:
           if (x > 40 || (api.enemiesAlive === 0 && S.t > 1)) {
-            openShack(api, shackA, 'Drive into the <b>checkpoint</b> for repairs and parts.');
+            openShack(api, shackA, api.lesson('checkpoint') ? 'Drive into the <b>checkpoint</b> for repairs and parts.' : null);
             go(8);
           }
           break;
@@ -1823,7 +1820,7 @@ function buildAvenue(scene) {
         // 4: waiting for the gate (onImpact)
         case 5:
           if (x > GX + 1) {
-            openShack(api, shackB, 'Through! Another <b>checkpoint</b>. Patch up before the intersection.');
+            openShack(api, shackB, api.lesson('checkpoint2') ? 'Enter the next <b>checkpoint</b>!' : null);
             go(6);
           }
           break;

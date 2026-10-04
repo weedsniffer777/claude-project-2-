@@ -258,6 +258,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
     stats = statsFor(list, tankId);
     tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
+    // the Vulcan: thin tracers, barely a kick per round
+    const vulcan = list.includes('vulcan') && tank.kind === 'light';
+    tank.tracerScale = vulcan ? 0.5 : 1;
+    if ('kick' in tank) tank.kick = vulcan ? 0.12 : 1;
     if (lastSize) game.resize(...lastSize); // optics widen the view
   }
 
@@ -544,8 +548,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         }
         if (first.equipment && EQUIPMENT[first.equipment] && !save.ownedEquipment().includes(first.equipment)) {
           save.ownEquipment(first.equipment);
-          // fitted straight away to every tank with nothing in that slot
-          for (const t of save.tanks()) if (!save.equipment(t)) save.setEquipment(first.equipment, t);
+          // fitted straight away to the tank you won it with (if its slot's free)
+          if (!save.equipment(tankId)) save.setEquipment(first.equipment, tankId);
           save.addNews([{ kind: 'equipment', id: first.equipment }]);
           rewards.push(['First clear reward', EQUIPMENT[first.equipment].name]);
         }
@@ -761,7 +765,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.damage(at.clone().setY(2.4), 0, 'heal', 'Blocked');
       return;
     }
-    run.hp -= damage * stats.armor * (run.shield > 0 ? 0.2 : 1);
+    run.hp -= damage * stats.armor * (run.shield > 0 ? 1 - stats.breakShield : 1);
     hud.setHull(run.hp, stats.maxHp);
     hud.hurt();
     combat.shake = Math.max(combat.shake, 0.22);
@@ -973,15 +977,30 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // white sparks streaming off it.
   function makeBowShock() {
     const g = new THREE.Group();
+    // each cone fades out toward its wide, trailing rim (an alpha ramp down
+    // its length), so the wedge has soft edges instead of a hard lip
+    const ramp = (() => {
+      const c = document.createElement('canvas');
+      c.width = 2;
+      c.height = 32;
+      const g2 = c.getContext('2d');
+      const grad = g2.createLinearGradient(0, 32, 0, 0);
+      grad.addColorStop(0, '#000');
+      grad.addColorStop(0.55, '#fff');
+      grad.addColorStop(1, '#fff');
+      g2.fillStyle = grad;
+      g2.fillRect(0, 0, 2, 32);
+      return new THREE.CanvasTexture(c);
+    })();
     const cone = (r, h, opacity) => {
-      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity, alphaMap: ramp, depthWrite: false, side: THREE.DoubleSide }));
       m.rotation.z = -Math.PI / 2; // apex forward (+x)
       m.position.x = -h / 2;
       m.userData.base = opacity;
       g.add(m);
       return m;
     };
-    const cones = [cone(1.25, 2.2, 0.16), cone(0.8, 1.9, 0.24), cone(0.42, 1.6, 0.42)];
+    const cones = [cone(1.6, 2.6, 0.08), cone(1.3, 2.4, 0.14), cone(0.95, 2.1, 0.22), cone(0.55, 1.8, 0.32), cone(0.28, 1.5, 0.48)];
     const rings = [];
     for (let i = 0; i < 5; i++) {
       const r = new THREE.Mesh(new THREE.RingGeometry(0.88, 1, 22), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide }));
@@ -1001,7 +1020,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     bowShock.visible = k > 0.01;
     if (!bowShock.visible) return;
     const size = TANK_BOX.hz * 1.9; // wider than the tank
-    bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 0.6, 0.8, 0);
+    bowShock.position.set(TANK_BOX.cx + TANK_BOX.hx + 1.4, 0.8, 0); // well out ahead of the nose
     bowShock.scale.setScalar(size);
     for (const c of bowShock.userData.cones) c.material.opacity = c.userData.base * k * (0.85 + Math.random() * 0.3);
     bowShock.userData.rings.forEach((r, i) => {
@@ -1703,7 +1722,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
   }
 
-  // Spotter (Legendary Wider view): every few seconds the farthest machines
+  // Spotter (Legendary Optics): every few seconds the farthest machines
   // in sight are marked; marked ones take extra damage until it wears off
   function spotter(dt) {
     if (!stats.spotter || run.over || run.mode !== 'field') return;
@@ -2056,9 +2075,22 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         const hits = raycaster.intersectObjects(targets, false);
         hovered = null;
         if (hits.length) {
-          aimPoint.copy(hits[0].point);
+          let pick = hits[0];
+          // the pointer's on an enemy behind something only the camera's
+          // view puts in the way (a low wall, a wreck): if the gun has a
+          // clear shot at it, aim at the enemy, not the cover
+          if (!pick.object.userData.enemy) {
+            const behind = hits.find((h) => h.object.userData.enemy?.alive);
+            if (behind) {
+              const { position: m, breech } = tank.muzzle();
+              const toward = behind.point.clone();
+              const shot = combat.traceShot(m, toward.clone().sub(m).normalize(), breech, toward, targets);
+              if (shot.hit?.mesh === behind.object) pick = behind;
+            }
+          }
+          aimPoint.copy(pick.point);
           hasAim = true;
-          hovered = hits[0].object.userData.enemy || null;
+          hovered = pick.object.userData.enemy || null;
         }
       }
       level.light.follow(camTarget); // the shadow box follows the view, not the tank
@@ -2160,11 +2192,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
-      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
+      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, art: equipmentArt(eq) } : null, 2);
-      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, active: run.arty > 0 ? run.arty / 8 : null, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);

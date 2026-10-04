@@ -66,11 +66,12 @@ export class CombatFx {
         this.smallHit(target, hit?.normal, hit?.mesh);
         return true;
       }
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 1.5), new THREE.MeshBasicMaterial({ color: 0xffc4ae })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts
+      const w = tank.tracerScale ?? 1; // (the Vulcan's rounds: thinner)
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.14 * w, 0.14 * w, 1.5), new THREE.MeshBasicMaterial({ color: 0xffc4ae })); // a red-tinted tracer: its own character, still warmer and paler than enemy bolts
       mesh.position.copy(m);
       mesh.lookAt(target);
       this.scene.add(mesh);
-      this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), small: true });
+      this.shells.push({ mesh, from: m.clone(), target, hit, travelled: 0, total: Math.max(0.01, m.distanceTo(target)), small: true, w });
       return true;
     }
 
@@ -411,8 +412,9 @@ export class CombatFx {
       const prev = s.mesh.position.clone();
       s.travelled = Math.min(s.total, s.travelled + SHELL_SPEED * dt);
       s.mesh.position.lerpVectors(s.from, s.target, s.travelled / s.total);
-      this.glow.tracer(prev, s.mesh.position, s.small ? 0xff9a7a : 0xffd27a, s.small ? 0.12 : 0.12, s.small ? 0.22 : 0.12); // hot trail
-      if (s.small) this.glow.tracer(prev, s.mesh.position, 0xff6a4a, 0.26, 0.12); // and a red glow round it
+      const w = s.w ?? 1;
+      this.glow.tracer(prev, s.mesh.position, s.small ? 0xff9a7a : 0xffd27a, 0.12 * w, s.small ? 0.22 : 0.12); // hot trail
+      if (s.small) this.glow.tracer(prev, s.mesh.position, 0xff6a4a, 0.26 * w, 0.12); // and a red glow round it
       if (s.travelled >= s.total) {
         if (s.small) this.smallHit(s.target, s.hit?.normal, s.hit?.mesh);
         else this.explode(s.target, s.hit?.normal, s.hit?.mesh);

@@ -104,9 +104,9 @@ export function createAmmoStrip(size = 'big') {
       if (flashUntil[i] > now) shell(x0, () => INK.flash);
       else if (i < lit) shell(x0, () => (low ? INK.low : INK.lit));
       else if (i === lit && part > 0) {
-        // filling from the base up
+        // filling from the base up, white-hot like the one that's just gone in
         const fillRow = H - Math.round(part * H);
-        shell(x0, (y) => (y >= fillRow ? INK.lit : INK.empty));
+        shell(x0, (y) => (y >= fillRow ? INK.flash : INK.empty));
       } else shell(x0, () => INK.empty);
     }
   }

@@ -62,6 +62,10 @@ const CSS = `
 .fit .slot .tiername, .fit .tip .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tc); }
 .fit .item .away { position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
 .fit .item.isaway img { filter: brightness(0.55) saturate(0.6); }
+.fit .item .away.only { color: #fff; background: #c42a20; }
+.fit .item.notfor { cursor: default; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446 !important; }
+.fit .item.notfor img { filter: grayscale(1) brightness(0.45); }
+.fit .pop .eqon { margin-left: auto; font: 400 8px/1 'Silkscreen', monospace; padding: 2px 3px; color: #111; background: #b9b0a0; }
 .fit .slot .fx { display: flex; flex-wrap: wrap; gap: 2px 8px; font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; }
 .fit .slot .fx b { font-weight: 400; }
 .fit .slot .fx b.good { color: var(--go); }
@@ -312,11 +316,16 @@ export function createFitting({ renderer, cursor }) {
       el.style.setProperty('--tc', TIERS[tierOf(id)].color);
       const only = PARTS[id].only && PARTS[id].only !== o.tankId ? TANKS[PARTS[id].only].name.replace(' tank', '') : null;
       if (only) el.classList.add('isaway');
-      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away">${only} only</span>` : ''}`;
+      if (only) el.classList.add('notfor');
+      el.innerHTML = `<img alt="${PARTS[id].name}" src="${pic(id)}">${away ? `<span class="away">On ${away.replace(' tank', '')}</span>` : only ? `<span class="away only">${only} only</span>` : ''}`;
       if (o.canEvolve?.(id)) el.insertAdjacentHTML('beforeend', '<span class="evb">Evolve</span>');
       // in the hangar: fit it or upgrade it; at a checkpoint: fit it
-      el.addEventListener('click', () => (o.tanks ? openItemPop(id, el) : equip(id)));
-      el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(id)));
+      el.addEventListener('click', () => {
+        if (only) return; // another tank's own part: nothing to do with it here
+        if (o.tanks) openItemPop(id, el);
+        else equip(id);
+      });
+      el.addEventListener('pointerenter', () => (showTip(el, id), renderBars(only ? null : id)));
       el.addEventListener('pointerleave', () => (hideTip(), renderBars()));
       store.append(el);
     }
@@ -406,9 +415,16 @@ export function createFitting({ renderer, cursor }) {
       for (const e of owned) {
         const b = document.createElement('button');
         b.type = 'button';
-        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>`;
-        b.querySelector('span').textContent = EQUIPMENT[e].name;
-        b.addEventListener('click', () => (save.setEquipment(e, o.tankId), closePop(), render()));
+        // one of each: fitting it here takes it off any other tank
+        const on = TANK_ORDER.find((t) => t !== o.tankId && save.equipment(t) === e);
+        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${on ? `<small class="eqon">On ${TANKS[on].name.replace(' tank', '')}</small>` : ''}`;
+        b.querySelector('span').textContent = on ? `${EQUIPMENT[e].name} · move here` : EQUIPMENT[e].name;
+        b.addEventListener('click', () => {
+          for (const t of TANK_ORDER) if (t !== o.tankId && save.equipment(t) === e) save.setEquipment(null, t);
+          save.setEquipment(e, o.tankId);
+          closePop();
+          render();
+        });
         pop.append(b);
       }
       if (item) {

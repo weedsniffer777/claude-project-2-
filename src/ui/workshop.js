@@ -337,6 +337,7 @@ export function createWorkshop({ renderer, cursor }) {
     ['cannonDamage', 'Shell damage', (v) => `${Math.round(v)}`],
     ['mgDamage', 'MG damage', (v) => `${+v.toFixed(1)}`],
     ['speed', 'Speed', (v) => `${Math.round(v * 100)}%`],
+    ['breakShield', 'Ability damage cut', (v) => `${Math.round(v * 100)}%`],
   ];
   function renderTank() {
     const d = $('.detail');
@@ -358,7 +359,7 @@ export function createWorkshop({ renderer, cursor }) {
         <div class="who"><span class="tier">Tank</span><h2></h2><div class="lvl">Lv ${lvl}<small>/ ${TANK_MAX}</small></div><div class="lbar"><i style="width:${(lvl / TANK_MAX) * 100}%"></i></div><p>Every level: a little more hull, gun and speed. Parts add on top.</p></div>
       </div>
       ${max ? '' : `<div class="step" style="--from:#ffb347;--to:#ffb347"><b>Lv ${lvl}</b><i class="arrow"></i><b class="to">Lv ${lvl + 1}</b></div>`}
-      <div class="stats">${TANK_ROWS.map(([key, label, fmt]) => {
+      <div class="stats">${TANK_ROWS.filter(([key]) => key !== 'breakShield' || TANKS[id].ability === 'breakthrough').map(([key, label, fmt]) => {
         const k = (s) => Math.max(0.05, (s[key] - one[key] * 0.5) / (top[key] - one[key] * 0.5));
         const gain = !max && fmt(nx[key]) !== fmt(now[key]) ? fmt(nx[key]) : null;
         return `<span class="lb">${label}</span><span class="sbar${max ? ' full' : ''}"><i class="max" style="width:100%"></i><i class="next" style="width:${k(gain ? nx : now) * 100}%"></i><i class="now" style="width:${k(now) * 100}%"></i></span><span class="val">${fmt(now[key])}${gain ? ` <span class="gain">→ ${gain}</span>` : ''}</span>`;

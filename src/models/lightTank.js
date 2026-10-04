@@ -565,7 +565,7 @@ export function createLightTank() {
 
   function fire() {
     recoil = 1;
-    spring.vPitch += 0.35; // a small gun: a small kick
+    spring.vPitch += 0.35 * (api.kick ?? 1); // a small gun: a small kick (the Vulcan's: smaller still)
     group.updateWorldMatrix(true, true);
     return {
       position: gunPivot.localToWorld(new THREE.Vector3(MUZZLE_X, 0, 0)),
@@ -726,7 +726,7 @@ export function createLightTank() {
   function setFlameStyle(style) {
     paintFlames(style);
   }
-  return {
+  const api = {
     kind: 'light',
     autocannon: true, // small rounds: sparks, little smoke (see combat.fireCannon)
     group,
@@ -750,5 +750,7 @@ export function createLightTank() {
     get rocketK() {
       return rocketK;
     },
+    kick: 1, // how hard each round kicks the gun up (the game sets it)
   };
+  return api;
 }
