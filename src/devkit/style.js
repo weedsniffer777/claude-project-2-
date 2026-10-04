@@ -70,6 +70,9 @@ const CSS = `
 .dk-panel [hidden], .dk-menu[hidden] { display: none !important; }
 .dk-fps { position: fixed; z-index: 30; right: 6px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); padding: 2px 6px; border-radius: 4px;
   background: var(--dk-panel); color: var(--dk-muted); font: 600 10px/1.3 var(--dk-font-label); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; pointer-events: none; }
+.dk-ammo { position: fixed; left: 18px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px; background: #1d1b1ecc; box-shadow: 0 0 0 2px #000; pointer-events: none; }
+.dk-passives { z-index: 20; bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important; right: 22px !important; }
+.dk-shot .dk-ammo, .dk-shot .dk-passives,
 .dk-shot .dk-panel, .dk-shot .dk-hint, .dk-shot .dk-button, .dk-shot .dk-menu, .dk-shot .dk-fps { display: none !important; }
 `;
 

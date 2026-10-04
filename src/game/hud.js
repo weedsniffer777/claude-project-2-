@@ -3,6 +3,7 @@
 // and the end-of-run panel. Pixel type, black panels, bone-white text with
 // hazard amber; red only means danger (damage taken, low hull, machines).
 import * as THREE from 'three';
+import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
 
 const CSS = `
 .hud button, .hud .hud-card { cursor: var(--cursor); }
@@ -139,9 +140,14 @@ const CSS = `
   color: #111; background: var(--ink); box-shadow: 0 2px 0 #6d655a; }
 .hud-reticle { position: absolute; left: 0; top: 0; width: 52px; height: 52px; margin: -26px 0 0 -26px; }
 .hud-reticle svg { width: 100%; height: 100%; overflow: visible; }
-.hud-reticle .mag { position: absolute; left: 44px; top: 34px; font: 400 14px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.hud-reticle .mag.low { color: var(--amber); }
-.hud-reticle .mag.out { color: #8f877a; }
+.hud-reticle .ammo-strip { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); }
+.hud-ammo { display: flex; align-items: center; gap: 10px; }
+.hud-ammo .px { font-size: 12px; color: var(--dim); }
+.hud-ammo .val { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hud-ammo .val.low { color: var(--danger); }
+.hud-ammo .val.out { color: #8f877a; }
+.hud-passives { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
+.hud.touch .hud-passives { right: calc(46px + env(safe-area-inset-right, 0px)); bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
 .hud-dmg { position: absolute; left: 0; top: 0; font: 400 16px/1 'Silkscreen', monospace; color: var(--ink);
   text-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, 2px 2px #000; white-space: nowrap; transform: translate(-50%, -50%); }
 .hud-dmg.big { font-size: 24px; color: var(--amber); }
@@ -295,7 +301,7 @@ export function createHud() {
     <canvas class="hud-spot"></canvas>
     <div class="hud-hurt"></div>
     <div class="hud-top">
-      <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div></div>
+      <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div><div class="hud-ammo" hidden><span class="px">Ammo</span><span class="px val"></span></div></div>
       <div class="hud-sectors panel px" hidden></div>
     </div>
     <div class="hud-right">
@@ -322,7 +328,6 @@ export function createHud() {
         <g class="cross" stroke="#f1e9d8" stroke-width="2"><path d="M-12 0H-5M5 0H12M0 -12V-5M0 5V12"></path></g>
         <rect x="-1.5" y="-1.5" width="3" height="3" fill="#f1e9d8"></rect>
       </svg>
-      <span class="mag" hidden></span>
     </div>
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
@@ -409,7 +414,16 @@ export function createHud() {
     { el: $('.hud-ability.one'), key: '', center: abilityCenter },
     { el: $('.hud-ability.two'), key: '', center: ability2Center },
   ];
-  const magEl = $('.hud-reticle .mag');
+  // ammo: a strip of shells under the reticle (magazine guns) and in the HP
+  // panel (every gun)
+  const reticleAmmo = createAmmoStrip('small');
+  reticle.append(reticleAmmo.el);
+  const panelAmmoRow = $('.hud-ammo');
+  const panelAmmo = createAmmoStrip('big');
+  panelAmmoRow.querySelector('.val').before(panelAmmo.el);
+  const ammoVal = panelAmmoRow.querySelector('.val');
+  const passives = createPassives();
+  root.append(passives.el);
   // depot cards
   const picker = $('.hud-picker');
   const cont = $('.hud-continue');
@@ -645,16 +659,27 @@ export function createHud() {
     showReticle(on) {
       reticle.hidden = !on;
     },
-    // reload: 0 = just fired .. 1 = ready. mag (an autocannon): { n, max,
-    // reloading } shown as a count beside it
-    setReticle(x, y, reload01, mag = null) {
-      magEl.hidden = !mag;
-      if (mag) {
-        const txt = mag.reloading ? 'Reload' : String(mag.n);
-        if (magEl.textContent !== txt) magEl.textContent = txt;
-        magEl.classList.toggle('low', !mag.reloading && mag.n <= 3);
-        magEl.classList.toggle('out', mag.reloading);
-      }
+    // ammo: { n, max, load (0..1 while reloading, else null) } or null to
+    // hide it. A single-shot gun is max 1: one shell in the panel, the ring
+    // at the reticle is enough there.
+    setAmmo(ammo) {
+      panelAmmoRow.hidden = !ammo;
+      reticleAmmo.el.hidden = !ammo || ammo.max < 2;
+      if (!ammo) return;
+      panelAmmo.set(ammo);
+      if (ammo.max > 1) reticleAmmo.set(ammo);
+      const reloading = ammo.load != null;
+      const txt = reloading ? 'Reloading' : ammo.max > 1 ? `${ammo.n}/${ammo.max}` : 'Ready';
+      if (ammoVal.textContent !== txt) ammoVal.textContent = txt;
+      ammoVal.classList.toggle('low', !reloading && ammo.max > 1 && ammo.n <= Math.ceil(ammo.max * 0.3));
+      ammoVal.classList.toggle('out', reloading);
+    },
+    // passive perks: small icons with timers (see createPassives)
+    setPassives(list) {
+      passives.set(list);
+    },
+    // reload: 0 = just fired .. 1 = ready
+    setReticle(x, y, reload01) {
       reticle.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
       const ready = reload01 >= 1;
       reload.setAttribute('stroke-dashoffset', String(RING_LEN * (1 - Math.min(1, reload01))));
@@ -804,6 +829,8 @@ export function createHud() {
       this.setChain(0, 0);
       this.setAbility(null);
       this.setAbility(null, 1);
+      this.setPassives([]);
+      this.setAmmo(null);
       this.setGone(false);
       this.fade(false);
       for (const n of numbers) n.el.remove();

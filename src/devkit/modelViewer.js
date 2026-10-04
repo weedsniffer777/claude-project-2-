@@ -11,6 +11,9 @@ import { CombatFx } from '../render/combat.js';
 import { addDaylight, groundTexture } from '../render/setup.js';
 import { glowMat } from '../models/kit.js';
 import { injectDevKitStyles } from './style.js';
+import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
+import { statsFor } from '../game/parts.js';
+import { partPicture } from '../render/partPictures.js';
 
 const VIEW_H = 7.2;
 const HOME = { position: new THREE.Vector3(-10, 11.5, 10), target: new THREE.Vector3(0.2, 0.8, 0) };
@@ -47,6 +50,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
     model = models[i].create();
     scene.add(model.group);
     buildParts();
+    resetAmmo();
   }
 
   // ---------------------------------------------------------------- UI
@@ -69,6 +73,8 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       <input data-weapons id="mv-aimy" type="range" min="0" max="4" step="0.1" value="0.6" />
       <label data-weapons><input id="mv-mg" type="checkbox" checked /> Roof MG tracks a flying target</label>
       <button id="mv-fire" type="button" data-weapons>Fire cannon</button>
+      <label data-weapons><input id="mv-ammo" type="checkbox" checked /> Ammo and reload (as in game, R reloads)</label>
+      <label data-weapons><input id="mv-passives" type="checkbox" /> Passive icons (demo)</label>
       <h2>Loadout slots</h2>
       <div class="dk-parts"></div>
       <button id="mv-reset" class="dk-quiet" type="button">Reset camera</button>
@@ -133,9 +139,58 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
   let hasAim = false;
   let downAt = null;
 
+  // the gun's real reload: the battle tank's single shot, the light tank's
+  // magazine; the ammo strip at the bottom shows it as in game
+  const ammo = { stats: null, n: 0, reload: 1, magT: 0 };
+  const ammoStrip = createAmmoStrip('big');
+  const ammoBox = document.createElement('div');
+  ammoBox.className = 'dk-ammo';
+  ammoBox.append(ammoStrip.el);
+  const passives = createPassives();
+  passives.el.classList.add('dk-passives');
+  const demoPassives = [
+    { id: 'optics', name: 'Spotter', every: 5 },
+    { id: 'era', name: 'Reactive', every: 8, armed: true },
+    { id: 'autoloader', name: 'Hot loader', every: 3.3 },
+    { id: 'afterburner', name: 'Afterburn', every: 4.1 },
+    { id: 'dozer', name: 'Plough', every: 2.7 },
+  ];
+  function resetAmmo() {
+    ammo.stats = model.fire ? statsFor([], model.autocannon ? 'light' : 'battle') : null;
+    ammo.n = ammo.stats?.mag || 1;
+    ammo.reload = 1;
+    ammo.magT = 0;
+  }
+  const ammoOn = () => !!ammo.stats && q('#mv-ammo').checked;
   function fire() {
     if (!model.fire) return;
+    if (ammoOn()) {
+      if (ammo.reload < 1 || ammo.magT > 0) return;
+      ammo.reload = 0;
+      if (ammo.stats.mag && --ammo.n <= 0) ammo.magT = ammo.stats.magReload;
+    }
     combat.fireCannon(model, hasAim || params.has('shot') ? aimPoint : null, [ground]);
+  }
+  function ammoFrame(dt, t) {
+    ammoBox.hidden = !ammoOn();
+    passives.el.hidden = !q('#mv-passives').checked;
+    if (!passives.el.hidden) {
+      passives.set(
+        demoPassives.map((p) => {
+          const left = p.every - (t % p.every);
+          return { id: p.id, name: p.name, img: partPicture(renderer, p.id, 72, 48), k: 1 - left / p.every, left: p.id === 'optics' || p.id === 'era' ? left : 0, ready: p.armed && left < 1.2, pulse: Math.floor(t / p.every) };
+        }),
+      );
+    }
+    if (!ammoOn()) return;
+    const s = ammo.stats;
+    ammo.reload = Math.min(1, ammo.reload + dt / s.reload);
+    if (ammo.magT > 0) {
+      ammo.magT -= dt;
+      if (ammo.magT <= 0) ammo.n = s.mag;
+    }
+    if (s.mag) ammoStrip.set({ n: ammo.n, max: s.mag, load: ammo.magT > 0 ? 1 - ammo.magT / s.magReload : null });
+    else ammoStrip.set({ n: ammo.reload >= 1 ? 1 : 0, max: 1, load: ammo.reload >= 1 ? null : ammo.reload });
   }
   const onMove = (e) => {
     const r = canvas.getBoundingClientRect();
@@ -153,6 +208,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       e.preventDefault();
       fire();
     }
+    if (e.code === 'KeyR' && ammo.stats?.mag && ammo.magT <= 0 && ammo.n < ammo.stats.mag) ammo.magT = ammo.stats.magReload;
   };
 
   function resetCamera() {
@@ -196,7 +252,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       canvas.addEventListener('pointerdown', onDown);
       canvas.addEventListener('pointerup', onUp);
       window.addEventListener('keydown', onKey);
-      document.body.append(panel, hint);
+      document.body.append(panel, hint, ammoBox, passives.el);
       window.__viewer = api;
     },
     exit() {
@@ -208,6 +264,8 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
       window.removeEventListener('keydown', onKey);
       panel.remove();
       hint.remove();
+      ammoBox.remove();
+      passives.el.remove();
       pixel.setHeight(saved.height);
       pixel.setOutline(saved.outline);
       if (window.__viewer === api) delete window.__viewer;
@@ -253,6 +311,7 @@ export function createModelViewer({ renderer, pixel, models, params = new URLSea
         speed,
       });
       combat.handleTankEvents(model);
+      ammoFrame(dt, t);
       combat.update(dt);
       if (hintTimer > 0) {
         hintTimer -= dt;

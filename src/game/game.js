@@ -175,6 +175,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       mag: stats.mag,
       spotT: 1,
       reactT: 0,
+      pulse: {}, // passive perks: bumped each time one goes off (the HUD icon pops)
       magT: 0,
       boost: 0,
       boostCd: 0,
@@ -553,9 +554,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           run.mag = Math.min(stats.mag, 3);
         } else run.mag = Math.min(stats.mag, run.mag + 3);
       } else reload = 1;
+      pulse('autoloader');
     }
     // Afterburn: kills while boosting take time off the recharge
-    if (stats.boostRefund && (run.boost > 0 || run.dash > 0)) run.boostCd = Math.max(0, run.boostCd - stats.boostRefund);
+    if (stats.boostRefund && (run.boost > 0 || run.dash > 0) && run.boostCd > 0) {
+      run.boostCd = Math.max(0, run.boostCd - stats.boostRefund);
+      pulse('afterburner');
+    }
     run.chain = Math.min(MULT_MAX, Math.max(1, run.chain) + (run.chainT > 0 ? 1 : 0));
     run.chainT = MULT_HOLD;
     const mult = run.chain;
@@ -691,6 +696,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // the brick it hits blasts the machines round the tank
     if (stats.reactive && !(run.reactT > 0)) {
       run.reactT = 8;
+      pulse('era');
       const at = pos.clone().setY(1);
       combat.explode(at);
       api.blast(at, 3.2, 30);
@@ -1336,11 +1342,25 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // The parts fitted this run, each with a little pre-rendered picture of
   // its model for the results screen.
   const partShots = new Map();
+  function partShot(id) {
+    if (!partShots.has(id)) partShots.set(id, id === 'afterburner' ? boostPicture(true, 'afterburner', 72, 48, bigUpArrow).toDataURL() : partPicture(renderer, id, 72, 48));
+    return partShots.get(id);
+  }
   function partCards() {
-    return run.found.map((id) => {
-      if (!partShots.has(id)) partShots.set(id, id === 'afterburner' ? boostPicture(true, 'afterburner', 72, 48, bigUpArrow).toDataURL() : partPicture(renderer, id, 72, 48));
-      return { ...PARTS[id], image: partShots.get(id) };
-    });
+    return run.found.map((id) => ({ ...PARTS[id], image: partShot(id) }));
+  }
+  const pulse = (id) => ((run.pulse ||= {})[id] = (run.pulse[id] || 0) + 1);
+  // the Legendary perks working away by themselves: small icons by the
+  // ability buttons, with their timers
+  function passives() {
+    const list = [];
+    const add = (id, name, o = {}) => list.push({ id, name, img: partShot(id), pulse: run.pulse?.[id] || 0, ...o });
+    if (stats.spotter) add('optics', 'Spotter', { k: 1 - Math.max(0, run.spotT) / 5, left: run.spotT });
+    if (stats.reactive) add('era', 'Reactive', { k: 1 - run.reactT / 8, left: run.reactT, ready: !(run.reactT > 0) });
+    if (stats.hotLoader) add('autoloader', 'Hot loader');
+    if (stats.boostRefund) add('afterburner', 'Afterburn');
+    if (stats.dozerStun) add('dozer', 'Plough');
+    return list;
   }
 
   // a big white arrow up the right side: an improved version of an ability
@@ -1537,6 +1557,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const reach = 24 * stats.view;
     const seen = enemies.alive.filter((e) => e.los && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach);
     seen.sort((a, b) => Math.hypot(b.pos.x - pos.x, b.pos.z - pos.z) - Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z));
+    if (seen.length) pulse('optics');
     for (const e of seen.slice(0, stats.spotter)) {
       e.markT = 5;
       combat.glow.flash(new THREE.Vector3(e.pos.x, 1.6 * e.stats.scale, e.pos.z), 0xffffff, 0.2, 1.0, 0.15);
@@ -1771,6 +1792,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           const opts = brk ? { push: 1.3, side: 2, stun: 1.2 } : stats.dozerStun && !boosting ? { push: 0.8, side: 4, stun: stats.dozerStun } : { push: 0.5, side: 5 };
           for (const h of enemies.ram({ ...tankBox(), hx: TANK_BOX.hx + (brk ? 1.2 : 0.3) }, ramDmg, vel, opts)) {
             const p = new THREE.Vector3(h.e.pos.x, 1.3, h.e.pos.z);
+            if (opts.stun && !brk) pulse('dozer');
             hud.damage(p, h.amount, 'big');
             if (h.killed) hud.damage(p.clone().setY(2), 0, 'kill');
             if (brk) {
@@ -1953,12 +1975,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.showReticle(!!client && !run.over && run.mode === 'field');
       if (client) {
         const reloading = stats.mag && run.magT > 0;
-        if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME), null); // the ring counts down the aim
-        else hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload, stats.mag ? { n: run.mag, max: stats.mag, reloading } : null);
+        if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME)); // the ring counts down the aim
+        else hud.setReticle(client[0], client[1], reloading ? 1 - run.magT / stats.magReload : reload);
       }
       if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
+      if (!run.gun || !live) hud.setAmmo(null);
+      else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });
+      else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
+      hud.setPassives(live ? passives() : []);
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
