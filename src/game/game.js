@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { createTank } from '../models/tank.js';
 import { TANKS, tankDef } from './tanks.js';
-import { campaignLevel } from './campaign.js';
+import { campaignLevel, clearKey } from './campaign.js';
 import { createFitting } from '../ui/fitting.js';
 import { CombatFx } from '../render/combat.js';
 import { wrapAngle, approachAngle } from '../models/kit.js';
@@ -404,7 +404,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     depot(shack, { offers, gift = null, onLeave }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
-      offers = offers.filter((id) => !run.parts.includes(id)); // nothing it already has
+      offers = offers.filter((id) => !save.owned().includes(id)); // only parts not found yet
       run.mode = 'depot';
       run.locked = true;
       queued = 0;
@@ -469,14 +469,18 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // first clears pay out: the level's tank, and on Hard its bonus
       const lvl = campaignLevel(levelDef.id);
       const rewards = [];
-      if (save.clear(levelDef.id) && lvl?.unlock && !save.tanks().includes(lvl.unlock)) {
-        save.unlockTank(lvl.unlock);
-        save.addNews([{ kind: 'tank', id: lvl.unlock }]);
-        rewards.push(['First clear reward', TANKS[lvl.unlock].name]);
-      }
-      if (run.hard && save.clear(`${levelDef.id}:hard`) && lvl?.hard) {
-        bank(lvl.hard.scraps);
-        rewards.push(['Hard clear reward', `+${lvl.hard.scraps} scraps`]);
+      const diff = run.hard ? 'hard' : 'easy';
+      const first = lvl?.first?.[diff];
+      if (save.clear(clearKey(levelDef.id, diff)) && first) {
+        if (first.tank && !save.tanks().includes(first.tank)) {
+          save.unlockTank(first.tank);
+          save.addNews([{ kind: 'tank', id: first.tank }]);
+          rewards.push(['First clear reward', TANKS[first.tank].name]);
+        }
+        if (first.scraps) {
+          bank(first.scraps);
+          rewards.push(['First clear reward', `+${first.scraps} scraps`]);
+        }
       }
       pickups.collectAll(collect);
       hud.clearPrompt();
@@ -1061,6 +1065,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       (id) => {
         const pad = id && st.room.pads.find((p) => p.offer === id);
         st.focus = pad ? new THREE.Vector3(pad.x, 0, pad.z) : null;
+        st.room.hover(id); // only its pallet lit
       },
     );
   }
@@ -1074,6 +1079,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     save.own(id);
     if (!run.found.includes(id)) run.found.push(id);
     st.found = id;
+    st.room.choose(id); // the other pallets fade away
     openFit();
   }
   // The checkpoint's fitting screen. Equipping the part found here brings
@@ -1127,6 +1133,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     fitting.hide();
     st.step = 'opening';
     st.focus = null;
+    st.room.clearPads(); // a part left unequipped fades away (it's in storage)
     st.room.openDoor();
     const wait = () => {
       if (st.room.doorOpen < 0.35) return void setTimeout(wait, 60);

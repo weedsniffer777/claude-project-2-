@@ -17,11 +17,10 @@ import { PLAYER_LAYER } from '../render/pixel.js';
 import { CURSOR } from '../game/hud.js';
 import { PARTS, attachPart } from '../game/parts.js';
 import { TANKS, tankDef } from '../game/tanks.js';
-import { createFitting, anchorWorld } from '../ui/fitting.js';
+import { createFitting, anchorWorld, tankPicture } from '../ui/fitting.js';
 import { save } from '../game/save.js';
 import { partPicture } from '../render/partPictures.js';
-import { snapshotCanvas } from '../render/snapshot.js';
-import { CAMPAIGN } from '../game/campaign.js';
+import { CAMPAIGN, clearKey } from '../game/campaign.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -92,14 +91,29 @@ const CSS = `
   .base-brief .map { width: 100%; height: auto; }
   .base-brief .info { width: auto; align-self: stretch; }
 }
-.base-brief .diff { display: flex; gap: 0; }
-.base-brief .diff button { padding: 7px 12px 8px; border: 0; cursor: var(--cursor); font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; background: #1d1b1e; box-shadow: 0 0 0 2px #000; }
-.base-brief .diff button.on { color: #111; background: var(--amber); }
-.base-brief .diff button.on.hard { background: #ff6a5a; }
+.base-brief .diffs { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.base-brief .dtab { display: grid; gap: 4px; justify-items: start; padding: 8px 10px 9px; border: 0; cursor: var(--cursor); text-align: left; color: #b9b0a0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; }
+.base-brief .dtab b { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: #f1e9d8; }
+.base-brief .dtab small { font: 400 11px/1.2 'Pixelify Sans', monospace; }
+.base-brief .dtab .st { display: flex; gap: 6px; align-items: center; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; }
+.base-brief .dtab.on { background: #2a2420; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-brief .dtab.hard b { color: #ff8a7a; }
+.base-brief .dtab.hard.on { background: #2a1716; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ff3b2f; }
+.base-brief .star { width: 12px; height: 12px; clip-path: polygon(50% 0, 63% 35%, 100% 38%, 71% 61%, 81% 100%, 50% 78%, 19% 100%, 29% 61%, 0 38%, 37% 35%); background: #3a3634; }
+.base-brief .star.easy.got { background: var(--amber); }
+.base-brief .star.hard.got { background: #ff3b2f; }
+.base-brief .callout { position: relative; justify-self: end; margin-top: 4px; padding: 6px 9px; font: 400 12px/1.25 'Pixelify Sans', monospace; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; animation: basecall 1.2s steps(2) infinite; }
+.base-brief .callout::before { content: ''; position: absolute; right: 26%; top: -8px; width: 12px; height: 8px; background: #c42a20; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+@keyframes basecall { 50% { transform: translateY(-3px); } }
+.base-brief .rewards span.tank { width: 116px; height: 68px; }
+.base-brief .rewards span.cash { display: grid; place-items: center; width: 116px; height: 40px; font: 400 13px/1 'Silkscreen', monospace; color: var(--amber); }
+.base-brief .rewards span.cash.got { color: #6d655a; }
+.base-brief .rewards span.tank img { object-fit: contain; }
 .base-brief .note { font-size: 12px; color: #b9b0a0; }
-.base-brief .unlock { display: flex; gap: 10px; align-items: center; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font-size: 13px; }
-.base-brief .unlock img { width: 72px; height: 42px; image-rendering: pixelated; }
-.base-brief .unlock.got img { filter: brightness(0.45) saturate(0.4); }
+.base-brief .node .stars { position: absolute; left: 50%; top: calc(100% + 5px); transform: translateX(-50%); display: flex; gap: 2px; }
+.base-brief .node .stars .star { width: 11px; height: 11px; background: #5a5456; }
+.base-brief .node .stars .star.easy.got { background: var(--amber); }
+.base-brief .node .stars .star.hard.got { background: #ff3b2f; }
 .base-news { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news .newtag { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .base-news img { width: 192px; height: 112px; image-rendering: pixelated; }
@@ -915,12 +929,14 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function openBriefing() {
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${z.open ? 'open' : 'locked'}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${z.open ? `<span class="stars">${stars(z)}</span>` : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1]));
     showLevel(selLevel);
   }
+  // a level's two stars on the map: Easy cleared (amber), Hard (red)
+  const stars = (z) => ['easy', 'hard'].map((d) => `<i class="star ${d} ${save.cleared().includes(clearKey(z.id, d)) ? 'got' : ''}"></i>`).join('');
   function showLevel(z) {
     selLevel = z;
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);
@@ -933,27 +949,33 @@ export function createHub({ renderer, pixel, onDeploy }) {
         <p>Beat level ${z.n - 1} to unlock.</p>
         <div class="row"><button type="button" class="back">Back</button></div>`;
     } else {
+      // Easy and Hard: each cleared on its own (a star each), each with
+      // its own first clear reward; parts can turn up on either
       const cleared = save.cleared();
-      const hard = save.difficulty() === 'hard';
-      const tankGot = z.unlock && save.tanks().includes(z.unlock);
+      const diff = save.difficulty() === 'hard' ? 'hard' : 'easy';
+      const done = (d) => cleared.includes(clearKey(z.id, d));
+      const first = z.first?.[diff];
+      const tile = (got, cls, inner, tip) => `<span class="${cls}${got ? ' got' : ''}" data-tip="${tip}${got ? ' (got it)' : ''}">${inner}</span>`;
+      let firstTile = '';
+      if (first?.tank) firstTile = tile(done(diff), 'tank', `<img alt="${TANKS[first.tank].name}" src="${tankIcon(first.tank)}">`, `${TANKS[first.tank].name}: ${tankDef(first.tank).blurb}`);
+      else if (first?.scraps) firstTile = tile(done(diff), 'cash', `+${first.scraps} scraps`, `${first.scraps} scraps`);
+      const tab = (d, name, txt) => `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''}" data-d="${d}"><b>${name}</b><small>${txt}</small><span class="st"><i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}</span></button>`;
       info.innerHTML = `
-        <span class="tagline px">Level ${z.n}${cleared.includes(z.id) ? ' · Cleared' : ''}${cleared.includes(`${z.id}:hard`) ? ' · Hard cleared' : ''}</span>
+        <span class="tagline px">Level ${z.n}</span>
         <h2>${z.name}</h2>
         <div class="steps">${z.steps.map((t, i) => `${i ? '<i></i>' : ''}<b class="${t === 'Boss' ? 'boss' : ''}">${t}</b>`).join('')}</div>
-        <span class="label">Difficulty</span>
-        <div class="diff"><button type="button" data-d="easy" class="${hard ? '' : 'on'}">Easy</button><button type="button" data-d="hard" class="hard ${hard ? 'on' : ''}">Hard</button></div>
-        <span class="note">${hard ? 'No repairs at checkpoints.' : 'Checkpoints repair your tank.'}</span>
-        ${z.unlock ? `<span class="label">First clear reward</span><div class="unlock ${tankGot ? 'got' : ''}"><img alt="" src="${tankIcon(z.unlock)}"><span>${TANKS[z.unlock].name}${tankGot ? ' ✓' : ''}</span></div>` : ''}
-        ${hard && z.hard ? `<span class="label">Hard clear reward</span><div class="unlock ${cleared.includes(`${z.id}:hard`) ? 'got' : ''}"><span>+${z.hard.scraps} scraps${cleared.includes(`${z.id}:hard`) ? ' ✓' : ''}</span></div>` : ''}
+        <div class="diffs">${tab('easy', 'Easy', 'Checkpoints repair you')}${tab('hard', 'Hard', 'More enemies, no repairs')}</div>
+        ${done('easy') && !done('hard') && diff === 'easy' ? '<span class="callout">Beat it on Hard for extra rewards!</span>' : ''}
+        ${firstTile ? `<span class="label">First clear reward${diff === 'hard' ? ' (Hard)' : ''}</span><div class="rewards">${firstTile}</div>` : ''}
         <span class="label">Possible parts</span>
-        <div class="rewards">${z.rewards.map((id) => `<span class="${owned.includes(id) ? 'got' : ''}" data-tip="${PARTS[id].name}: ${PARTS[id].text}${owned.includes(id) ? ' (found)' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"></span>`).join('')}</div>
-        <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
-      info.querySelector('.go').addEventListener('click', () => deploy(z.id));
-      for (const b of info.querySelectorAll('.diff button'))
+        <div class="rewards">${z.rewards.map((id) => tile(owned.includes(id), '', `<img alt="${PARTS[id].name}" src="${partIcon(id)}">`, `${PARTS[id].name}: ${PARTS[id].text}`)).join('')}</div>
+        <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
+      for (const b of info.querySelectorAll('.dtab'))
         b.addEventListener('click', () => {
           save.setDifficulty(b.dataset.d);
           showLevel(z);
         });
+      info.querySelector('.go').addEventListener('click', () => deploy(z.id));
     }
     info.querySelector('.back').addEventListener('click', closeRoom);
   }
@@ -962,15 +984,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // The shared fitting screen over the tank on its lift: slots with lines to
   // where each part sits, storage, the tanks to choose from.
   const partIcon = (id) => partPicture(renderer, id);
-  const tankIcons = new Map();
-  function tankIcon(id) {
-    if (!tankIcons.has(id)) {
-      const t = TANKS[id].create();
-      t.update(0.016, 0, {});
-      tankIcons.set(id, snapshotCanvas(renderer, t.group, 144, 84).toDataURL());
-    }
-    return tankIcons.get(id);
-  }
+  const tankIcon = (id) => tankPicture(renderer, id, 144, 84);
   const sv = new THREE.Vector3();
   function toScreen(p) {
     const rect = canvasEl.getBoundingClientRect();

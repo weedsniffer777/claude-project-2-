@@ -19,6 +19,8 @@ export const TANKS = {
     stats: {},
     // footprint for collisions (hull, covers, the rear drums), tank-local
     box: { cx: -0.25, hx: 2.25, hz: 1.15 },
+    // its picture (carousel, rewards): framed on the hull, antennas aside
+    pic: { target: [-0.1, 0.95, 0], half: 1.45 },
     // where each part sits on the tank (tank-local), for the fitting
     // screen's lines
     anchors: {
@@ -47,6 +49,7 @@ export const TANKS = {
     // reload: seconds between rounds; mag rounds, then magReload to refill
     stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.6, boostCooldown: 5 },
     box: { cx: 0.2, hx: 1.55, hz: 0.88 },
+    pic: { target: [0.15, 0.8, 0], half: 1.0 },
     anchors: {
       dozer: [1.95, 0.4, 0],
       autoloader: [-0.53, 1.36, -0.66],

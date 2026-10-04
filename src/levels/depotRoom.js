@@ -42,11 +42,7 @@ function floorTexture(rand) {
   const Z = (z) => (z + 25) * S; // and z -25..25
   g.fillStyle = '#a58a3e';
   for (const z of [-3.2, 3.2]) for (let x = 2; x < 24; x += 1.4) if (rand() > 0.2) g.fillRect(X(x), Z(z), 0.8 * S, 0.15 * S);
-  for (const z of [-5.6, 0, 5.6]) {
-    g.strokeStyle = '#b39443';
-    g.lineWidth = 2;
-    g.strokeRect(X(17.8), Z(z - 1.2), 2.4 * S, 2.4 * S);
-  }
+  // (the squares round the pallets come and go with them: see the pallets)
   // outside the garage: dark slush
   g.fillStyle = '#2a2a2e';
   g.fillRect(0, 0, X(-0.3), c.height);
@@ -195,22 +191,45 @@ export function buildDepotRoom(scene) {
 
   // ---------------------------------------------------------- pallets
   const PAD_X = 19;
+  // Up to three pallets, each with its own lamp. They only appear with a
+  // part on them (three: all of them; two: the outer pair; one: the middle)
+  // and fade away again once you've picked, or leave without equipping.
+  const lampOff = toon(0x2a2b2e);
+  const lampOn = glowMat(SODIUM);
   const pads = [-5.6, 0, 5.6].map((z) => {
+    const pallet = new THREE.Group();
+    pallet.position.set(PAD_X, 0, z);
+    const mats = [0x7a5f3e, 0x5c472e].map((c) => new THREE.MeshToonMaterial({ color: c, gradientMap, transparent: true }));
+    // the painted square round it on the floor
+    const paint = new THREE.MeshBasicMaterial({ color: 0x8c7434, transparent: true, depthWrite: false });
+    mats.push(paint);
+    for (const [w, d, x, dz] of [[2.4, 0.06, 0, -1.2], [2.4, 0.06, 0, 1.2], [0.06, 2.4, -1.2, 0], [0.06, 2.4, 1.2, 0]]) {
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(w, d), paint);
+      line.rotation.x = -Math.PI / 2;
+      line.position.set(x, 0.015, dz);
+      pallet.add(line);
+    }
     // (slats and runners never share a face: no flicker)
-    for (let i = 0; i < 3; i++) B.piece(1.7, 0.08, 0.32, 0x7a5f3e, PAD_X, 0.165, z - 0.6 + i * 0.6);
-    for (const dz of [-0.62, 0, 0.62]) B.piece(1.56, 0.12, 0.14, 0x5c472e, PAD_X, 0.06, z + dz);
+    for (let i = 0; i < 3; i++) put(pallet, box(1.7, 0.08, 0.32, 0x7a5f3e), 0, 0.165, -0.6 + i * 0.6).material = mats[0];
+    for (const dz of [-0.62, 0, 0.62]) put(pallet, box(1.56, 0.12, 0.14, 0x5c472e), 0, 0.06, dz).material = mats[1];
+    pallet.visible = false;
+    B.add(pallet);
+    B.keep(pallet);
     // hanging lamp over each pallet
     B.line([at(PAD_X, H, z).sub(O), new THREE.Vector3(PAD_X, 3.4, z)]);
     put(B.root, cyl(0.3, 0.18, 0x2e3034, { seg: 8, radiusEnd: 0.12 }), PAD_X, 3.3, z);
-    put(B.root, cyl(0.18, 0.05, SODIUM, { seg: 8, glow: true }), PAD_X, 3.2, z);
-    const e = B.emit(new THREE.Vector3(PAD_X, 2.4, z), SODIUM, 16, 6, { priority: true }); // always gets a real light while it has a part
-    const p = B.pool(PAD_X, z, 1.8, SODIUM, 0.26);
+    const bulb = B.keep(put(B.root, cyl(0.18, 0.05, SODIUM, { seg: 8, glow: true }), PAD_X, 3.2, z));
+    bulb.material = lampOff;
+    const e = B.emit(new THREE.Vector3(PAD_X, 2.4, z), SODIUM, 16, 6, { priority: true, level: 0 }); // gets a real light while it's lit
+    const p = B.pool(PAD_X, z, 1.8, SODIUM, 0);
     const holder = new THREE.Group();
     holder.position.set(PAD_X, 0.24, z);
     B.add(holder);
     B.keep(holder);
-    return { x: PAD_X + O.x, z: z + O.z, local: new THREE.Vector3(PAD_X, 0.24, z), holder, light: e, pool: p, offer: null, model: null };
+    // k: how much it's there (fading), lit: how lit its lamp is
+    return { x: PAD_X + O.x, z: z + O.z, local: new THREE.Vector3(PAD_X, 0.24, z), holder, pallet, mats, bulb, light: e, pool: p, offer: null, model: null, modelMats: [], k: 0, vis: 0, lit: 0, litWant: 0 };
   });
+  const SLOT_ORDER = { 1: [1], 2: [0, 2], 3: [0, 1, 2] };
 
   // ---------------------------------------------------------- exit door
   const door = new THREE.Group();
@@ -375,36 +394,79 @@ export function buildDepotRoom(scene) {
     placeCrane();
     for (const p of pads) {
       p.holder.clear();
-      p.holder.visible = true; // the last stop's install hid the pallets it didn't use
       p.offer = null;
-      p.light.level = 1;
-      p.pool.visible = true;
+      p.model = null;
+      p.modelMats = [];
+      p.k = p.vis = p.lit = p.litWant = 0;
+      showPad(p);
     }
   }
   let blocksRef = null; // the game's live block list (the door is in it)
+  // the pallets on show: no parts (everything here's been found) and there
+  // are none at all
   function setOffers(ids) {
+    ids = ids.slice(0, 3);
     if (bayLamp) bayLamp.level = ids.length ? 0 : 1;
-    pads.forEach((p, i) => {
+    for (const p of pads) {
       p.holder.clear();
-      p.offer = ids[i] ?? null;
-      p.light.level = p.offer ? 1 : 0;
-      p.pool.visible = !!p.offer;
-      if (p.offer) {
-        p.model = partModel(p.offer);
-        p.holder.add(p.model);
-      }
+      p.offer = null;
+      p.model = null;
+      p.modelMats = [];
+      p.vis = p.litWant = 0;
+    }
+    (SLOT_ORDER[ids.length] || []).forEach((slot, i) => {
+      const p = pads[slot];
+      p.offer = ids[i];
+      p.model = partModel(p.offer);
+      // its own see-through materials, so it can fade with its pallet
+      p.model.traverse((m) => {
+        if (!m.isMesh) return;
+        m.material = m.material.clone();
+        m.material.transparent = true;
+        p.modelMats.push(m.material);
+      });
+      p.holder.add(p.model);
+      p.vis = 1;
+      p.litWant = 1; // every one on offer lit
     });
+  }
+  // the card under the pointer: only its pallet lit (null: all of them)
+  function hover(id) {
+    for (const p of pads) if (p.offer && p.vis) p.litWant = !id || p.offer === id ? 1 : 0;
+  }
+  // a part picked: the rest fade away, only its lamp stays on
+  function choose(id) {
+    for (const p of pads) {
+      if (!p.offer) continue;
+      const mine = p.offer === id;
+      p.vis = mine ? 1 : 0;
+      p.litWant = mine ? 1 : 0;
+    }
+  }
+  // leaving: whatever's still on a pallet fades away (nothing left to drive into)
+  function clearPads() {
+    for (const p of pads) {
+      p.vis = 0;
+      p.litWant = 0;
+    }
+  }
+  function showPad(p) {
+    const on = p.k > 0.01;
+    p.pallet.visible = on;
+    p.holder.visible = on;
+    for (const m of p.mats) m.opacity = p.k;
+    for (const m of p.modelMats) m.opacity = p.k;
+    const l = p.k * p.lit;
+    p.light.level = l;
+    p.pool.material.opacity = 0.26 * l;
+    p.bulb.material = l > 0.5 ? lampOn : lampOff;
   }
   // The crane lifts the chosen part off its pallet and lowers it onto the
   // tank. onFit fires when it touches the hull; onDone when the hook is back.
   function install(id, getTank, { onFit, onDone }) {
     const pad = pads.find((p) => p.offer === id);
+    choose(id);
     state.crane = { t: 0, pad, getTank, onFit, onDone, fitted: false };
-    for (const p of pads) if (p !== pad) {
-      p.light.level = 0.15;
-      p.pool.visible = false;
-      p.holder.visible = false;
-    }
   }
   function openDoor() {
     state.opening = true;
@@ -415,9 +477,14 @@ export function buildDepotRoom(scene) {
     B.update(dt, t, ctx);
     beacon.rotation.y = t * 5;
     beaconE.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5));
-    for (const p of pads) if (p.model && p.holder.visible) {
-      p.model.rotation.y = Math.sin(t * 0.8) * 0.5;
-      p.model.position.y = 0.05 + Math.sin(t * 2) * 0.04;
+    for (const p of pads) {
+      p.k += THREE.MathUtils.clamp(p.vis - p.k, -dt * 2, dt * 3);
+      p.lit += THREE.MathUtils.clamp(p.litWant - p.lit, -dt * 4, dt * 4);
+      showPad(p);
+      if (p.model && p.model.parent === p.holder) {
+        p.model.rotation.y = Math.sin(t * 0.8) * 0.5;
+        p.model.position.y = 0.05 + Math.sin(t * 2) * 0.04;
+      }
     }
     if (state.opening && state.doorOpen < 1) {
       state.doorOpen = Math.min(1, state.doorOpen + dt * 0.7);
@@ -460,6 +527,10 @@ export function buildDepotRoom(scene) {
       } else if (!c.fitted) {
         c.fitted = true;
         if (c.pad.model) c.pad.model.removeFromParent();
+        c.pad.model = null;
+        c.pad.offer = null;
+        c.pad.vis = 0; // the empty pallet goes too
+        c.pad.litWant = 0;
         c.onFit?.();
       } else if (T < 2.7) {
         crane.y = lerp(2.0, 4.6, ease((T - 2.0) / 0.7));
@@ -491,6 +562,9 @@ export function buildDepotRoom(scene) {
     },
     reset,
     setOffers,
+    hover,
+    choose,
+    clearPads,
     install,
     openDoor,
     get doorOpen() {

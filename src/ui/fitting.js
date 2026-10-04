@@ -46,8 +46,12 @@ const CSS = `
 .fit .slot.empty { color: var(--red); background: #241314; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; min-height: 54px; justify-content: center; font-size: 13px; }
 .fit .slot.empty::before { content: ''; width: 12px; height: 14px; background: var(--red); clip-path: polygon(0 0, 100% 50%, 0 100%); }
 .fit .slot.empty:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--red); }
-.fit.replacing .slot:not(.empty) { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); animation: fitpulse 0.8s steps(2) infinite; }
-@keyframes fitpulse { 50% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; } }
+.fit .slothead { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 22px; }
+.fit .slotlabel.full { color: var(--red); }
+.fit .slothead .cancel { padding: 5px 9px 6px; font-size: 10px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 3px #6d655a; }
+.fit.replacing .slot:not(.empty) { background: #2a1416; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--red); animation: fitpulse 0.7s steps(2) infinite; }
+.fit.replacing .slot:not(.empty):hover { background: #3a1a1a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffb0a8; animation: none; }
+@keyframes fitpulse { 50% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; } }
 .fit .store { display: flex; flex-wrap: wrap; gap: 8px; }
 .fit .store .none { font-size: 13px; color: #6d655a; }
 .fit .item { position: relative; padding: 0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
@@ -109,13 +113,17 @@ function bars(s) {
 }
 
 // pictures of the tanks for the carousel, drawn once
+// (front three-quarters, framed on the hull so it's centred and big)
 const tankPics = new Map();
-function tankPicture(renderer, id) {
-  if (tankPics.has(id)) return tankPics.get(id);
+export function tankPicture(renderer, id, W = 96, H = 56) {
+  const key = `${id}|${W}|${H}`;
+  if (tankPics.has(key)) return tankPics.get(key);
   const t = TANKS[id].create();
   t.update(0.016, 0, {});
-  const url = snapshotCanvas(renderer, t.group, 96, 56).toDataURL();
-  tankPics.set(id, url);
+  const p = tankDef(id).pic;
+  const view = { target: new THREE.Vector3(...p.target), dir: new THREE.Vector3(0.95, 0.8, 1), half: p.half };
+  const url = snapshotCanvas(renderer, t.group, W, H, null, view).toDataURL();
+  tankPics.set(key, url);
   return url;
 }
 
@@ -128,7 +136,7 @@ export function createFitting({ renderer, cursor }) {
   root.innerHTML = `
     <svg></svg>
     <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div></div>
-    <div class="right pnl"><span class="label slotlabel"></span><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div></div>
+    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
   const $ = (s) => root.querySelector(s);
@@ -189,7 +197,18 @@ export function createFitting({ renderer, cursor }) {
       <div><span>Gun</span><span>${def.gun === 'autocannon' ? 'Autocannon' : 'Cannon'}</span></div>
       <div><span><kbd>Shift</kbd></span><span>${def.moveName}</span></div>
       <div><span><kbd>E</kbd></span><span class="${def.ability ? '' : 'none'}">${def.abilityName || 'None yet'}</span></div>`;
-    $('.slotlabel').textContent = `Parts ${list.length}/${def.slots}`;
+    // all slots taken: the count goes red; picking a part from storage then
+    // asks (in red, on the slots themselves) which one it replaces
+    const full = list.length >= def.slots;
+    const label = $('.slotlabel');
+    label.textContent = replacing ? 'Slots full: click one to replace' : `Parts ${list.length}/${def.slots}${full ? ' · Full' : ''}`;
+    label.classList.toggle('full', full);
+    const cancel = $('.slothead .cancel');
+    cancel.hidden = !replacing;
+    cancel.onclick = () => {
+      replacing = null;
+      render();
+    };
     // the slots: fitted parts, then the empty ones
     const slots = $('.slots');
     slots.innerHTML = '';
@@ -230,15 +249,7 @@ export function createFitting({ renderer, cursor }) {
     // the message box: a fresh find, or which slot to replace
     const msg = $('.msg');
     msg.hidden = true;
-    if (replacing) {
-      msg.hidden = false;
-      msg.innerHTML = `<span>Slots full. Choose a part to replace with <b></b>.</span><div class="row"><button type="button" class="btn cancel">Cancel</button></div>`;
-      msg.querySelector('b').textContent = PARTS[replacing].name;
-      msg.querySelector('.cancel').addEventListener('click', () => {
-        replacing = null;
-        render();
-      });
-    } else if (o.highlight && sp.includes(o.highlight)) {
+    if (!replacing && o.highlight && sp.includes(o.highlight)) {
       msg.hidden = false;
       msg.innerHTML = `<span>Found: <b></b>. It's in storage.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`;
       msg.querySelector('b').textContent = PARTS[o.highlight].name;

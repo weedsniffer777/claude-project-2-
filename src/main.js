@@ -133,9 +133,10 @@ const devkit = createDevKit({
           if (!l.id || l.n > +v) continue;
           save.clear(l.id);
           for (const id of l.rewards || []) save.own(id);
-          if (l.unlock && !save.tanks().includes(l.unlock)) {
-            save.unlockTank(l.unlock);
-            save.addNews([{ kind: 'tank', id: l.unlock }]);
+          const tank = l.first?.easy?.tank;
+          if (tank && !save.tanks().includes(tank)) {
+            save.unlockTank(tank);
+            save.addNews([{ kind: 'tank', id: tank }]);
           }
         }
         hub.refresh();
