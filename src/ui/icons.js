@@ -106,3 +106,31 @@ export function artilleryCanvas(scale = 2) {
   if (!artyCache.has(scale)) artyCache.set(scale, raster(32, 24, artilleryAt, scale));
   return artyCache.get(scale);
 }
+
+// ----------------------------------------------------------------- ATGM
+// a missile streaking right on a smoke trail into a lock box round its
+// target
+function atgmAt(x, y) {
+  // the lock box: four cyan corner brackets round the target
+  const bx = [20, 30];
+  const by = [4, 16];
+  const onEdge = (v, a, b) => Math.abs(v - a) < 0.6 || Math.abs(v - b) < 0.6;
+  const inSpan = (v, a, b) => v >= a - 0.6 && v <= b + 0.6;
+  const nearCorner = (v, a, b) => v - a < 3 || b - v < 3;
+  if (inSpan(x, ...bx) && inSpan(y, ...by) && ((onEdge(x, ...bx) && nearCorner(y, ...by)) || (onEdge(y, ...by) && nearCorner(x, ...bx)))) return '#5fe6ff';
+  // the target inside it: a dark machine silhouette
+  if (x > 22 && x < 28 && y > 8 && y < 14) return y < 9.5 ? '#ff3b2f' : '#3a2a2a';
+  // the missile: body, nose, fins
+  const my = 11;
+  if (y > my - 1 && y < my + 1 && x > 9 && x < 17) return x > 15 ? '#f1e9d8' : '#8a9097';
+  if ((x > 9 && x < 11.5 && Math.abs(y - my) < 2.6) ) return '#5f6b48';
+  // its flame and smoke trail, back down the line
+  if (Math.abs(y - my) < 0.9 && x > 6.5 && x <= 9) return x > 8 ? '#ffffff' : '#ffb347';
+  if (x <= 6.5 && x > 0 && Math.abs(y - my - Math.sin(x * 0.9) * 0.4) < 0.8 + (6.5 - x) * 0.12) return x > 3.5 ? '#c9c2b4' : '#7d776d';
+  return null;
+}
+const atgmCache = new Map();
+export function atgmCanvas(scale = 2) {
+  if (!atgmCache.has(scale)) atgmCache.set(scale, raster(32, 24, atgmAt, scale));
+  return atgmCache.get(scale);
+}

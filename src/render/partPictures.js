@@ -36,31 +36,46 @@ export function partPicture(renderer, id, W = 84, H = 56) {
       vulcanTank.group.traverse((o) => {
         if ((o.isMesh || o.isInstancedMesh) && !keep.has(o)) o.visible = false;
       });
-      // the muzzle flash: a white-hot core, a starburst of rays, a big warm glow
+      // the muzzle flash like the game's: a white-hot core, a short cross of
+      // flame, a soft orange bloom; and red tracers streaking out ahead
       const hot = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const yellow = new THREE.MeshBasicMaterial({ color: 0xffe27a });
+      const yellow = new THREE.MeshBasicMaterial({ color: 0xffe9a0 });
       const orange = new THREE.MeshBasicMaterial({ color: 0xffa040 });
       const flash = new THREE.Group();
-      flash.position.set(0.95, 0, 0);
-      flash.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.26, 0.26), hot));
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        const ray = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.07, 0.07), i % 2 ? orange : yellow);
-        ray.position.set(0.2 + Math.abs(Math.cos(a)) * 0.15, Math.cos(a) * 0.2, Math.sin(a) * 0.2);
-        ray.rotation.set(a, 0, Math.cos(a) * 0.6);
+      flash.position.set(0.86, 0, 0); // just past the barrel ends
+      const core = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.16), hot);
+      core.position.x = 0.12;
+      flash.add(core);
+      for (const [ry, rz] of [[0, 0.8], [0, -0.8], [0.8, 0], [-0.8, 0]]) {
+        const ray = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.05), yellow);
+        ray.position.set(0.12 + Math.cos(rz + ry) * 0.04, Math.sin(rz) * 0.12, Math.sin(ry) * 0.12);
+        ray.rotation.set(0, -ry, rz);
         flash.add(ray);
       }
-      const core = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.12, 0.12), yellow);
-      core.position.x = 0.6;
-      flash.add(core);
-      const glow = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.45, depthWrite: false }));
-      glow.position.x = 0.15;
-      flash.add(glow);
+      const tongue = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.08), orange);
+      tongue.position.x = 0.36;
+      flash.add(tongue);
+      const bloom = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.3, depthWrite: false }));
+      bloom.position.x = 0.14;
+      flash.add(bloom);
       g.add(flash);
+      // three tracers on their way, a little spread
+      const tracerCore = new THREE.MeshBasicMaterial({ color: 0xffc4ae });
+      const tracerGlow = new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.55, depthWrite: false });
+      for (const [x, y, z] of [[1.45, 0.02, 0.0], [1.95, -0.03, 0.05], [2.45, 0.04, -0.04]]) {
+        const t1 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.05), tracerCore);
+        t1.position.set(x, y, z);
+        g.add(t1);
+        const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.11, 0.11), tracerGlow);
+        t2.position.set(x, y, z);
+        g.add(t2);
+      }
     }
     vulcanTank.group.updateMatrixWorld(true);
-    const at = vulcanTank.turret.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(1.35, 0.1, 0));
-    pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.8, 0.5, 1), half: 1.1 });
+    // framed on the barrels and what's coming out of them (the turret's
+    // mostly off to the side)
+    const at = vulcanTank.gunPivot.localToWorld(new THREE.Vector3(1.0, 0, 0));
+    pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.55, 0.5, 1), half: 1.0 });
   } else {
     pic = snapshotCanvas(renderer, partModel(id), W, H, PARTS[id].badge === 'up' ? upArrow : null);
   }

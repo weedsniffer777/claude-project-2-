@@ -167,6 +167,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     artyRing.visible = false;
     scene.add(aimLine, aimMark, aimBeam, artyRing);
     strikes.length = 0;
+    missiles.length = 0;
     tank.group.position.set(level.spawn.x, 0, level.spawn.z);
     tank.group.rotation.y = level.spawn.yaw;
     // a fresh run: the tank as it finished its last level (its saved
@@ -974,11 +975,81 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     letGoFrame();
     const id = equipId();
     if (!id || !run.gun || run.over || run.mode !== 'field' || run.locked) return;
-    if (run.arty > 0) return void (run.arty = 0);
+    if (run.arty > 0) return void (run.arty = 0); // Q again: call it off
     if (run.equipCd > 0 || run.aiming > 0) return;
-    if (id === 'artillery') {
-      run.arty = 8;
-      trigger = false;
+    // picking the spot (artillery) or the target (ATGM)
+    run.armed = id;
+    run.arty = DESIGNATE[id] || 6;
+    trigger = false;
+  }
+  const DESIGNATE = { artillery: 8, atgm: 6 }; // seconds to pick before it's called off
+  // the click while designating: the strike on the spot, or the missile at
+  // the locked machine (no lock: nothing happens, keep pointing)
+  function useEquipment() {
+    if (!hasAim) return;
+    if (run.armed === 'atgm') {
+      const t = lockTarget();
+      if (t) launchMissile(t);
+    } else callStrike(aimPoint.clone());
+  }
+  const lockTarget = () => (hovered?.alive && !(hovered.delay > 0) ? hovered : null);
+
+  // The ATGM: off the turret roof, a kick up, then it lights and flies
+  // straight at the machine (following it if it moves) on a smoke trail.
+  const missiles = [];
+  function launchMissile(e) {
+    const E = EQUIPMENT.atgm;
+    run.arty = 0;
+    run.equipCd = E.cooldown;
+    const from = pos.clone().add(new THREE.Vector3(0, 2.0, 0));
+    const m = new THREE.Group();
+    m.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.9), new THREE.MeshBasicMaterial({ color: 0x5f6b48 })));
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.18), new THREE.MeshBasicMaterial({ color: 0xd8d2c4 }));
+    nose.position.z = 0.5;
+    m.add(nose);
+    for (const r of [0, Math.PI / 2]) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.16), new THREE.MeshBasicMaterial({ color: 0x3a4430 }));
+      fin.position.z = -0.35;
+      fin.rotation.z = r;
+      m.add(fin);
+    }
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff0c8 }));
+    flame.position.z = -0.52;
+    m.add(flame);
+    m.position.copy(from);
+    scene.add(m);
+    const dir = new THREE.Vector3(e.pos.x - from.x, 0.6, e.pos.z - from.z).normalize();
+    missiles.push({ m, e, vel: dir.multiplyScalar(6), t: 0, last: from.clone(), aim: null });
+    combat.glow.flash(from, 0xfff0c8, 0.2, 1.4, 0.1);
+    for (let i = 0; i < 6; i++) combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 3, 1 + Math.random(), (Math.random() - 0.5) * 3), { color: 0xc9c2b4, s0: 0.2, s1: 0.7, life: 0.8, drag: 3, lift: 0.4, fadeAt: 0.3 });
+    hud.setLock(null);
+  }
+  function missileFrame(dt) {
+    const E = EQUIPMENT.atgm;
+    for (let i = missiles.length - 1; i >= 0; i--) {
+      const ms = missiles[i];
+      ms.t += dt;
+      // where it's going: the machine (or, if that's gone, where it was)
+      if (ms.e.alive) ms.aim = new THREE.Vector3(ms.e.pos.x, 0.8 * (ms.e.stats.scale || 1), ms.e.pos.z);
+      const aim = ms.aim || ms.m.position.clone().addScaledVector(ms.vel, 1);
+      const to = aim.clone().sub(ms.m.position);
+      const d = to.length();
+      const speed = Math.min(E.speed, 6 + ms.t * 60);
+      // straight at it, after a quick turn out of the launch kick
+      ms.vel.lerp(to.normalize().multiplyScalar(speed), Math.min(1, dt * (ms.t < 0.15 ? 2 : 14)));
+      ms.m.position.addScaledVector(ms.vel, dt);
+      ms.m.lookAt(ms.m.position.clone().add(ms.vel));
+      combat.glow.tracer(ms.last, ms.m.position, 0xffd9a0, 0.1, 0.12);
+      if (Math.random() < 0.8) combat.puffs.spawn(ms.m.position.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.2, (Math.random() - 0.5) * 0.3), { color: 0xc9c2b4, s0: 0.12, s1: 0.45, life: 0.7, drag: 2, lift: 0.2, fadeAt: 0.2 });
+      ms.last = ms.m.position.clone();
+      if (d < 0.9 || ms.t > 4 || ms.m.position.y < 0.15) {
+        ms.m.removeFromParent();
+        missiles.splice(i, 1);
+        const at = ms.m.position.clone();
+        combat.explode(at);
+        combat.shake = Math.max(combat.shake, 0.3);
+        onImpact(at, null, false, { radius: E.blast, damage: E.damage });
+      }
     }
   }
   function callStrike(at) {
@@ -1323,7 +1394,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.paused) return;
     if (e.code === 'Space') {
       e.preventDefault();
-      if (run.arty > 0) return void (hasAim && callStrike(aimPoint.clone()));
+      if (run.arty > 0) return void useEquipment();
       if (run.aiming > 0) firePierce();
       else if (holdFire()) trigger = true;
       else fire();
@@ -1424,7 +1495,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     setTouch(false);
     if (e.button === 2 && run.arty > 0) return void (run.arty = 0); // right click: call it off
     if (e.button !== 0) return;
-    if (run.arty > 0) return void (hasAim && callStrike(aimPoint.clone()));
+    if (run.arty > 0) return void useEquipment();
     if (run.aiming > 0) firePierce();
     else if (holdFire()) trigger = true;
     else fire();
@@ -1933,7 +2004,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.dilate -= realDt;
         dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
       }
-      if (run.arty > 0 && !(run.aiming > 0)) dt = Math.min(dt, realDt * 0.5); // picking the spot: time slows a little
       if (run.aiming > 0) {
         dt = realDt * AIM_SLOW;
         run.aiming -= realDt;
@@ -1962,6 +2032,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (run.over || run.mode !== 'field') run.arty = 0;
       }
       strikeFrame(dt, t);
+      missileFrame(dt);
       run.shield = Math.max(0, run.shield - dt);
       if (run.chain > 0) {
         run.chainT -= dt;
@@ -2212,10 +2283,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       if (strikeOnAim) {
         strikeOnAim = false;
-        if (run.arty > 0 && hasAim) callStrike(aimPoint.clone());
+        if (run.arty > 0) useEquipment();
       }
       // the strike's ring follows the aim while it's being called in
-      artyRing.visible = run.arty > 0 && hasAim && !run.over;
+      artyRing.visible = run.arty > 0 && run.armed === 'artillery' && hasAim && !run.over;
+      // the ATGM's lock box: on the machine under the pointer, else
+      // following the pointer asking for one
+      if (run.arty > 0 && run.armed === 'atgm' && !run.over) {
+        const t = lockTarget();
+        if (t) hud.setLock(new THREE.Vector3(t.pos.x, 1.0 * (t.stats.scale || 1), t.pos.z), 'Locked', true);
+        else hud.setLock(hasAim ? aimPoint : null, 'Pick a target');
+      } else hud.setLock(null);
       if (artyRing.visible) {
         artyRing.position.set(aimPoint.x, (level.heightAt ? level.heightAt(aimPoint.x, aimPoint.z) : 0) + 0.05, aimPoint.z);
         artyRing.scale.setScalar(EQUIPMENT.artillery.radius + EQUIPMENT.artillery.blast * 0.5);
@@ -2309,7 +2387,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : null, art: boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0, active: run.arty > 0 ? run.arty / 8 : null, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || strikes.length > 0 || missiles.length > 0, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

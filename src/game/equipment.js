@@ -3,7 +3,7 @@
 // pixel icons on a cyan tile with cut corners (parts are pictures of the
 // part in a square frame), so the two never get mixed up.
 
-import { artilleryCanvas } from '../ui/icons.js';
+import { artilleryCanvas, atgmCanvas } from '../ui/icons.js';
 
 export const EQUIPMENT = {
   artillery: {
@@ -16,6 +16,15 @@ export const EQUIPMENT = {
     blast: 3.3, // each shell's splash
     damage: 70,
     art: () => artilleryCanvas(2), // red impact rings, shells streaking in, explosions
+  },
+  atgm: {
+    name: 'ATGM',
+    text: 'An anti-tank guided missile. Press Q, point at an enemy to lock on, click: the missile flies straight at it, 140 damage. Recharges in 5 s.',
+    cooldown: 5,
+    damage: 140,
+    blast: 1.6,
+    speed: 26, // top speed, units/s
+    art: () => atgmCanvas(2), // a missile on its smoke trail into a lock box
   },
 };
 

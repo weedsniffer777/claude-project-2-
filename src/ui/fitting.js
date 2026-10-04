@@ -9,7 +9,7 @@
 // checkpoint is shown as New with an "Equip now" button. Upgrades have a
 // screen of their own (workshop.js), opened from the hangar.
 import * as THREE from 'three';
-import { PARTS, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
+import { PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
 import { EQUIPMENT, equipmentIcon } from '../game/equipment.js';
@@ -60,7 +60,7 @@ const CSS = `
 .fit .slot[data-tier]:hover, .fit .slot[data-tier].on { box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .fit .item[data-tier] { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--tc); }
 .fit .slot .tiername, .fit .tip .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--tc); }
-.fit .item .away { position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
+.fit .item .away { z-index: 2; position: absolute; left: -4px; right: -4px; bottom: -8px; font: 400 8px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #b9b0a0; box-shadow: 0 0 0 2px #000; padding: 1px 2px; }
 .fit .item.isaway img { filter: brightness(0.55) saturate(0.6); }
 .fit .item .away.only { color: #fff; background: #c42a20; }
 .fit .item.notfor { cursor: default; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446 !important; }
@@ -99,6 +99,10 @@ const CSS = `
 .fit.replacing .slot:not(.empty):hover { background: #3a1a1a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffb0a8; animation: none; }
 @keyframes fitpulse { 50% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; } }
 .fit .store { display: flex; flex-wrap: wrap; gap: 8px; }
+.fit .storehead { display: flex; align-items: center; gap: 6px; }
+.fit .storehead .label { margin-right: auto; }
+.fit .storehead select { padding: 3px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; background: #1d1b1e; border: 0; box-shadow: 0 0 0 2px #000, 0 0 0 3px #6d655a; cursor: var(--cursor); pointer-events: auto; }
+.fit .storehead select option { color: #111; background: #f1e9d8; }
 .fit .store .none { font-size: 13px; color: #6d655a; }
 .fit .item { position: relative; padding: 0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .item img { display: block; width: 60px; height: 40px; image-rendering: pixelated; }
@@ -187,7 +191,7 @@ export function createFitting({ renderer, cursor }) {
   root.innerHTML = `
     <svg></svg>
     <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Change it in the hangar.</span></div></div>
-    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><span class="label">Storage</span><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
+    <div class="right pnl"><div class="slothead"><span class="label slotlabel"></span><button type="button" class="cancel" hidden>Cancel</button></div><div class="slots"></div><div class="storehead"><span class="label">Storage</span><select class="sortby" title="Sort"><option value="rarity">By rarity</option><option value="name">By name</option><option value="type">By type</option></select><select class="filterby" title="Filter"></select></div><div class="store"></div><div class="msg" hidden></div><button type="button" class="upbtn" hidden>Upgrade parts</button></div>
     <div class="bottom"><div class="tanks pnl" hidden></div><div class="btns"></div></div>
     <div class="tip" hidden><b></b><span></span></div>`;
   const $ = (s) => root.querySelector(s);
@@ -200,13 +204,32 @@ export function createFitting({ renderer, cursor }) {
   let slotEls = []; // { id, el }
   for (const ev of ['pointerdown', 'pointerup', 'click', 'wheel']) root.addEventListener(ev, (e) => e.stopPropagation());
 
+  // the slot or stored part a popup belongs to; clicking it again closes it
+  let popOwner = null;
+  const view = { sort: 'rarity', filter: 'all' }; // the storage's sort and filter
+  let justClosed = null;
   function closePop() {
     pop?.remove();
     pop = null;
+    popOwner?.classList.remove('on');
+    popOwner = null;
     for (const s of slotEls) s.el.classList.remove('on');
   }
+  // (call at the top of an opener: true if this click should only close:
+  // its own popup was open, or was just closed by this same click)
+  function toggledOff(el) {
+    const was = justClosed === el || (pop && popOwner === el);
+    justClosed = null;
+    if (was) closePop();
+    return was;
+  }
   document.addEventListener('pointerdown', (e) => {
-    if (pop && !pop.contains(e.target)) closePop();
+    if (pop && !pop.contains(e.target)) {
+      // a click on the popup's own slot or part closes it (and stays closed)
+      const owner = popOwner;
+      closePop();
+      justClosed = owner && owner.contains(e.target) ? owner : null;
+    }
   });
   function showTip(el, id) {
     const r = el.getBoundingClientRect();
@@ -305,8 +328,33 @@ export function createFitting({ renderer, cursor }) {
     // storage
     const store = $('.store');
     store.innerHTML = '';
-    const sp = spare();
-    if (!sp.length) store.innerHTML = `<span class="none">${o.owned.length ? 'Everything you have is fitted.' : 'Empty. Parts you find at checkpoints go here.'}</span>`;
+    // sort and filter (they stay as set while the screen's in use)
+    const sortEl = $('.storehead .sortby');
+    const filterEl = $('.storehead .filterby');
+    const filters = [['all', 'All tanks'], ...TANK_ORDER.map((t) => [`tank:${t}`, TANKS[t].name.replace(' tank', '')]), ...Object.entries(PART_TYPES).map(([k, v]) => [`type:${k}`, v])];
+    if (filterEl.options.length !== filters.length) filterEl.innerHTML = filters.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    sortEl.value = view.sort;
+    filterEl.value = view.filter;
+    sortEl.onchange = () => ((view.sort = sortEl.value), render());
+    filterEl.onchange = () => ((view.filter = filterEl.value), render());
+    const typeOrder = Object.keys(PART_TYPES);
+    const sp = spare()
+      .filter((id) => {
+        const [k, v] = view.filter.split(':');
+        if (k === 'tank') return !PARTS[id].only || PARTS[id].only === v;
+        if (k === 'type') return PARTS[id].type === v;
+        return true;
+      })
+      .sort((a, b) => {
+        // what this tank can't take, or another tank has on, goes to the back
+        const back = (id) => ((PARTS[id].only && PARTS[id].only !== o.tankId) || where(id) ? 1 : 0);
+        if (back(a) !== back(b)) return back(a) - back(b);
+        if (view.sort === 'name') return PARTS[a].name.localeCompare(PARTS[b].name);
+        if (view.sort === 'type') return typeOrder.indexOf(PARTS[a].type) - typeOrder.indexOf(PARTS[b].type) || PARTS[a].name.localeCompare(PARTS[b].name);
+        return levelOf(b) - levelOf(a) || PARTS[a].name.localeCompare(PARTS[b].name);
+      });
+    if (!sp.length && spare().length) store.innerHTML = '<span class="none">Nothing matches the filter.</span>';
+    else if (!sp.length) store.innerHTML = `<span class="none">${o.owned.length ? 'Everything you have is fitted.' : 'Empty. Parts you find at checkpoints go here.'}</span>`;
     for (const id of sp) {
       const el = document.createElement('button');
       el.type = 'button';
@@ -468,7 +516,9 @@ export function createFitting({ renderer, cursor }) {
   }
 
   function openItemPop(id, el) {
+    if (toggledOff(el)) return;
     closePop();
+    popOwner = el;
     hideTip();
     pop = document.createElement('div');
     pop.className = 'pop pnl';
@@ -520,7 +570,9 @@ export function createFitting({ renderer, cursor }) {
     el.classList.add('on');
   }
   function openPop(id, el) {
+    if (toggledOff(el)) return;
     closePop();
+    popOwner = el;
     hideTip();
     const list = loadout();
     pop = document.createElement('div');

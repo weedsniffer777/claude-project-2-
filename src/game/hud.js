@@ -162,6 +162,11 @@ const CSS = `
 .hud-dmg.chain { color: var(--amber); font-size: 20px; }
 .hud-marker { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; }
 .hud-marker::before, .hud-marker::after { content: ''; position: absolute; inset: 0; border: 3px solid var(--amber); clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); animation: hudpulse 0.9s steps(2) infinite; }
+.hud-lock { position: absolute; left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; }
+.hud-lock::before { content: ''; position: absolute; inset: 0; border: 3px solid #5fe6ff; clip-path: polygon(0 0, 30% 0, 30% 4px, 4px 4px, 4px 30%, 0 30%, 0 0, 100% 0, 100% 30%, calc(100% - 4px) 30%, calc(100% - 4px) 4px, 70% 4px, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4px 70%, 4px calc(100% - 4px), 30% calc(100% - 4px), 30% 100%, 0 100%); }
+.hud-lock.on::before { animation: hudlock 0.35s steps(2) infinite; }
+@keyframes hudlock { 50% { transform: scale(0.88); } }
+.hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: #5fe6ff; white-space: nowrap; text-shadow: 2px 2px #000; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
 .hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
@@ -360,6 +365,7 @@ export function createHud() {
     <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
     <div class="hud-ability three" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Q</kbd></div>
     <div class="hud-marker" hidden><span class="px"></span></div>
+    <div class="hud-lock" hidden><span class="px"></span></div>
     <div class="hud-reticle" hidden>
       <svg viewBox="-26 -26 52 52" shape-rendering="crispEdges">
         <circle r="${RING_R}" fill="none" stroke="#000" stroke-width="6" opacity="0.6"></circle>
@@ -390,6 +396,8 @@ export function createHud() {
   const end = $('.hud-end');
   const numbers = [];
   let markerAt = null;
+  let lockAt = null;
+  const lockEl = $('.hud-lock');
   // The drive stick: fixed in the bottom-left corner, drawn as pixel art
   // (one canvas pixel = 6 screen pixels).
   const stickEl = $('.hud-stick');
@@ -581,6 +589,13 @@ export function createHud() {
     clearPrompt() {
       prompt.hidden = true;
       promptTimer = 0;
+    },
+    // the ATGM's lock box: on a machine (locked) or following the pointer
+    setLock(worldPos, label = '', locked = false) {
+      lockAt = worldPos ? worldPos.clone() : null;
+      lockEl.hidden = !lockAt;
+      lockEl.classList.toggle('on', locked);
+      lockEl.querySelector('span').textContent = label;
     },
     setMarker(worldPos, label = '') {
       markerAt = worldPos ? worldPos.clone() : null;
@@ -899,6 +914,10 @@ export function createHud() {
           arrow.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
         }
       }
+      if (lockAt) {
+        const [lx, ly] = toScreen(lockAt, camera, rect);
+        lockEl.style.transform = `translate(${Math.round(lx)}px, ${Math.round(ly)}px)`;
+      }
       if (markerAt) {
         const [x, y] = toScreen(markerAt, camera, rect);
         marker.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
@@ -938,6 +957,8 @@ export function createHud() {
       prompt.hidden = true;
       marker.hidden = true;
       markerAt = null;
+      lockEl.hidden = true;
+      lockAt = null;
       arrow.hidden = true;
       arrowAt = null;
       this.setObjective('');

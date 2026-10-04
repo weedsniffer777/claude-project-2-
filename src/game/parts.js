@@ -56,8 +56,12 @@ const DARK = 0x262b32;
 // icon: 16x10 pixel art for the end screen ('.' clear, '#' bone, '+' amber,
 // '-' steel, '*' cyan, '%' pink)
 const ERA_EDGE = 0x3a3626;
+// type: what the part's for (the hangar sorts and filters by it): weapons,
+// armor, movement, utility
+export const PART_TYPES = { weapons: 'Weapons', armor: 'Armour', movement: 'Movement', utility: 'Utility' };
 export const PARTS = {
   dozer: {
+    type: 'armor',
     name: 'Dozer blade',
     text: 'Ram enemies for heavy damage.',
     icon: ['................', '.##############.', '.#++++++++++++#.', '.#++++++++++++#.', '.#++++++++++++#.', '.##############.', '...-........-...', '...--......--...', '....--------....', '................'],
@@ -91,6 +95,7 @@ export const PARTS = {
     },
   },
   autoloader: {
+    type: 'weapons',
     name: 'Fast reload',
     text: 'Main gun reloads faster (an autocannon fires faster too).',
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
@@ -157,6 +162,7 @@ export const PARTS = {
     },
   },
   era: {
+    type: 'armor',
     name: 'Reactive armour',
     text: 'Take 30% less damage.',
     icon: ['................', '.###.###.###.###', '.#+#.#+#.#+#.#+#', '.###.###.###.###', '................', '...###.###.###..', '...#+#.#+#.#+#..', '...###.###.###..', '................', '................'],
@@ -279,6 +285,7 @@ export const PARTS = {
     },
   },
   twinmg: {
+    type: 'weapons',
     name: 'Extra MGs',
     text: 'A second machine gun that picks its own target.',
     icon: ['................', '.....------.....', '.....-####-.....', '#########-#.....', '.....-####-.....', '.....------.....', '#########-#.....', '.....-####-.....', '.....------.....', '................'],
@@ -313,6 +320,7 @@ export const PARTS = {
     model: () => mgMount(),
   },
   afterburner: {
+    type: 'movement',
     name: 'Improved boost',
     badge: 'up', // its picture gets an up arrow: an improved ability
     text: 'Boost burns hotter: faster and longer, but a longer recharge.',
@@ -364,6 +372,7 @@ export const PARTS = {
     },
   },
   optics: {
+    type: 'utility',
     name: 'Optics',
     text: 'See further around you. Machine gun reaches further.',
     icon: ['................', '....######......', '...#------#.....', '..#--****--#####', '..#--*##*--#....', '..#--****--#####', '...#------#.....', '....######......', '................', '................'],
@@ -399,6 +408,7 @@ export const PARTS = {
     },
   },
   he: {
+    type: 'weapons',
     name: 'Explosive shells',
     text: 'Bigger blast and more damage per shot.',
     icon: ['................', '......+.........', '.....+++........', '.....+++........', '.....###........', '.....+++........', '.....###........', '................', '................', '................'],
@@ -429,6 +439,7 @@ export const PARTS = {
   // gun. A huge magazine fired very fast, each round lighter. Found already
   // Legendary (level 21), as level 2's Hard first clear.
   vulcan: {
+    type: 'weapons',
     name: 'Vulcan autocannon',
     only: 'light',
     startLevel: 21,
