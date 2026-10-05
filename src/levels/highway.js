@@ -985,6 +985,7 @@ function buildHighway(scene) {
           api.prompt('Barricade', '<b>Break through the barricade!</b>', { go: true, seconds: 5 });
           api.objective('Break through');
           api.arrow(new THREE.Vector3(BAR_X, DECK + 2.2, DZ), 'Break it!');
+          api.cameraTo(new THREE.Vector3(BAR_X, DECK, DZ), 2);
           go(3);
         }
         break;

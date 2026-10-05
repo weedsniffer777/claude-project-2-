@@ -10,7 +10,7 @@ export const CAMPAIGN = [
   { n: 4, id: 'depot', name: 'Depot', page: 0, at: [0.76, 0.41], steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'he'], first: { easy: { equipment: 'shield' }, hard: { scraps: 2500, tokens: 7 } } },
   { n: 5, id: 'stadium', name: 'Destroyed stadium', page: 0, at: [0.46, 0.18], steps: ['1', 'Boss'], rewards: ['rangefinder', 'twinmg', 'optics'], first: { easy: { tank: 'missile' }, hard: { scraps: 3000, tokens: 8 } } },
   // beyond the city wall: the second page of the map
-  { n: 6, name: 'City gates', page: 1, at: [0.66, 0.84], steps: ['1', '2', 'Boss'], rewards: ['era', 'afterburner', 'rangefinder'], first: { easy: { scraps: 1500, tokens: 4 }, hard: { scraps: 3500, tokens: 9 } } },
+  { n: 6, id: 'gates', name: 'City gates', page: 1, at: [0.66, 0.84], steps: ['1', '2', 'Boss'], rewards: ['era', 'afterburner', 'rangefinder'], first: { easy: { scraps: 1500, tokens: 4 }, hard: { scraps: 3500, tokens: 9 } } },
   { n: 7, name: 'Suburbs', page: 1, at: [0.36, 0.72], steps: [], rewards: [] },
   { n: 8, name: 'Industrial district', page: 1, at: [0.7, 0.55], steps: [], rewards: [] },
   { n: 9, name: 'Slums', page: 1, at: [0.3, 0.34], steps: [], rewards: [] },

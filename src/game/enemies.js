@@ -177,7 +177,7 @@ const SPIDER = {
   heavy: true, // (rams, shoves and shockwaves hurt it but never move it)
   kinetic: true,
   shatterOnDeath: true,
-  hp: 6000,
+  hp: 3600,
   runSpeed: 2.0,
   walkSpeed: 1.3,
   turnRate: 1.2,
@@ -269,6 +269,31 @@ const DRONE = {
   scrap: 5,
 };
 
+// The gunship (level 6's boss): an attack drone grown big and armoured,
+// flying higher, a long salvo from each hover. Mid-sized: a step up from
+// the drones, well short of the mech.
+const GUNSHIP = {
+  ...DRONE,
+  hp: 900,
+  runSpeed: 5.5,
+  walkSpeed: 2.5,
+  fly: 5.8,
+  range: 22,
+  orbit: [11, 16],
+  windup: 1.0,
+  salvo: 6,
+  salvoGap: 0.18,
+  reload: 2.6,
+  damage: 9,
+  rocketSpeed: 11,
+  box: { hx: 1.2, hz: 1.2 },
+  scale: 2.3,
+  modelScale: 2.3,
+  aimY: 6.2,
+  scrap: 60,
+};
+
+
 // The red funnel a machine shows while winding up a burst: where the rounds
 // will go. Unit length along +x, opening to ±0.5; scaled per shot.
 const funnelGeo = (() => {
@@ -325,6 +350,19 @@ export class Enemies {
     e.arena = opts.arena || null; // (x, z) => inside where it can dash
     e.mctx = {};
     return e;
+  }
+  spawnGunship(x, z, opts) {
+    const e = this.spawn(GUNSHIP, 'drone', x, z, opts);
+    e.pos.y = GUNSHIP.fly + 8;
+    return e;
+  }
+  // a flier breaks off and gets away to (x, z): it can't be hurt, it climbs
+  // and goes, and once it's there it's gone (not killed)
+  escape(e, x, z) {
+    e.flee = { x, z };
+    e.invuln = true;
+    e.windup = 0;
+    e.burstLeft = 0;
   }
   spawnArty(x, z, opts = {}) {
     const e = this.spawn(ARTY, 'arty', x, z, opts);
@@ -891,6 +929,27 @@ export class Enemies {
       e.spot = { x: tankPos.x + Math.cos(a) * r, z: tankPos.z + Math.sin(a) * r };
       e.hold = 0.2 + Math.random() * 0.4;
     };
+    if (e.flee) {
+      const dx = e.flee.x - e.pos.x;
+      const dz = e.flee.z - e.pos.z;
+      const d = Math.hypot(dx, dz) || 1;
+      const sp = S.runSpeed * 1.4;
+      e.pos.x += (dx / d) * sp * dt;
+      e.pos.z += (dz / d) * sp * dt;
+      e.pos.y += dt * 2.2;
+      e.funnel.visible = false;
+      const g = e.model.group;
+      let diff = Math.atan2(-dz, dx) - g.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      g.rotation.y += diff * Math.min(1, dt * 4);
+      e.model.update(dt, t, { speed: 1, tilt: 0.3, aimYaw: 0, charge: 0, height: e.pos.y - ground });
+      if (d < 3) {
+        g.removeFromParent();
+        e.alive = false;
+        e.escaped = true;
+      }
+      return;
+    }
     if (!e.spot) pickSpot();
     let vx = 0;
     let vz = 0;

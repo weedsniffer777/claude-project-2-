@@ -352,6 +352,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     spawnBridgeGun: (x, z, opts) => enemies.spawnBridgeGun(x, z, opts),
     spawnSpider: (x, z, opts) => enemies.spawnSpider(x, z, opts),
     spawnArty: (x, z, opts) => enemies.spawnArty(x, z, opts),
+    spawnGunship: (x, z, opts) => enemies.spawnGunship(x, z, opts),
+    escape: (e, x, z) => enemies.escape(e, x, z),
     get run() {
       return run;
     },
@@ -1200,7 +1202,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       targets.push({ point: p });
     }
     run.abilityCd = stats.salvoCooldown;
-    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 1.6, blast: stats.splash * 1.15 };
+    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 2.09, blast: stats.splash * 1.15 }; // (the salvo keeps its punch: the single missiles are the weaker ones)
   }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
@@ -1732,6 +1734,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
               setPaused(false);
               loadLevel(levelDef.id);
             },
+            lost: partCards().map((c) => ({ name: c.name, image: c.image })),
             exit: onExit
               ? () => {
                   setPaused(false);

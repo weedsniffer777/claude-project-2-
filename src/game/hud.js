@@ -228,6 +228,11 @@ const CSS = `
 .hud-pause button { padding: 10px 16px 11px; border: 0; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-pause .menu, .hud-pause .ask { display: grid; gap: 12px; justify-items: stretch; }
 .hud-pause .menu[hidden], .hud-pause .ask[hidden] { display: none; }
+.hud-pause .lost { display: grid; gap: 8px; justify-items: center; }
+.hud-pause .lost[hidden] { display: none; }
+.hud-pause .lost-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.hud-pause .lost-row span { width: 60px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #a8241c; }
+.hud-pause .lost-row img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
 .hud-pause p { margin: 0 0 4px; text-align: center; font-size: 15px; color: var(--ink); }
 .hud-pause .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .hud-pause button[data-ask="yes"] { color: #fff; background: #a8241c; box-shadow: 0 4px 0 #5a1410; }
@@ -508,7 +513,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
-    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="settings">Settings</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
+    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="settings">Settings</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="lost" hidden><p>The following parts picked up will also be lost!</p><div class="lost-row"></div></div><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
     <div class="hud-fade"></div>
@@ -1005,6 +1010,10 @@ export function createHud() {
         ask.hidden = false;
         el.querySelector('[data-ask="no"]').focus();
       };
+      // this run's finds: they go too
+      const lost = el.querySelector('.lost');
+      lost.hidden = !acts.lost?.length;
+      lost.querySelector('.lost-row').innerHTML = (acts.lost || []).map((c) => `<span title="${c.name}"><img alt="${c.name}" src="${c.image}"></span>`).join('');
       el.querySelector('[data-ask="yes"]').onclick = () => acts.exit?.();
       el.querySelector('[data-ask="no"]').onclick = back;
       back();

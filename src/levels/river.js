@@ -848,6 +848,7 @@ function buildRiver(scene) {
           api.prompt('Bridge gun destroyed', 'The way is open. <b>Drive across!</b>', { go: true, seconds: 5 });
           setBounds(api, { maxX: MAP.x1 - 4 });
           api.arrow(new THREE.Vector3(END_X + 2, 0.6, 0), 'Exit');
+          api.cameraTo(new THREE.Vector3(END_X, 0, 0), 2); // (a look at the way out)
           go(1);
           break;
         }

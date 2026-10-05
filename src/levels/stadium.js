@@ -840,6 +840,7 @@ function buildStadium(scene) {
           for (const [dx, z, d] of [[0, -10, 0], [2, 10, 0.4], [4, 0, 0.8], [6, -4, 1.2]]) api.spawnDog(x + 26 + dx, z, { delay: d });
           api.spawnWalker(x + 34, 8, { delay: 1.4 });
           contact(api, 'Enemies on the plaza!');
+          api.cameraTo(new THREE.Vector3(W_IN - 4, 0, CZ), 2.2); // (a look at the way in)
           go(1);
         }
         break;
@@ -850,7 +851,8 @@ function buildStadium(scene) {
           setBounds(api, { minX: W_IN + 1.5, minZ: CZ - R + 1, maxZ: CZ + R - 1 });
           api.arrow(null);
           if (api.enemiesAlive) api.clearEnemies();
-          S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI, arena: (x, z) => inPill(x, z, 3.2) });
+          // (its dashes stop short of the gates: never out through one)
+          S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI, arena: (x, z) => inPill(x, z, 3.2) && !(Math.abs(x - CX) > HL + R - 9 && Math.abs(z - CZ) < GATE_HALF + 3) });
           api.boss(S.boss, 'Mech');
           api.objective('Destroy the mech');
           api.prompt('Mech', 'A <b>mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
