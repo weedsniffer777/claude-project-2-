@@ -18,8 +18,14 @@ import { settings, onSettings } from './ui/settings.js';
 // its own cursor (the canvas hiding it in combat) still wins.
 {
   const st = document.createElement('style');
-  st.textContent = `:where(html, body, body *) { cursor: ${CURSOR}; }`;
+  // and no long-press text selection, copy / look up callouts or tap
+  // flashes on phones (a held finger is for firing and driving)
+  st.textContent = `:where(html, body, body *) { cursor: ${CURSOR}; }
+html, body, body * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+canvas { touch-action: none; }`;
   document.head.append(st);
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('selectstart', (e) => e.preventDefault());
 }
 
 const params = new URLSearchParams(location.search);

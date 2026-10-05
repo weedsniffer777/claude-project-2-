@@ -2207,7 +2207,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const retreatPics = new Map();
   function retreatArt(firing) {
     if (retreatPics.has(firing)) return retreatPics.get(firing);
-    const base = boostPicture(firing, 'afterburner'); // (the High-power boost's own look on this tank)
+    const base = boostPicture(firing, 'normal'); // (the missile tank's own boost picture)
     const c = document.createElement('canvas');
     c.width = base.width;
     c.height = base.height;
