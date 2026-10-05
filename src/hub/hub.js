@@ -320,17 +320,24 @@ function route(g, W, Hc, page) {
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, ay] = pts[i];
     const [bx, by] = pts[i + 1];
-    for (let s = 0; s <= 40; s += 2) {
-      const t = s / 40;
-      g.fillRect(Math.round((ax + (bx - ax) * t) * W), Math.round((ay + (by - ay) * t) * Hc), 2, 2);
+    // each leg bowed a little, alternately (a road, not a ruler line)
+    const bow = (i % 2 ? 1 : -1) * 0.12;
+    const cx = (ax + bx) / 2 - (by - ay) * bow;
+    const cy = (ay + by) / 2 + (bx - ax) * bow;
+    for (let s = 0; s <= 44; s += 2) {
+      const t = s / 44;
+      const x = (1 - t) * (1 - t) * ax + 2 * (1 - t) * t * cx + t * t * bx;
+      const y = (1 - t) * (1 - t) * ay + 2 * (1 - t) * t * cy + t * t * by;
+      g.fillRect(Math.round(x * W), Math.round(y * Hc), 2, 2);
     }
   }
 }
 
-// The second page: out past the city wall. The wall along the bottom with
-// its gate, then the suburbs (rows of little houses on curving streets),
-// the industrial district (big sheds, chimneys, rail sidings), the slums
-// (a dense scatter of shacks), and something big at the top. All of it
+// The second page: out past the city wall, drawn the same way as the
+// city's page. The wall along the bottom with its gate; beyond it the
+// suburbs (small scattered blocks), the industrial district (big ones), the
+// slums (a dense spatter), and the far side of it all. A stream winding
+// across; the old trunk road out from the gate, branches off it. All of it
 // enemy ground, hatched red.
 function outerMap() {
   const W = 160;
@@ -338,69 +345,53 @@ function outerMap() {
   const [c, g] = canvas(W, Hc);
   let seed = 97;
   const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
-  g.fillStyle = '#1c1d1b';
+  g.fillStyle = '#1b1c1f';
   g.fillRect(0, 0, W, Hc);
-  g.fillStyle = '#242522';
+  g.fillStyle = '#232428';
   for (let x = 0; x < W; x += 10) g.fillRect(x, 0, 1, Hc);
   for (let y = 0; y < Hc; y += 10) g.fillRect(0, y, W, 1);
-  // open ground: dull green patches
-  for (let i = 0; i < 40; i++) {
-    g.fillStyle = ['#262b22', '#2a2f25', '#232720'][(rand() * 3) | 0];
-    g.fillRect((rand() * W) | 0, (rand() * Hc) | 0, 6 + ((rand() * 18) | 0), 4 + ((rand() * 10) | 0));
-  }
-  // the suburbs (left, low): rows of small houses along curving streets
-  g.fillStyle = '#8a877f';
-  for (let k = 0; k < 4; k++) for (let x = 6; x < 80; x++) g.fillRect(x, (138 + k * 14 + Math.sin(x / 12 + k) * 4) | 0, 1, 1);
-  for (let k = 0; k < 4; k++)
-    for (let x = 8; x < 78; x += 5) {
-      if (rand() < 0.2) continue;
-      const y = (138 + k * 14 + Math.sin(x / 12 + k) * 4) | 0;
-      g.fillStyle = ['#4a4b46', '#54554f', '#43443f'][(rand() * 3) | 0];
-      g.fillRect(x, y - 5, 3, 3);
-      g.fillRect(x + 1, y + 2, 3, 3);
+  // districts: [cx, cy, count, radius, block size min, extra]
+  for (const [cx, cy, n, r, s0, ds] of [
+    [60, 182, 70, 34, 2, 2], // suburbs: many small
+    [30, 150, 24, 18, 2, 2],
+    [116, 128, 22, 28, 5, 7], // industrial: few big
+    [132, 168, 10, 16, 4, 6],
+    [46, 76, 120, 26, 1, 2], // slums: a dense spatter
+    [100, 30, 30, 26, 3, 6], // the far side
+  ]) {
+    for (let i = 0; i < n; i++) {
+      const a = rand() * Math.PI * 2;
+      const d = Math.sqrt(rand()) * r;
+      g.fillStyle = ['#3a3b3f', '#44454a', '#34353a'][(rand() * 3) | 0];
+      g.fillRect((cx + Math.cos(a) * d) | 0, (cy + Math.sin(a) * d * 0.9) | 0, s0 + ((rand() * ds) | 0), Math.max(1, s0 - 1) + ((rand() * ds * 0.7) | 0));
     }
-  // the industrial district (right, middle): big sheds, chimneys, sidings
-  for (let i = 0; i < 14; i++) {
-    g.fillStyle = ['#3e3f3b', '#474844', '#383935'][(rand() * 3) | 0];
-    g.fillRect(90 + ((rand() * 56) | 0), 86 + ((rand() * 46) | 0), 8 + ((rand() * 12) | 0), 5 + ((rand() * 7) | 0));
   }
-  g.fillStyle = '#6d6a64';
-  for (const x of [104, 122, 140]) g.fillRect(x, 92, 2, 2);
-  g.fillStyle = '#5a5850';
-  for (let x = 84; x < W; x++) {
-    g.fillRect(x, 134, 1, 1);
-    if (x % 3 === 0) g.fillRect(x, 133, 1, 3);
-  }
-  // the slums (left, high): a dense scatter of tiny shacks
-  for (let i = 0; i < 260; i++) {
-    const a = rand() * Math.PI * 2;
-    const d = Math.sqrt(rand()) * 30;
-    g.fillStyle = ['#3d3c37', '#47443c', '#35342f', '#4d4a40'][(rand() * 4) | 0];
-    g.fillRect((48 + Math.cos(a) * d * 1.2) | 0, (72 + Math.sin(a) * d * 0.8) | 0, 2 + ((rand() * 2) | 0), 2);
-  }
-  // something big at the top: a dark fortified block
-  g.fillStyle = '#2e2b2a';
-  g.fillRect(84, 14, 36, 20);
-  g.fillStyle = '#5a1f1c';
-  g.fillRect(84, 14, 36, 2);
-  // roads
+  // a stream across the middle
+  const streamY = (x) => 112 + Math.sin(x / 26 + 1) * 8 + Math.sin(x / 9) * 2;
+  g.fillStyle = '#2b3740';
+  for (let x = 0; x < W; x++) g.fillRect(x, streamY(x) | 0, 1, 3);
+  // roads: the trunk road on out from the gate, bending; branches off it
   g.fillStyle = '#c9c6bd';
-  for (let y = 0; y < Hc; y++) g.fillRect((77 + Math.sin(y / 26) * 10) | 0, y, 2, 1);
+  const trunk = (y) => GATE_X * W + Math.sin((Hc - y) / 40) * 22 - (Hc - y) * 0.12;
+  for (let y = 0; y < Hc - 8; y++) g.fillRect(trunk(y) | 0, y, 2, 1);
   g.fillStyle = '#8a877f';
-  for (let x = 0; x < W; x++) g.fillRect(x, (110 - x * 0.2) | 0, 1, 1);
+  for (let x = 0; x < W; x++) {
+    g.fillRect(x, (196 - x * 0.18) | 0, 1, 1);
+    if (x > 60) g.fillRect(x, (140 + (x - 60) * 0.1) | 0, 1, 1);
+    if (x < 110) g.fillRect(x, (58 + x * 0.22) | 0, 1, 1);
+  }
+  // a rail line through the industrial district
+  g.fillStyle = '#5a5850';
+  for (let x = 80; x < W; x++) {
+    const y = (150 - (x - 80) * 0.35) | 0;
+    g.fillRect(x, y, 1, 1);
+    if (x % 3 === 0) g.fillRect(x, y - 1, 1, 3);
+  }
   // enemy ground everywhere out here
   g.fillStyle = '#5a1f1c';
-  for (let y = 0; y < 214; y += 4) for (let x = (y / 2) % 4 | 0; x < W; x += 6) if (rand() < 0.8) g.fillRect(x, y, 1, 1);
-  // the city wall along the bottom: thick, crenellated, its gate open
-  g.fillStyle = '#8d8a83';
-  for (let x = 0; x < W; x++) {
-    g.fillRect(x, 222, 1, 6);
-    if (((x / 4) | 0) % 2) g.fillRect(x, 220, 1, 2);
-  }
-  g.fillStyle = '#1c1d1b';
-  g.fillRect(GATE_X * W - 7, 219, 14, 10);
+  for (let y = 0; y < Hc - 12; y += 4) for (let x = (y / 2) % 4 | 0; x < W; x += 6) if (rand() < 0.8) g.fillRect(x, y, 1, 1);
   g.fillStyle = '#ff3b2f';
-  for (const [x, y] of [[32, 160], [64, 186], [116, 104], [134, 120], [52, 64], [100, 24]]) {
+  for (const [x, y] of [[40, 190], [90, 176], [124, 132], [140, 150], [60, 80], [30, 64], [110, 30]]) {
     g.fillRect(x - 1, y - 1, 1, 1);
     g.fillRect(x + 1, y - 1, 1, 1);
     g.fillRect(x, y, 1, 1);
@@ -408,10 +399,13 @@ function outerMap() {
     g.fillRect(x + 1, y + 1, 1, 1);
   }
   route(g, W, Hc, 1);
+  // the city wall along the bottom (the same wall the city's page has along
+  // its top), its gate open
+  g.fillStyle = '#6d6a64';
+  for (let x = 0; x < W; x++) g.fillRect(x, Hc - 8 + (((x / 7) | 0) % 2), 1, 3);
+  g.fillStyle = '#1b1c1f';
+  g.fillRect(GATE_X * W - 7, Hc - 9, 14, 6);
   g.fillStyle = '#d8d4cb';
-  g.fillRect(W - 12, 8, 1, 10);
-  g.fillRect(W - 13, 9, 3, 1);
-  g.fillRect(W - 14, 10, 5, 1);
   for (const [x, y, sx, sy] of [[2, 2, 1, 1], [W - 3, 2, -1, 1], [2, Hc - 3, 1, -1], [W - 3, Hc - 3, -1, -1]]) {
     g.fillRect(Math.min(x, x + sx * 8), y, 8, 1);
     g.fillRect(x, Math.min(y, y + sy * 8), 1, 8);
@@ -471,11 +465,8 @@ function campaignMap() {
   for (let x = 0; x < W; x++) g.fillRect(x, 4 + ((x / 7) | 0) % 2, 1, 3);
   g.fillStyle = '#1b1c1f';
   g.fillRect(GATE_X * W - 7, 3, 14, 6);
-  // north arrow and corner brackets
+  // corner brackets
   g.fillStyle = '#d8d4cb';
-  g.fillRect(W - 12, 8, 1, 10);
-  g.fillRect(W - 13, 9, 3, 1);
-  g.fillRect(W - 14, 10, 5, 1);
   for (const [x, y, sx, sy] of [[2, 2, 1, 1], [W - 3, 2, -1, 1], [2, Hc - 3, 1, -1], [W - 3, Hc - 3, -1, -1]]) {
     g.fillRect(Math.min(x, x + sx * 8), y, 8, 1);
     g.fillRect(x, Math.min(y, y + sy * 8), 1, 8);
@@ -1232,7 +1223,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const to = mapPage + dir;
       if (to < 0 || to >= PAGES) return '';
       const glow = pageOf(next) === to && !save.cleared().includes(clearKey(next.id, 'easy'));
-      const label = dir > 0 ? 'Beyond the wall' : 'The city';
+      const label = dir > 0 ? 'Next area' : 'Previous area';
       return `<button type="button" class="pageturn ${dir > 0 ? 'up' : 'down'}${glow ? ' glow' : ''}" data-to="${to}"><i></i><span>${label}</span>${glow ? '<em>New</em>' : ''}</button>`;
     };
     map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;

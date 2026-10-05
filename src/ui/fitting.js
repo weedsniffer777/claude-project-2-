@@ -821,9 +821,19 @@ export function createFitting({ renderer, cursor }) {
 }
 
 // where a part sits on a tank, as a world point (for the fitting lines)
+// (the part's own model on the tank, wherever it was fitted: the middle of
+// its box; failing that, the tank's hand-set anchor)
 export function anchorWorld(tank, tankId, id) {
+  tank.group.updateMatrixWorld(true);
+  let part = null;
+  tank.group.traverse((o) => {
+    if (!part && o.userData.part === id) part = o;
+  });
+  if (part) {
+    const bb = new THREE.Box3().setFromObject(part);
+    if (!bb.isEmpty()) return bb.getCenter(new THREE.Vector3());
+  }
   const a = tankDef(tankId).anchors?.[id];
   if (!a) return null;
-  tank.group.updateMatrixWorld(true);
   return tank.group.localToWorld(new THREE.Vector3(...a));
 }

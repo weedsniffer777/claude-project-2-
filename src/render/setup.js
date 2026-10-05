@@ -215,3 +215,37 @@ export function addNoon(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
   sun.position.copy(offset);
   return { sun, follow: shadowFollower(sun, offset, shadowSize) };
 }
+
+// Late afternoon (level 4): the sun low-ish in the north-west, behind the
+// far side, warm but not dusk-orange; a pale amber haze, a cool sky. Long
+// shadows reach across the street toward the camera, and into a building
+// it comes in through the north windows.
+export const AFTERNOON_SUN = new THREE.Vector3(-11, 12, -25);
+export function addAfternoon(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#46628c');
+  grad.addColorStop(0.55, '#a8a6b4');
+  grad.addColorStop(1, '#e8c9a0');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 128);
+  const sky = new THREE.CanvasTexture(c);
+  sky.colorSpace = THREE.SRGBColorSpace;
+  scene.background = sky;
+  scene.fog = new THREE.Fog(0xb4a898, 80, 130);
+  const hemi = new THREE.HemisphereLight(0xaab6d8, 0x544c46, 1.9);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffd6a0, 4.4);
+  const offset = AFTERNOON_SUN.clone().setLength(SUN_BACK);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: SUN_BACK + 60 });
+  sun.shadow.bias = -0.0003;
+  sun.shadow.normalBias = 0.02;
+  scene.add(sun, sun.target);
+  sun.position.copy(offset);
+  return { sun, hemi, follow: shadowFollower(sun, offset, shadowSize) };
+}

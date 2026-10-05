@@ -100,7 +100,7 @@ function groundTexture(rand) {
 // The highway's surface, for one stretch of deck (or the ramp): worn dark
 // asphalt, patched squares, cracks, oil and soot, tyre marks, white lane
 // dashes, a double yellow centre, yellow edge lines, slush along the sides.
-function deckTexture(rand, len) {
+export function deckTexture(rand, len) {
   const K = 10; // texels per unit
   const Wd = DECK_Z * 2;
   const [c, g] = canvas(Math.round(len * K), Math.round(Wd * K));
@@ -174,7 +174,7 @@ function deckTexture(rand, len) {
 
 // A highway sign with no words: a green board, a white edge, white arrows
 // (straight on; or on, and an exit off to the side) and bars.
-function roadSign(w, h, rand, kind = 'ahead') {
+export function roadSign(w, h, rand, kind = 'ahead') {
   const k = 24;
   const [c, g] = canvas(w * k, h * k);
   g.fillStyle = '#1f6b43';
@@ -953,10 +953,10 @@ function buildHighway(scene) {
         }
         break;
       case 1:
-        if (api.enemiesAlive <= 1 && S.t > 3 && (x > 250 || S.t > 12)) {
+        if (x > 250) {
           // the last stand: everything they've got, between the tank and
           // the barricade, in three waves
-          api.prompt('Barricade', 'A barricade across the highway, and <b>everything they have left</b> in front of it. Clear them all!', { danger: true, seconds: 6 });
+          api.prompt('Barricade', 'Clear the enemies ahead of the barricade!', { danger: true, seconds: 5 });
           api.objective('Clear the highway');
           for (const [dx, z, d] of [[0, -5, 0], [1, 4, 0.3], [2, -1, 0.6], [3, 6, 0.9]]) deckDog(api, 290 + dx, DZ + z, d);
           api.spawnWalker(296, DZ - 4, { delay: 0.5 });
@@ -967,23 +967,22 @@ function buildHighway(scene) {
         }
         break;
       case 2:
-        if (S.wave === 1 && api.enemiesAlive <= 3 && S.t > 4) {
+        if (S.wave === 1 && x > 268) {
           for (const [dx, z, d] of [[0, -3, 0], [2, 3, 0.4], [4, 0, 0.8]]) deckDog(api, 292 + dx, DZ + z, d);
           api.spawnWalker(298, DZ, { delay: 0.6 });
           sideDrone(api, 286, -1, 0.4);
           S.wave = 2;
           S.t = 0;
-        } else if (S.wave === 2 && api.enemiesAlive <= 3 && S.t > 4) {
+        } else if (S.wave === 2 && x > 282) {
           for (const [dx, z, d] of [[0, -5, 0], [1, 5, 0.3], [2, -2, 0.6], [3, 2, 0.9], [4, 0, 1.2]]) deckDog(api, 290 + dx, DZ + z, d);
           api.spawnWalker(297, DZ - 5, { delay: 0.4 });
           api.spawnWalker(297, DZ + 5, { delay: 0.9 });
           sideDrone(api, 284, 1, 0.5);
-          contact(api, 'The last of them!', 3);
           S.wave = 3;
           S.t = 0;
         } else if (S.wave === 3 && api.enemiesAlive === 0 && S.t > 2) {
           for (const c of barricade) c.armored = false;
-          api.prompt('Barricade', 'Highway clear. <b>Break through the barricade!</b>', { go: true, seconds: 5 });
+          api.prompt('Barricade', '<b>Break through the barricade!</b>', { go: true, seconds: 5 });
           api.objective('Break through');
           api.arrow(new THREE.Vector3(BAR_X, DECK + 2.2, DZ), 'Break it!');
           go(3);

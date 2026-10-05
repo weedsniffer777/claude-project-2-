@@ -181,7 +181,7 @@ export function buildDepotRoom(scene) {
     }
     // work lamps at the pit
     for (const [x, z] of [[PIT.x0 - 0.6, PIT.z1 + 1.2], [PIT.x1 + 0.6, PIT.z0 - 1.2]]) {
-      for (let k = 0; k < 3; k++) B.piece(0.04, 1.4, 0.04, 0x3a3c3f, x + Math.cos(k * 2.1) * 0.25, 0.7, z + Math.sin(k * 2.1) * 0.25, Math.sin(k * 2.1) * 0.2, 0, -Math.cos(k * 2.1) * 0.2);
+      for (let k = 0; k < 3; k++) B.piece(0.04, 1.4, 0.04, 0x3a3c3f, x + Math.cos(k * 2.1) * 0.25, 0.7, z + Math.sin(k * 2.1) * 0.25, -Math.sin(k * 2.1) * 0.2, 0, Math.cos(k * 2.1) * 0.2); // (feet out, tops in)
       put(B.root, box(0.4, 0.3, 0.2, 0x2e3034, { r: 0.03 }), x, 1.45, z);
       put(B.root, box(0.3, 0.22, 0.04, COLD, { glow: true }), x, 1.45, z + (z > 0 ? -0.11 : 0.11));
     }
