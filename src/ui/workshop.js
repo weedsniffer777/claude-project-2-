@@ -111,6 +111,28 @@ const CSS = `
   .ws .who h2 { font-size: 18px; }
   .ws .banner { font-size: 40px; }
 }
+/* phones: the list over the details, the whole screen scrolling */
+.ws .banner { max-width: calc(100vw - 24px); white-space: normal; text-align: center; }
+@media (max-width: 860px) {
+  .ws { grid-template-rows: none; grid-auto-rows: max-content; background: rgba(8, 7, 9, 0.94); }
+  .ws .list { grid-row: 4; }
+  .ws .detail { grid-row: 5; overflow: visible; }
+  .ws .head { flex-wrap: wrap; }
+  .ws .top { gap: 10px; }
+  .ws .top h1 { font-size: 20px; }
+}
+@media (max-width: 420px) {
+  .ws { padding-left: 12px; padding-right: 12px; gap: 14px; }
+  .ws .detail { padding: 14px 12px 16px; }
+  .ws .stats { grid-template-columns: auto minmax(0, 1fr); }
+  .ws .stats .val { grid-column: 1 / -1; text-align: left; }
+  .ws .go { font-size: 15px; padding: 14px 12px 15px; }
+}
+@media (max-height: 520px) and (min-width: 861px) {
+  .ws { align-content: start; overflow-y: auto; padding-top: calc(10px + env(safe-area-inset-top, 0px)); gap: 10px 20px; }
+  .ws .list { max-height: none; }
+  .ws .frame { width: 144px; height: 96px; }
+}
 `;
 
 let injected = false;

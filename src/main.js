@@ -11,6 +11,7 @@ import { MODELS } from './models/registry.js';
 import { LEVELS } from './levels/index.js';
 import { CURSOR } from './game/hud.js';
 import { PARTS } from './game/parts.js';
+import { settings, onSettings } from './ui/settings.js';
 
 // The themed cursor everywhere: over panels, text and empty UI too (not the
 // browser's arrow or text beam). Zero specificity, so anything that sets
@@ -38,15 +39,37 @@ const hub = createHub({
 });
 const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
 // The pixel grid is part of the art: always 540 rows, whatever the screen.
-// Quality tiers only trade shadow detail and lamp lights. Auto starts phones one tier down and steps down whenever the
-// frame rate stays low; it never steps back up (no flicker between tiers).
+// Quality tiers only trade shadow detail and lamp lights.
+//
+// Auto quality aims for a steady 60: it starts at the best tier (or the one
+// it settled on last time), and while it's still finding its feet it steps
+// down whenever a few seconds run under 50 fps, then sticks with the first
+// tier that holds. After that it only steps down if the frame rate stays
+// really low for several seconds: under 30 (or under 15 on a screen that
+// can't go past 30 anyway). It never steps back up mid-session, so the
+// look doesn't flicker. A tier that didn't help (a 30 Hz screen) is undone.
 const TIERS = [
   { name: 'High', shadow: 2048, lamps: 6 },
   { name: 'Medium', shadow: 1024, lamps: 4 },
   { name: 'Low', shadow: 1024, lamps: 2 },
   { name: 'Potato', shadow: 512, lamps: 0 },
 ];
-const mobile = matchMedia('(pointer: coarse)').matches;
+const AUTO_KEY = 'scavenger.autoTier';
+const readAuto = () => {
+  try {
+    const v = localStorage.getItem(AUTO_KEY);
+    return v == null ? 0 : +v;
+  } catch {
+    return 0;
+  }
+};
+const writeAuto = (i) => {
+  try {
+    localStorage.setItem(AUTO_KEY, String(i));
+  } catch {
+    // storage blocked: settle again next time
+  }
+};
 let autoQuality = true;
 let tier = -1;
 function setTier(i) {
@@ -56,18 +79,52 @@ function setTier(i) {
   const q = TIERS[i];
   game.setQuality(q);
 }
-setTier(params.has('quality') ? +params.get('quality') : mobile ? 1 : 0);
-const perf = { t: 0, frames: 0, warm: 3 };
+const perf = { t: 0, frames: 0, warm: 3, phase: 'probe', lastFps: 0, low: 0, peak: 0 };
+function applyQuality() {
+  const q = params.has('quality') ? params.get('quality') : settings().quality;
+  autoQuality = q === 'auto';
+  if (autoQuality) {
+    setTier(readAuto());
+    Object.assign(perf, { t: 0, frames: 0, warm: 3, phase: 'probe', lastFps: 0, low: 0 });
+  } else setTier(+q);
+}
+applyQuality();
+onSettings((k) => k === 'quality' && applyQuality());
 function watchFrameRate(dt) {
   if (!autoQuality || mode !== game) return;
   if (perf.warm > 0) return void (perf.warm -= dt); // let shaders compile first
   perf.t += dt;
   perf.frames++;
-  if (perf.t < 2.5) return;
+  const win = perf.phase === 'probe' ? 2.5 : 1;
+  if (perf.t < win) return;
   const fps = perf.frames / perf.t;
   perf.t = perf.frames = 0;
-  if (fps < 48 && tier < TIERS.length - 1) {
+  perf.peak = Math.max(perf.peak, fps);
+  if (perf.phase === 'probe') {
+    if (fps >= 50 || tier >= TIERS.length - 1) {
+      perf.phase = 'locked';
+      writeAuto(tier);
+      return;
+    }
+    // stepping down didn't help (the screen's capped, not the GPU): back up and stay
+    if (perf.lastFps && fps < perf.lastFps * 1.08 && tier > 0) {
+      setTier(tier - 1);
+      perf.phase = 'locked';
+      writeAuto(tier);
+      return;
+    }
+    perf.lastFps = fps;
     setTier(tier + 1);
+    perf.warm = 1.5;
+    return;
+  }
+  // settled: only a long, real slump steps down
+  const floor = perf.peak < 40 ? 15 : 30;
+  perf.low = fps < floor ? perf.low + 1 : 0;
+  if (perf.low >= 5 && tier < TIERS.length - 1) {
+    setTier(tier + 1);
+    writeAuto(tier);
+    perf.low = 0;
     perf.warm = 1.5;
   }
 }
@@ -76,6 +133,10 @@ function watchFrameRate(dt) {
 const fpsEl = document.createElement('div');
 fpsEl.className = 'dk-fps';
 document.body.append(fpsEl);
+// (shown with the dev kit, or when Settings asks for it)
+const showFps = () => (fpsEl.style.display = settings().showFps || params.has('fps') || params.has('devkit') || location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : 'none');
+showFps();
+onSettings((k) => k === 'showFps' && showFps());
 const fpsMeter = { t: 0, frames: 0 };
 function countFrame(dt) {
   fpsMeter.t += dt;
@@ -182,6 +243,7 @@ const devkit = createDevKit({
       onChange: (v) => {
         autoQuality = v === 'auto';
         if (!autoQuality) setTier(+v);
+        else applyQuality();
       },
     },
   ],
@@ -218,7 +280,16 @@ window.__hub = hub;
 
 const clock = new THREE.Timer();
 clock.connect(document);
-function frame() {
+// the frame cap (60 by default): on a faster screen, skip frames till the
+// next one's due
+let lastFrame = 0;
+function frame(now = performance.now()) {
+  const cap = settings().fps;
+  if (cap > 0 && lastFrame && now - lastFrame < 1000 / cap - 2) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  lastFrame = now;
   clock.update();
   const raw = clock.getDelta();
   const dt = Math.min(raw, 0.05);

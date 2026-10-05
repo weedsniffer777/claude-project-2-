@@ -25,6 +25,7 @@ import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
 import { buildLauncher } from '../models/launchers.js';
 import { EQUIPMENT, equipmentArt } from './equipment.js';
+import { settings, actionFor, openSettings, onSettings } from '../ui/settings.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -258,7 +259,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     run.ability = all;
     hud.showScrap(all);
     if (level.start) level.start(api);
-    else if (touch) hud.prompt('Controls', 'Stick drives · tap anywhere to aim and fire', { seconds: 8 });
+    else if (touch) hud.prompt('Controls', 'Stick drives · <b>FIRE</b> shoots (it aims for you) · drag on the screen to aim', { seconds: 8 });
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
     if (canvas.isConnected && hud.root.isConnected) canvas.style.cursor = 'none';
     return levelDef.id;
@@ -1657,6 +1658,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       on
         ? {
             resume: () => setPaused(false),
+            settings: () => openSettings(),
             restart: () => {
               setPaused(false);
               loadLevel(levelDef.id);
@@ -1672,6 +1674,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     );
     setCursor();
   }
+  // keys: whatever Settings has them bound to (the arrows always drive too)
   const onKeyDown = (e) => {
     if (e.code === 'Escape') {
       const devMenu = document.querySelector('.dk-menu');
@@ -1679,7 +1682,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return;
     }
     if (run.paused) return;
-    if (e.code === 'Space') {
+    const act = actionFor(e.code);
+    if (act === 'fire') {
       e.preventDefault();
       if (run.arty > 0) return void useEquipment();
       if (run.aiming > 0) firePierce();
@@ -1687,27 +1691,28 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else fire();
       return;
     }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+    if (act === 'boost') {
       if (!e.repeat) boost();
       return;
     }
-    if (e.code === 'KeyE') {
+    if (act === 'ability') {
       if (!e.repeat) ability();
       return;
     }
-    if (e.code === 'KeyQ') {
+    if (act === 'equip') {
       if (!e.repeat) equipment();
       return;
     }
-    if (e.code === 'KeyR') {
+    if (act === 'reload') {
       reloadMag();
       return;
     }
-    keys.add(e.code);
+    keys.add(act ? `act:${act}` : e.code);
   };
   const onKeyUp = (e) => {
-    keys.delete(e.code);
-    if (e.code === 'Space') trigger = false;
+    const act = actionFor(e.code);
+    keys.delete(act ? `act:${act}` : e.code);
+    if (act === 'fire') trigger = false;
   };
   function aimAt(x, y) {
     const r = canvas.getBoundingClientRect();
@@ -1715,21 +1720,29 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     client = [x, y];
   }
 
-  // Touch: a floating stick on the left side drives; touching anywhere else
-  // aims there (drag to adjust) and fires.
+  // Touch: a stick on the left drives; a FIRE button in the bottom right
+  // fires (it aims for you: the nearest machine in view); touching anywhere
+  // else aims there instead (drag to adjust) without firing, and the aim
+  // holds there a moment after you let go.
   const STICK_R = 56; // how far the knob travels
   const STICK_GRAB = 96; // touches this close to the stick grab it; anything else fires
   const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
   let fireOnAim = false;
   let strikeOnAim = false;
+  hud.onPause(() => setPaused(!run.paused));
+  onSettings((k) => (k === 'hand' || k === 'buttons') && hud.placeStick());
   function setTouch(on) {
     if (touch === on) return;
     touch = on;
     hud.setTouch(on);
   }
 
+  let fireTouch = null; // the finger on FIRE
+  let manualAim = 0; // seconds the touch aim holds after the finger lifts
+  let autoTarget = null;
   const onMove = (e) => {
     if (e.pointerType === 'touch') {
+      if (e.pointerId === fireTouch) return;
       if (e.pointerId === stick.id) {
         let dx = e.clientX - stick.ox;
         let dy = e.clientY - stick.oy;
@@ -1750,18 +1763,28 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType === 'touch') {
       setTouch(true);
       const c = hud.stickCenter();
+      const f = hud.fireCenter();
+      const bs = { small: 0.82, normal: 1, large: 1.18 }[settings().buttons] || 1;
+      if (run.gun && fireTouch === null && Math.hypot(e.clientX - f.x, e.clientY - f.y) < 50 * bs) {
+        fireTouch = e.pointerId;
+        if (run.arty > 0) return; // (calling in a strike: the spot's tapped on the ground)
+        if (run.aiming > 0) firePierce();
+        else if (holdFire()) trigger = true;
+        else fire();
+        return;
+      }
       const a = hud.abilityCenter();
-      if (run.rockets && Math.hypot(e.clientX - a.x, e.clientY - a.y) < 64) {
+      if (run.rockets && Math.hypot(e.clientX - a.x, e.clientY - a.y) < 40 * bs) {
         boost();
         return;
       }
       const a3 = hud.ability3Center();
-      if (equipId() && Math.hypot(e.clientX - a3.x, e.clientY - a3.y) < 50) {
+      if (equipId() && Math.hypot(e.clientX - a3.x, e.clientY - a3.y) < 40 * bs) {
         equipment();
         return;
       }
       const a2 = hud.ability2Center();
-      if (run.ability && def.ability && Math.hypot(e.clientX - a2.x, e.clientY - a2.y) < 56) {
+      if (run.ability && def.ability && Math.hypot(e.clientX - a2.x, e.clientY - a2.y) < 40 * bs) {
         ability();
         return;
       }
@@ -1772,10 +1795,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         aimAt(e.clientX, e.clientY);
         if (run.arty > 0) strikeOnAim = true; // the spot tapped, once the aim ray's found it
         else if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
-        else if (holdFire()) {
-          trigger = true; // held down: keeps firing
-          aimTouch = e.pointerId;
-        } else fireOnAim = true; // fire once this frame's aim ray has landed
+        else aimTouch = e.pointerId; // just aiming (FIRE fires)
       }
       return;
     }
@@ -1797,8 +1817,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType === 'mouse' && e.button === 0) trigger = false;
     if (e.pointerId === pierceTouch) firePierce();
     if (e.pointerId === aimTouch) {
-      trigger = false;
       aimTouch = null;
+      manualAim = 1.5;
+    }
+    if (e.pointerId === fireTouch) {
+      trigger = false;
+      fireTouch = null;
     }
     if (e.pointerId !== stick.id) return;
     Object.assign(stick, { id: null, x: 0, y: 0 });
@@ -1813,6 +1837,37 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType !== 'touch') client = null;
   };
 
+  // touch, with no finger aiming: the turret takes the nearest machine in
+  // view (sticking with the one it has while it's there), else straight on
+  function touchAim(dt) {
+    if (aimTouch !== null || pierceTouch !== null || run.arty > 0 || run.mode !== 'field' || !settings().aimAssist) return;
+    if (manualAim > 0) {
+      manualAim -= dt;
+      return;
+    }
+    const reach = ((camera.top - camera.bottom) / camera.zoom) * 0.62;
+    const ok = (e) => e?.alive && !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach;
+    if (!ok(autoTarget)) {
+      autoTarget = null;
+      let best = Infinity;
+      for (const e of enemies.alive) {
+        if (!ok(e)) continue;
+        const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
+        if (d < best) {
+          best = d;
+          autoTarget = e;
+        }
+      }
+    }
+    if (!autoTarget) {
+      client = null;
+      hasAim = false;
+      return;
+    }
+    const p = new THREE.Vector3(autoTarget.pos.x, (autoTarget.pos.y || 0) + 0.8 * (autoTarget.stats.scale || 1), autoTarget.pos.z).project(camera);
+    const r = canvas.getBoundingClientRect();
+    aimAt(r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height);
+  }
   function tankBox() {
     const yaw = tank.group.rotation.y;
     return { x: pos.x + Math.cos(yaw) * TANK_BOX.cx, z: pos.z - Math.sin(yaw) * TANK_BOX.cx, hx: TANK_BOX.hx, hz: TANK_BOX.hz, yaw };
@@ -2403,16 +2458,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       input.set(0, 0, 0);
       const canDrive = !run.over && !run.locked;
       if (canDrive) {
-        if (keys.has('KeyW') || keys.has('ArrowUp')) input.add(INPUT_FORWARD);
-        if (keys.has('KeyS') || keys.has('ArrowDown')) input.sub(INPUT_FORWARD);
-        if (keys.has('KeyD') || keys.has('ArrowRight')) input.add(INPUT_RIGHT);
-        if (keys.has('KeyA') || keys.has('ArrowLeft')) input.sub(INPUT_RIGHT);
+        if (keys.has('act:up') || keys.has('ArrowUp')) input.add(INPUT_FORWARD);
+        if (keys.has('act:down') || keys.has('ArrowDown')) input.sub(INPUT_FORWARD);
+        if (keys.has('act:right') || keys.has('ArrowRight')) input.add(INPUT_RIGHT);
+        if (keys.has('act:left') || keys.has('ArrowLeft')) input.sub(INPUT_RIGHT);
         if (stick.id !== null) input.addScaledVector(INPUT_RIGHT, stick.x).addScaledVector(INPUT_FORWARD, -stick.y);
       }
       const boosting = run.boost > 0 || run.dash > 0 || run.brk > 0;
       let want = 0;
       let accel = ACCEL;
-      let throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4) : 1;
+      let throttle = stick.id !== null ? Math.min(1, Math.hypot(stick.x, stick.y) * 1.4 * settings().stick) : 1;
       // driven by the game (into and out of depots)
       if (run.auto) {
         const dx = run.auto.x - pos.x;
@@ -2753,6 +2808,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       enemies.setHover(outlined);
       hud.showReticle(!!client && !run.over && run.mode === 'field');
+      if (touch) touchAim(realDt);
       if (client) {
         const reloading = stats.mag && run.magT > 0;
         if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME)); // the ring counts down the aim
@@ -2761,6 +2817,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (run.gun) hud.setKills(enemies.killed);
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
+      hud.setFire(live && !!run.gun, fireTouch !== null, reload < 1 && !stats.mag);
       if (!run.gun || !live) hud.setAmmo(null);
       else if (def.gun === 'missile') hud.setAmmo({ n: run.mag, max: stats.mag, load: run.mReload && run.mag < stats.mag ? (run.mag + (run.trickleT || 0) / (stats.magReload / stats.mag)) / stats.mag : null, kind: 'missile' }); // (the next one filling as it reloads)
       else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });

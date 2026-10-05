@@ -182,6 +182,29 @@ const CSS = `
   .fit .right { left: 12px; right: 12px; width: auto; }
   .fit .left { width: calc(100vw - 24px); }
 }
+/* phones. Portrait: the panels stacked in one scrolling column. Landscape
+   (short): info top left, slots down the right (scrolling), tanks between. */
+.fit .pop, .fit .tip { max-width: calc(100vw - 16px); box-sizing: border-box; }
+@media (max-width: 600px) {
+  .fit { overflow-y: auto; pointer-events: auto; display: flex; flex-direction: column; gap: 18px; padding: calc(14px + env(safe-area-inset-top, 0px)) 14px calc(20px + env(safe-area-inset-bottom, 0px)); background: rgba(8, 7, 9, 0.6); box-sizing: border-box; }
+  .fit svg { display: none; }
+  .fit .left, .fit .right { position: relative; left: auto; right: auto; top: auto; bottom: auto; transform: none; width: auto; flex: none; box-sizing: border-box; }
+  .fit .bottom { position: relative; left: auto; bottom: auto; transform: none; pointer-events: auto; flex: none; }
+  .fit .tanks { flex-wrap: wrap; justify-content: center; }
+  .fit .btns { flex-wrap: wrap; justify-content: center; }
+}
+@media (max-height: 520px) and (min-width: 601px) {
+  .fit .left { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: none; left: calc(8px + env(safe-area-inset-left, 0px)); width: 200px; padding: 8px 10px 10px; gap: 6px; max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
+  .fit .left p, .fit .left .kit { display: none; }
+  .fit .left h2 { font-size: 15px; }
+  .fit .right { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: none; right: calc(8px + env(safe-area-inset-right, 0px)); width: 270px; padding: 8px 10px 10px; gap: 6px; overflow-y: auto; box-sizing: border-box; align-content: start; }
+  .fit .slot img { width: 44px; height: 30px; }
+  .fit .bottom { left: calc(224px + env(safe-area-inset-left, 0px)); right: calc(294px + env(safe-area-inset-right, 0px)); transform: none; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+  .fit .tanks { gap: 8px; padding: 6px; flex-wrap: wrap; justify-content: center; }
+  .fit .tcard img { width: 60px; height: 35px; }
+  .fit .tcard { font-size: 9px; }
+  .fit .btns { flex-wrap: wrap; justify-content: center; gap: 8px; }
+}
 `;
 
 let injected = false;

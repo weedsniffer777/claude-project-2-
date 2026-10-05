@@ -1,6 +1,7 @@
 // Combat effects shared by the game and the model viewer: the cannon's tracer
 // shell, muzzle blast and explosion, the roof MG's tracers and brass, and
 // camera shake. One instance per scene.
+import { settings } from '../ui/settings.js';
 import * as THREE from 'three';
 import { Fx, Glow, Puffs, Debris, Craters } from './fx.js';
 
@@ -504,7 +505,7 @@ export class CombatFx {
 
   // Wrap a render: offset the camera for this frame only.
   beginShake(camera) {
-    const k = this.shake;
+    const k = this.shake * ({ on: 1, reduced: 0.4, off: 0 }[settings().shake] ?? 1); // (Settings: screen shake)
     this.offset.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
     camera.position.add(this.offset);
   }

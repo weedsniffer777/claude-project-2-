@@ -1630,7 +1630,7 @@ function buildAvenue(scene) {
         case 0:
           if (api.seen('crush')) {
             if (S.t > 1.5) go(1); // seen it: straight to the first enemies
-          } else if (x > S.spawnX + 3 || S.t > 4) {
+          } else if (x > S.spawnX + 3) { // (only once they've driven: the lessons never run on by themselves)
             api.lesson('crush');
             api.prompt('Crush', 'Drive over debris to <b>crush</b> it!');
             api.arrow(new THREE.Vector3(FIRST_WRECK.x, 1.6, FIRST_WRECK.z), 'Crush it!');
@@ -1645,7 +1645,7 @@ function buildAvenue(scene) {
             if (api.lesson('scraps')) api.prompt('Scraps', 'Destroying obstacles gives <b>scraps</b>, a valuable currency.', { go: true });
             api.revealScraps();
             go(-2);
-          } else if (x > FIRST_WRECK.x + 6 || S.t > 12) {
+          } else if (x > FIRST_WRECK.x + 6) {
             api.arrow(null);
             api.clearPrompt();
             api.revealScraps(false);
@@ -1674,11 +1674,11 @@ function buildAvenue(scene) {
           if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
             S.shots = run.shots;
             const hold = api.tank.gun === 'autocannon';
-            const how = api.touch ? `${hold ? 'Touch and hold' : CLICK} on one to fire.` : `Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`;
+            const how = api.touch ? `${hold ? 'Hold' : 'Tap'} <b>FIRE</b>: it aims for you (or drag on the screen to aim yourself).` : `Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`;
             api.enableGun();
             if (api.lesson('fire')) {
               api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
-              api.arrow(onEnemy(api), api.touch ? `${CLICK} it!` : `${CLICK} to fire!`);
+              api.arrow(onEnemy(api), api.touch ? 'Fire!' : `${CLICK} to fire!`);
               api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
             } else if (!api.cleared) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
             go(3);
@@ -1819,7 +1819,7 @@ function buildAvenue(scene) {
         case 3:
           if (api.enemiesAlive === 0 && S.t > 1) {
             api.objective('Break the gate');
-            if (api.lesson('gate')) api.prompt('Gate', api.touch ? `${CLICK} the gate to shoot it, or ${api.tank.moveName.toLowerCase()} into it.` : `Shoot the gate (${CLICK}), or ${api.tank.moveName.toLowerCase()} into it.`);
+            if (api.lesson('gate')) api.prompt('Gate', api.touch ? `Drag to aim at the gate and <b>FIRE</b>, or ${api.tank.moveName.toLowerCase()} into it.` : `Shoot the gate (${CLICK}), or ${api.tank.moveName.toLowerCase()} into it.`);
             api.arrow(gateMark, 'Break it!');
             go(4);
           }

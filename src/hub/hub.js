@@ -23,6 +23,7 @@ import { save } from '../game/save.js';
 import { EQUIPMENT, equipmentIcon, equipmentHtml } from '../game/equipment.js';
 import { tokenIconURL } from '../ui/icons.js';
 import { partPicture } from '../render/partPictures.js';
+import { openSettings } from '../ui/settings.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
 
 const VIEW_FAR = 23; // the whole base in view
@@ -167,7 +168,21 @@ const CSS = `
 .base-news img.gear { width: 128px; height: 96px; }
 .base-news .hint { font-size: 12px; color: #8f877a; }
 .base-news .row { display: flex; gap: 10px; }
-.base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; white-space: nowrap; }
+.base-gear { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; align-items: center; padding: 7px 12px 8px; border: 0; pointer-events: auto; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
+.base-gear i { width: 14px; height: 14px; background: #f1e9d8; clip-path: polygon(40% 0, 60% 0, 62% 16%, 78% 8%, 92% 22%, 84% 38%, 100% 40%, 100% 60%, 84% 62%, 92% 78%, 78% 92%, 62% 84%, 60% 100%, 40% 100%, 38% 84%, 22% 92%, 8% 78%, 16% 62%, 0 60%, 0 40%, 16% 38%, 8% 22%, 22% 8%, 38% 16%); }
+.base-gear:hover { filter: brightness(1.2); }
+@media (max-width: 600px) { .base-gear span { display: none; } }
+.base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; text-align: center; }
+/* phones: nothing past the screen's edges; overlays scroll instead */
+.base-news, .base-menu { max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; }
+.base-brief { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+@media (max-height: 520px) and (min-width: 761px) {
+  .base-brief { padding: 10px 16px; gap: 16px; align-items: center; }
+  .base-brief .map { height: calc(100dvh - 20px); }
+  .base-brief .info { width: min(340px, 46vw); max-height: calc(100dvh - 20px); overflow-y: auto; box-sizing: border-box; padding: 12px 14px; gap: 8px; }
+  .base-bank { transform: scale(0.8); transform-origin: top left; }
+  .base-news img { width: 144px; height: 84px; }
+}
 .base-fade { position: absolute; inset: 0; background: #070609; opacity: 1; transition: opacity 0.45s steps(5); }
 .base-fade.off { opacity: 0; }
 .base [hidden] { display: none !important; }
@@ -968,18 +983,21 @@ export function createHub({ renderer, pixel, onDeploy }) {
   root.style.setProperty('--cursor', CURSOR);
   root.innerHTML = `
     <div class="base-bank panel px"><i></i>Scraps <b>0</b></div>
+    <button type="button" class="base-gear panel px" aria-label="Settings"><i></i><span>Settings</span></button>
     ${ROOMS.map((r) => `<div class="base-tag" data-id="${r.id}">${r.name}</div>`).join('')}
     <div class="base-menu panel" hidden></div>
     <div class="base-brief" hidden></div>
     <div class="base-news panel" hidden></div>
     <div class="base-promo panel" hidden><span class="t">New tank</span><img alt=""><b>Beat level 2 for a new tank!</b><i></i></div>
-    <div class="base-hint panel">Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
+    <div class="base-hint panel">${matchMedia('(pointer: coarse)').matches ? 'Tap a room to open it, or tap the floor to walk' : 'Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk'}</div>
     <div class="base-fade"></div>
   `;
   const tags = new Map(ROOMS.map((r) => [r.id, root.querySelector(`.base-tag[data-id="${r.id}"]`)]));
   const menu = root.querySelector('.base-menu');
   const brief = root.querySelector('.base-brief');
   const hint = root.querySelector('.base-hint');
+  root.querySelector('.base-gear').addEventListener('click', () => openSettings());
+  root.querySelector('.base-gear').addEventListener('pointerdown', (e) => e.stopPropagation());
   const fade = root.querySelector('.base-fade');
   const bankEl = root.querySelector('.base-bank b');
   const news = root.querySelector('.base-news');
@@ -1390,6 +1408,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
   let speed = 0;
 
   return {
+    // dev/test: open a room (quarters, briefing, hangar) or the upgrades screen
+    open(id) {
+      const r = ROOMS.find((x) => x.id === id);
+      if (r) openRoom(r);
+    },
+    openUpgrades: (tab = 'parts') => openWorkshop({ tab }),
     enter() {
       document.body.append(root, fitting.el, workshop.el);
       window.addEventListener('keydown', onKeyDown);

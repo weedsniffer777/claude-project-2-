@@ -2,6 +2,7 @@
 // cannon's reload ring, floating damage numbers, an on-screen target marker
 // and the end-of-run panel. Pixel type, black panels, bone-white text with
 // hazard amber; red only means danger (damage taken, low hull, machines).
+import { rebindHints, settings, keyLabel } from '../ui/settings.js';
 import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
 import { EFFECT_CSS } from './parts.js';
@@ -41,7 +42,7 @@ const CSS = `
 .hud-center { width: clamp(260px, calc(100vw - 560px), 500px); }
 @media (max-width: 820px) { .hud-center { top: calc(108px + env(safe-area-inset-top, 0px)); width: calc(100vw - 32px); } }
 .hud.touch .hud-center { top: calc(8px + env(safe-area-inset-top, 0px)); width: clamp(220px, calc(100vw - 390px), 440px); gap: 8px; }
-@media (max-width: 620px) { .hud.touch .hud-center { top: calc(92px + env(safe-area-inset-top, 0px)); width: calc(100vw - 24px); } }
+@media (max-width: 620px) { .hud.touch .hud-center { top: calc(108px + env(safe-area-inset-top, 0px)); width: calc(100vw - 24px); } }
 .hud.touch .hud-prompt { padding: 7px 12px 9px; }
 .hud.touch .hud-prompt .text { font-size: 14px; }
 .hud.touch .hud-kills { display: none; }
@@ -101,11 +102,24 @@ const CSS = `
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .hud-ability.ready canvas { filter: drop-shadow(0 0 4px #ffe2a0) drop-shadow(0 0 10px #ffb347aa); }
 .hud-ability.ready::before { content: 'Ready'; position: absolute; left: 50%; top: -24px; transform: translateX(-50%); padding: 3px 6px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; white-space: nowrap; }
-.hud.touch .hud-ability.ready::before { top: -20px; font-size: 10px; }
+.hud.touch .hud-ability.ready::before { display: none; } /* (touch: the glow says it; no tags crowding the thumb buttons) */
 .hud-ability .cd { position: relative; font: 400 26px/1 'Silkscreen', monospace; color: var(--ink); text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000; }
 .hud:not(.touch) .hud-ability .cd { font-size: 20px; }
 @keyframes hudready { 50% { filter: brightness(1.35); } }
 .hud:not(.touch) .hud-ability { width: 84px; height: 84px; margin: -42px 0 0 -42px; }
+.hud.touch .hud-ability { width: 68px; height: 68px; margin: -34px 0 0 -34px; }
+.hud.touch .hud-ability canvas { width: 68px; height: 68px; }
+.hud.touch .hud-ability .cd { font-size: 20px; }
+/* the touch FIRE button: a chunky yellow pixel button, a shell flying out of it */
+.hud-fire { position: absolute; left: 0; top: 0; width: 88px; height: 88px; margin: -44px 0 0 -44px; pointer-events: none; }
+.hud-fire canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; filter: drop-shadow(0 0 6px #ffc24a88); }
+.hud-fire.down canvas { filter: brightness(0.85); }
+.hud-fire.reloading canvas { filter: saturate(0.35) brightness(0.7); }
+.hud-pausebtn { position: absolute; right: calc(72px + env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); width: 40px; height: 40px; display: flex; gap: 6px; align-items: center; justify-content: center; border: 0; padding: 0; pointer-events: auto;
+  background: rgba(12, 11, 13, 0.85); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
+.hud-pausebtn i { width: 6px; height: 16px; background: #f1e9d8; }
+.hud.touch .hud-right { top: calc(56px + env(safe-area-inset-top, 0px)); }
+}
 .hud:not(.touch) .hud-ability canvas { width: 84px; height: 84px; }
 /* on a computer the bottom of the screen is the tank's panel: HP in the
    bottom left, the ability buttons bottom right */
@@ -157,7 +171,7 @@ const CSS = `
 .hud-ammo { display: flex; align-items: center; gap: 10px; }
 .hud-ammo .px { font-size: 12px; color: var(--dim); }
 .hud-passives { right: calc(30px + env(safe-area-inset-right, 0px)); bottom: calc(170px + env(safe-area-inset-bottom, 0px)); }
-.hud.touch .hud-passives { right: calc(46px + env(safe-area-inset-right, 0px)); bottom: calc(204px + env(safe-area-inset-bottom, 0px)); }
+.hud.touch .hud-passives { right: calc(10px + env(safe-area-inset-right, 0px)); top: calc(118px + env(safe-area-inset-top, 0px)); bottom: auto; }
 .hud-dmg { position: absolute; left: 0; top: 0; font: 400 16px/1 'Silkscreen', monospace; color: var(--ink);
   text-shadow: 2px 0 #000, -2px 0 #000, 0 2px #000, 0 -2px #000, 2px 2px #000; white-space: nowrap; transform: translate(-50%, -50%); }
 .hud-dmg.big { font-size: 24px; color: var(--amber); }
@@ -208,6 +222,28 @@ const CSS = `
 .hud-pause button[data-act="resume"] { color: #111; background: var(--go); box-shadow: 0 4px 0 #2f6b40; }
 .hud-pause button:hover, .hud-pause button:focus-visible { filter: brightness(1.2); outline: none; }
 .hud-end .btns { display: flex; gap: 14px; justify-content: center; }
+/* phones: every panel fits the screen (scrolling if it must), never clipped */
+.hud-end, .hud-pause { max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; }
+.hud-banner { max-width: calc(100vw - 24px); white-space: normal; text-align: center; box-sizing: border-box; }
+.hud-picker { max-width: calc(100vw - 16px); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; }
+.hud-end .btns { flex-wrap: wrap; }
+@media (max-width: 600px) {
+  .hud-picker .row { gap: 10px; }
+  .hud-card { width: min(184px, calc(50vw - 22px)); min-height: 0; padding: 10px 8px 12px; gap: 6px; }
+  .hud-end { padding: 16px 16px 18px; }
+  .hud-end h2 { font-size: 22px; }
+  .hud-end .stats { font-size: 13px; gap: 4px 12px; }
+  .hud-banner { font-size: 20px; }
+  .hud-continue { right: 50%; transform: translate(50%, 0); top: auto; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+}
+@media (max-height: 500px) {
+  .hud-picker { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  .hud-card { width: 150px; min-height: 0; padding: 8px 8px 10px; gap: 4px; }
+  .hud-end { padding: 12px 18px 14px; gap: 8px; }
+  .hud-end h2 { font-size: 20px; }
+  .hud-pause { padding: 14px 20px 16px; gap: 8px; }
+  .hud-banner { font-size: 20px; top: 24%; }
+}
 .hud-end button.alt { background: #2a2628; color: var(--ink); box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-end button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 .hud-stick { position: absolute; left: 0; top: 0; width: 132px; height: 132px; margin: -66px 0 0 -66px; image-rendering: pixelated; }
@@ -256,6 +292,41 @@ function drawStick(base, knob) {
 // recharges the part still to fill stays dark, filling from the bottom.
 // active: while a timed ability runs, the share of it left (1 .. 0): the
 // button stays bright and the brightness drains down as it runs out
+// The touch FIRE button, 26 px of pixel art: a chunky yellow button with a
+// dark rim and a lit top edge, a shell flying out of it to the right with
+// speed streaks behind.
+function drawFireButton(c) {
+  const g = c.getContext('2d');
+  const px = (x, y, w, h, col) => {
+    g.fillStyle = col;
+    g.fillRect(x, y, w, h);
+  };
+  g.clearRect(0, 0, 26, 26);
+  // body: an octagon of yellow on black
+  px(4, 0, 18, 26, '#111');
+  px(0, 4, 26, 18, '#111');
+  px(2, 2, 22, 22, '#111');
+  px(5, 1, 16, 24, '#c98a1c');
+  px(1, 5, 24, 16, '#c98a1c');
+  px(3, 3, 20, 20, '#c98a1c');
+  px(5, 2, 16, 21, '#ffc24a');
+  px(2, 5, 22, 15, '#ffc24a');
+  px(4, 3, 18, 19, '#ffc24a');
+  px(5, 2, 16, 2, '#ffe29a'); // lit top edge
+  px(2, 5, 2, 8, '#ffe29a');
+  // the shell: brass case, dark head with a bright band, a sharp nose
+  px(8, 11, 7, 5, '#111');
+  px(9, 12, 5, 3, '#b07a2a');
+  px(15, 11, 4, 5, '#111');
+  px(15, 12, 3, 3, '#3a3634');
+  px(14, 12, 1, 3, '#f1e9d8');
+  px(19, 12, 2, 3, '#111');
+  px(21, 13, 1, 1, '#111');
+  // speed streaks behind it
+  px(3, 11, 4, 1, '#7a4a10');
+  px(4, 13, 4, 1, '#7a4a10');
+  px(3, 15, 4, 1, '#7a4a10');
+}
 function drawAbility(c, k, lit, art, active = null) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, 32, 32);
@@ -376,6 +447,8 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
+    <div class="hud-fire" hidden><canvas width="26" height="26"></canvas></div>
+    <button type="button" class="hud-pausebtn" hidden aria-label="Pause"><i></i><i></i></button>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
     <div class="hud-ability three" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Q</kbd></div>
@@ -393,7 +466,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
-    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
+    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="settings">Settings</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
     <div class="hud-fade"></div>
@@ -424,7 +497,7 @@ export function createHud() {
   const knob = stickEl.querySelector('.knob');
   let touchMode = false;
   drawStick(stickEl.querySelector('.base'), knob);
-  const stickCenter = () => ({ x: 96, y: window.innerHeight - 100 });
+  const stickCenter = () => (settings().hand === 'left' ? { x: window.innerWidth - 96, y: window.innerHeight - 100 } : { x: 96, y: window.innerHeight - 100 });
   const placeStick = () => {
     const c = stickCenter();
     stickEl.style.transform = `translate(${c.x}px, ${c.y}px)`;
@@ -475,16 +548,40 @@ export function createHud() {
   // ability button / icon
   // two ability buttons: the movement one (Shift) in the corner, the
   // signature one (E) beside it
-  const abilityCenter = () => (touchMode ? { x: window.innerWidth - 92, y: window.innerHeight - 104 } : { x: window.innerWidth - 72, y: window.innerHeight - 72 });
+  // touch: FIRE in the corner, the ability buttons in a straight line from
+  // it (a column above it when the screen's tall, a row beside it when it's
+  // wide), sized by Settings, mirrored for a left-handed layout
+  const bscale = () => ({ small: 0.82, normal: 1, large: 1.18 })[settings().buttons] || 1;
+  const mirror = (p) => (settings().hand === 'left' ? { x: window.innerWidth - p.x, y: p.y } : p);
+  const fireCenter = () => {
+    const k = bscale() * (Math.min(window.innerWidth, window.innerHeight) <= 420 ? 0.9 : 1);
+    return mirror({ x: window.innerWidth - 20 - 44 * k, y: window.innerHeight - 22 - 44 * k });
+  };
+  const lineAt = (i) => {
+    const f = mirror(fireCenter()); // (worked out right-handed, then mirrored)
+    const k = bscale();
+    const step = 80 * k;
+    const tall = window.innerHeight > window.innerWidth;
+    return mirror(tall ? { x: f.x, y: f.y - 92 * k - i * step } : { x: f.x - 92 * k - i * step, y: f.y + 6 * k });
+  };
+  const abilityCenter = () => (touchMode ? lineAt(0) : { x: window.innerWidth - 72, y: window.innerHeight - 72 });
   const ability2Center = () => {
+    if (touchMode) return lineAt(1);
     const c = abilityCenter();
-    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
+    return { x: c.x - 110, y: c.y };
   };
   // the equipment (Q), beside them
   const ability3Center = () => {
+    if (touchMode) return lineAt(2);
     const c = ability2Center();
-    return touchMode ? { x: c.x - 118, y: c.y + 8 } : { x: c.x - 110, y: c.y };
+    return { x: c.x - 110, y: c.y };
   };
+  const fireEl = $('.hud-fire');
+  drawFireButton(fireEl.querySelector('canvas'));
+  const pauseBtn = $('.hud-pausebtn');
+  let onPauseBtn = null;
+  pauseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  pauseBtn.addEventListener('click', () => onPauseBtn?.());
   const abilities = [
     { el: $('.hud-ability.one'), key: '', center: abilityCenter },
     { el: $('.hud-ability.two'), key: '', center: ability2Center },
@@ -568,7 +665,7 @@ export function createHud() {
     prompt(tag, html, { seconds = 0, danger = false, go = false } = {}) {
       prompt.querySelector('.tag').textContent = tag;
       const text = prompt.querySelector('.text');
-      text.innerHTML = html;
+      text.innerHTML = rebindHints(html);
       prompt.classList.toggle('danger', danger);
       prompt.classList.toggle('go', go);
       prompt.hidden = false;
@@ -656,8 +753,14 @@ export function createHud() {
       touchMode = on;
       root.classList.toggle('touch', on);
       stickEl.hidden = !on;
+      pauseBtn.hidden = !on;
       placeStick();
     },
+    // the touch pause button (top right)
+    onPause(fn) {
+      onPauseBtn = fn;
+    },
+    placeStick,
     stickCenter,
     // knob offset in screen pixels from the stick's centre (snapped to the
     // stick's 6 px pixel grid)
@@ -739,8 +842,9 @@ export function createHud() {
       el.classList.toggle('cooling', cooling);
       el.querySelector('.cd').textContent = cooling ? Math.ceil(state.left) : '';
       const c = a.center();
-      el.style.transform = `translate(${c.x}px, ${c.y}px)`;
+      el.style.transform = `translate(${c.x}px, ${c.y}px)${touchMode ? ` scale(${bscale()})` : ''}`;
       el.querySelector('.key').hidden = touchMode;
+      el.querySelector('.key').textContent = keyLabel(settings().keys[['boost', 'ability', 'equip'][which]]);
       // aiming something that can be called off (the artillery strike): a
       // red cancel mark over the button (press it again to cancel)
       let x = el.querySelector('.cancelx');
@@ -755,6 +859,16 @@ export function createHud() {
     abilityCenter,
     ability2Center,
     ability3Center,
+    fireCenter,
+    // the touch FIRE button: shown (in battle, with a gun), held down, reloading
+    setFire(show, down = false, reloading = false) {
+      fireEl.hidden = !(show && touchMode);
+      if (fireEl.hidden) return;
+      const c = fireCenter();
+      fireEl.style.transform = `translate(${c.x}px, ${c.y}px) scale(${bscale() * (down ? 0.93 : 1)})`;
+      fireEl.classList.toggle('down', down);
+      fireEl.classList.toggle('reloading', reloading);
+    },
     // the whole HUD fades away (the tank's been destroyed); the end panel stays
     setGone(on) {
       root.classList.toggle('gone', on);
