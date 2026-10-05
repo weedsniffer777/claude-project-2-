@@ -1004,6 +1004,7 @@ export function createTank() {
     chassis,
     turret,
     mgMount: mgSlot,
+    mgGun: mgPivot, // (the roof MG itself: a part can fit things to it)
     slotGroups,
     setSlotVisible,
     fire,

@@ -163,3 +163,47 @@ export function atgmCanvas(scale = 2) {
   if (!atgmCache.has(scale)) atgmCache.set(scale, raster(32, 24, atgmAt, scale));
   return atgmCache.get(scale);
 }
+
+// --------------------------------------------------------------- shield
+// a small tank seen from above, a curved see-through shield bowed out in
+// front of it (a hex grid in it, bright rims), and red rounds bursting
+// on its face
+const SC = [9, 12];
+function shieldBand(x, y) {
+  const d = Math.hypot(x - SC[0], (y - SC[1]) * 1.05);
+  const a = Math.atan2(y - SC[1], x - SC[0]);
+  if (Math.abs(a) > 1.25 || d < 10.4 || d > 13.6) return null;
+  return { d, a };
+}
+function shieldAt(x, y) {
+  // the rounds coming in, and their bursts on the shield
+  for (const [hx, hy, len] of [[21.5, 6.2, 8], [22.6, 15.6, 6]]) {
+    const r = Math.hypot(x - hx, y - hy);
+    if (r < 1.1) return '#ffffff';
+    if (r < 2.1 && ((Math.atan2(y - hy, x - hx) * 4) | 0) % 2 === 0) return '#ffd36b';
+    if (y > hy - 0.6 && y < hy + 0.6 && x > hx + 1.5 && x < hx + len) return x < hx + 3 ? '#ffb8a0' : '#ff2414';
+  }
+  const s = shieldBand(x, y);
+  if (s) {
+    if (s.d > 12.8 || s.d < 11.2 || Math.abs(s.a) > 1.12) return '#c8fbff'; // the rims
+    // the hex grid: offset rows of cells, their edges lit
+    const u = s.a * 9;
+    const v = (s.d - 11.2) * 1.4 + (Math.floor(u) % 2) * 0.5;
+    const edge = u - Math.floor(u) < 0.22 || v - Math.floor(v) < 0.25;
+    return edge ? '#5fe6ff' : '#1f6f84';
+  }
+  // the tank: hull, tracks, turret, the gun pointing at the shield
+  if (x > 3 && x < 15 && y > 6 && y < 18) {
+    if (y < 7.6 || y > 16.4) return '#2b2f26'; // tracks
+    if (Math.hypot(x - 8.5, y - 12) < 2.6) return '#9aa274'; // turret
+    if (x > 10 && x < 15.5 && Math.abs(y - 12) < 0.6) return '#3a3d33';
+    return '#6f7a52';
+  }
+  if (x >= 15 && x < 17.5 && Math.abs(y - 12) < 0.6) return '#3a3d33'; // the barrel's end
+  return null;
+}
+const shieldCache = new Map();
+export function shieldCanvas(scale = 2) {
+  if (!shieldCache.has(scale)) shieldCache.set(scale, raster(32, 24, shieldAt, scale));
+  return shieldCache.get(scale);
+}

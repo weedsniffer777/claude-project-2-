@@ -25,6 +25,7 @@ import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
 import { buildLauncher } from '../models/launchers.js';
 import { EQUIPMENT, equipmentArt } from './equipment.js';
+import { createShield } from './shield.js';
 import { settings, actionFor, openSettings, onSettings } from '../ui/settings.js';
 
 const VIEW_H = 13; // world units visible vertically
@@ -96,7 +97,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const fitting = createFitting({ renderer, cursor: hud.cursor });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const camTarget = new THREE.Vector3();
-  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, artyRing, pickups, crushing;
+  let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, artyRing, pickups, crushing, shield;
   const strikes = []; // artillery shells on their way: { at, t, marker }
   const run = { hp: 100, time: 0, over: false, won: false };
   let stats = { ...BASE_STATS };
@@ -179,6 +180,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     artyRing.add(fill);
     artyRing.visible = false;
     scene.add(aimLine, aimMark, aimBeam, artyRing);
+    shield = createShield(scene, EQUIPMENT.shield);
     strikes.length = 0;
     missiles.length = 0;
     tank.group.position.set(level.spawn.x, 0, level.spawn.z);
@@ -349,6 +351,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     spawnDrone: (x, z, opts) => enemies.spawnDrone(x, z, opts),
     spawnBridgeGun: (x, z, opts) => enemies.spawnBridgeGun(x, z, opts),
     spawnSpider: (x, z, opts) => enemies.spawnSpider(x, z, opts),
+    spawnArty: (x, z, opts) => enemies.spawnArty(x, z, opts),
     get run() {
       return run;
     },
@@ -1113,10 +1116,29 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (run.equipCd > 0 || run.aiming > 0) return;
     // the guided missiles: no picking, they lock on by themselves
     if (id === 'atgm') return lockMissiles();
+    if (id === 'shield') return raiseShield();
     // picking the spot
     run.armed = id;
     run.arty = DESIGNATE[id] || 6;
     trigger = false;
+  }
+  // The shield (Q): up at once in front of the turret, for a few seconds
+  function raiseShield() {
+    const E = EQUIPMENT.shield;
+    run.barrier = E.time;
+    run.equipCd = E.cooldown;
+    const at = pos.clone().setY(pos.y + 1.2);
+    combat.glow.flash(at, 0x9ff4ff, 0.25, 3.2, 0.15);
+    combat.glow.light(at, 0x5fe6ff, 30, 0.3);
+    combat.shake = Math.max(combat.shake, 0.15);
+  }
+  // where the shield stands, for the machines' rounds (null: it's down)
+  const shieldNow = () => (run.barrier > 0 && run.mode === 'field' && !run.over ? { x: pos.x, z: pos.z, y: pos.y, yaw: tank.group.rotation.y + tank.turret.rotation.y, r: shield.radius, h: shield.height } : null);
+  function shieldHit(point) {
+    shield.hit(point);
+    combat.glow.flash(point, 0xc8fbff, 0.12, 1.4, 0.08);
+    combat.glow.light(point, 0x5fe6ff, 16, 0.12);
+    combat.fx.burst(point, { count: 10, speed: 5, color: 0x9ff4ff, life: 0.25, size: 0.06, gravity: 6 });
   }
   const DESIGNATE = { artillery: 8 }; // seconds to pick before it's called off
   // the click while designating: the strike on the spot, or the missile at
@@ -2522,6 +2544,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.boostCd = Math.max(0, run.boostCd - dt);
       run.abilityCd = Math.max(0, run.abilityCd - dt);
       run.equipCd = Math.max(0, run.equipCd - dt);
+      run.barrier = Math.max(0, (run.barrier || 0) - dt);
+      if (run.over || run.mode !== 'field') run.barrier = 0;
+      run.shieldOn = THREE.MathUtils.clamp((run.shieldOn || 0) + (run.barrier > 0 ? dt * 6 : -dt * 4), 0, 1);
+      shield.update(dt, t, run.shieldOn, pos, tank.group.rotation.y + tank.turret.rotation.y);
       if (run.arty > 0) {
         run.arty -= realDt;
         if (run.over || run.mode !== 'field') run.arty = 0;
@@ -2831,7 +2857,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
 
       // machines
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over });
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
       // the roof MG only takes machines it can see (not through trams and walls)
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
@@ -2922,7 +2948,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting || run.retreat > 0, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt(true) : boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
       const eq = equipId();
-      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || !!run.msl, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
+      hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || !!run.msl || run.barrier > 0, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : run.barrier > 0 ? run.barrier / EQUIPMENT.shield.time : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
       hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : def.ability === 'salvo' ? equipmentArt('atgm') : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;

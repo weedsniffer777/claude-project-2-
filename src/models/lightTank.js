@@ -733,6 +733,7 @@ export function createLightTank() {
     chassis,
     turret,
     mgMount: mgSlot,
+    mgGun: mgPivot, // (the roof MG itself: a part can fit things to it)
     gunPivot, // (the Vulcan part bolts its barrels on here)
     slotGroups,
     setSlotVisible(name, visible) {

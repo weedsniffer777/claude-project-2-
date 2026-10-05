@@ -25,7 +25,7 @@ import { tokenIconURL } from '../ui/icons.js';
 import { partPicture } from '../render/partPictures.js';
 import { fitInside } from '../ui/scale.js';
 import { openSettings } from '../ui/settings.js';
-import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
+import { CAMPAIGN, PAGES, clearKey, isOpen } from '../game/campaign.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -120,6 +120,16 @@ const CSS = `
 .base-brief .node.open.alldone { background: #5d7fa8; color: #e8eef6; box-shadow: 0 0 0 2px #000, 0 0 0 4px #b9c6d6; }
 .base-brief .node.alldone::after { content: ''; position: absolute; right: -9px; top: -9px; width: 16px; height: 16px; background: #6be08a; box-shadow: 0 0 0 2px #000; clip-path: polygon(14% 52%, 30% 36%, 42% 50%, 72% 16%, 88% 32%, 42% 82%); }
 .base-brief .node.sel { outline: 3px solid #f1e9d8; outline-offset: 3px; }
+/* the page turn: a big pixel arrow tab on the map's top or bottom edge */
+.base-brief .pageturn { position: absolute; left: 72%; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 7px 12px 8px; border: 0; cursor: var(--cursor); transform: translateX(-50%); font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap; color: #141416; background: #f1e9d8; box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000; }
+.base-brief .pageturn.up { top: -20px; }
+.base-brief .pageturn.down { bottom: -20px; }
+.base-brief .pageturn i { width: 14px; height: 12px; background: #141416; clip-path: polygon(50% 0, 100% 60%, 70% 60%, 70% 100%, 30% 100%, 30% 60%, 0 60%); }
+.base-brief .pageturn.down i { transform: scaleY(-1); }
+.base-brief .pageturn:hover { background: #fff; }
+.base-brief .pageturn.glow { color: #111; background: var(--amber); animation: pageglow 0.9s steps(2) infinite; }
+.base-brief .pageturn em { position: absolute; right: -12px; top: -12px; padding: 3px 5px; font: 400 9px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+@keyframes pageglow { 0%, 100% { box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000, 0 0 10px 2px #ffb347aa; } 50% { box-shadow: 0 0 0 2px #000, 4px 4px 0 2px #000, 0 0 26px 8px #ffb347ee; background: #ffd27a; } }
 .base-brief .node.open.sel { background: #6be08a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #6be08aaa; }
 .base-brief .info { width: min(300px, 32vw); padding: 16px 18px 18px; display: grid; gap: 10px; align-self: center; }
 .base-brief .info .tagline { font-size: 11px; color: #ff6a5a; }
@@ -299,6 +309,116 @@ function holoTexture(rand) {
   return tex(c);
 }
 
+// the route between a page's levels: dashed white; on to the next page off
+// the top, and in from the last one at the bottom
+const GATE_X = 0.72; // where the way out through the city wall is, across the map
+function route(g, W, Hc, page) {
+  const pts = CAMPAIGN.filter((l) => (l.page || 0) === page).map((l) => l.at);
+  if (page < PAGES - 1) pts.push([GATE_X, -0.02]);
+  if (page > 0) pts.unshift([GATE_X, 1.02]);
+  g.fillStyle = '#f1e9d8';
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i];
+    const [bx, by] = pts[i + 1];
+    for (let s = 0; s <= 40; s += 2) {
+      const t = s / 40;
+      g.fillRect(Math.round((ax + (bx - ax) * t) * W), Math.round((ay + (by - ay) * t) * Hc), 2, 2);
+    }
+  }
+}
+
+// The second page: out past the city wall. The wall along the bottom with
+// its gate, then the suburbs (rows of little houses on curving streets),
+// the industrial district (big sheds, chimneys, rail sidings), the slums
+// (a dense scatter of shacks), and something big at the top. All of it
+// enemy ground, hatched red.
+function outerMap() {
+  const W = 160;
+  const Hc = 240;
+  const [c, g] = canvas(W, Hc);
+  let seed = 97;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  g.fillStyle = '#1c1d1b';
+  g.fillRect(0, 0, W, Hc);
+  g.fillStyle = '#242522';
+  for (let x = 0; x < W; x += 10) g.fillRect(x, 0, 1, Hc);
+  for (let y = 0; y < Hc; y += 10) g.fillRect(0, y, W, 1);
+  // open ground: dull green patches
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = ['#262b22', '#2a2f25', '#232720'][(rand() * 3) | 0];
+    g.fillRect((rand() * W) | 0, (rand() * Hc) | 0, 6 + ((rand() * 18) | 0), 4 + ((rand() * 10) | 0));
+  }
+  // the suburbs (left, low): rows of small houses along curving streets
+  g.fillStyle = '#8a877f';
+  for (let k = 0; k < 4; k++) for (let x = 6; x < 80; x++) g.fillRect(x, (138 + k * 14 + Math.sin(x / 12 + k) * 4) | 0, 1, 1);
+  for (let k = 0; k < 4; k++)
+    for (let x = 8; x < 78; x += 5) {
+      if (rand() < 0.2) continue;
+      const y = (138 + k * 14 + Math.sin(x / 12 + k) * 4) | 0;
+      g.fillStyle = ['#4a4b46', '#54554f', '#43443f'][(rand() * 3) | 0];
+      g.fillRect(x, y - 5, 3, 3);
+      g.fillRect(x + 1, y + 2, 3, 3);
+    }
+  // the industrial district (right, middle): big sheds, chimneys, sidings
+  for (let i = 0; i < 14; i++) {
+    g.fillStyle = ['#3e3f3b', '#474844', '#383935'][(rand() * 3) | 0];
+    g.fillRect(90 + ((rand() * 56) | 0), 86 + ((rand() * 46) | 0), 8 + ((rand() * 12) | 0), 5 + ((rand() * 7) | 0));
+  }
+  g.fillStyle = '#6d6a64';
+  for (const x of [104, 122, 140]) g.fillRect(x, 92, 2, 2);
+  g.fillStyle = '#5a5850';
+  for (let x = 84; x < W; x++) {
+    g.fillRect(x, 134, 1, 1);
+    if (x % 3 === 0) g.fillRect(x, 133, 1, 3);
+  }
+  // the slums (left, high): a dense scatter of tiny shacks
+  for (let i = 0; i < 260; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = Math.sqrt(rand()) * 30;
+    g.fillStyle = ['#3d3c37', '#47443c', '#35342f', '#4d4a40'][(rand() * 4) | 0];
+    g.fillRect((48 + Math.cos(a) * d * 1.2) | 0, (72 + Math.sin(a) * d * 0.8) | 0, 2 + ((rand() * 2) | 0), 2);
+  }
+  // something big at the top: a dark fortified block
+  g.fillStyle = '#2e2b2a';
+  g.fillRect(84, 14, 36, 20);
+  g.fillStyle = '#5a1f1c';
+  g.fillRect(84, 14, 36, 2);
+  // roads
+  g.fillStyle = '#c9c6bd';
+  for (let y = 0; y < Hc; y++) g.fillRect((77 + Math.sin(y / 26) * 10) | 0, y, 2, 1);
+  g.fillStyle = '#8a877f';
+  for (let x = 0; x < W; x++) g.fillRect(x, (110 - x * 0.2) | 0, 1, 1);
+  // enemy ground everywhere out here
+  g.fillStyle = '#5a1f1c';
+  for (let y = 0; y < 214; y += 4) for (let x = (y / 2) % 4 | 0; x < W; x += 6) if (rand() < 0.8) g.fillRect(x, y, 1, 1);
+  // the city wall along the bottom: thick, crenellated, its gate open
+  g.fillStyle = '#8d8a83';
+  for (let x = 0; x < W; x++) {
+    g.fillRect(x, 222, 1, 6);
+    if (((x / 4) | 0) % 2) g.fillRect(x, 220, 1, 2);
+  }
+  g.fillStyle = '#1c1d1b';
+  g.fillRect(GATE_X * W - 7, 219, 14, 10);
+  g.fillStyle = '#ff3b2f';
+  for (const [x, y] of [[32, 160], [64, 186], [116, 104], [134, 120], [52, 64], [100, 24]]) {
+    g.fillRect(x - 1, y - 1, 1, 1);
+    g.fillRect(x + 1, y - 1, 1, 1);
+    g.fillRect(x, y, 1, 1);
+    g.fillRect(x - 1, y + 1, 1, 1);
+    g.fillRect(x + 1, y + 1, 1, 1);
+  }
+  route(g, W, Hc, 1);
+  g.fillStyle = '#d8d4cb';
+  g.fillRect(W - 12, 8, 1, 10);
+  g.fillRect(W - 13, 9, 3, 1);
+  g.fillRect(W - 14, 10, 5, 1);
+  for (const [x, y, sx, sy] of [[2, 2, 1, 1], [W - 3, 2, -1, 1], [2, Hc - 3, 1, -1], [W - 3, Hc - 3, -1, -1]]) {
+    g.fillRect(Math.min(x, x + sx * 8), y, 8, 1);
+    g.fillRect(x, Math.min(y, y + sy * 8), 1, 8);
+  }
+  return c;
+}
+
 // The briefing screen's campaign map, drawn small and shown big: a grey
 // city plan in white roads, the river through it, enemy ground hatched red,
 // the route north from level to level.
@@ -345,15 +465,12 @@ function campaignMap() {
     g.fillRect(x + 1, y + 1, 1, 1);
   }
   // the route between the levels: dashed white
-  g.fillStyle = '#f1e9d8';
-  for (let i = 0; i < CAMPAIGN.length - 1; i++) {
-    const [ax, ay] = CAMPAIGN[i].at;
-    const [bx, by] = CAMPAIGN[i + 1].at;
-    for (let s = 0; s <= 40; s += 2) {
-      const t = s / 40;
-      g.fillRect(Math.round((ax + (bx - ax) * t) * W), Math.round((ay + (by - ay) * t) * Hc), 2, 2);
-    }
-  }
+  route(g, W, Hc, 0);
+  // the city wall across the top, the way out through its gate
+  g.fillStyle = '#6d6a64';
+  for (let x = 0; x < W; x++) g.fillRect(x, 4 + ((x / 7) | 0) % 2, 1, 3);
+  g.fillStyle = '#1b1c1f';
+  g.fillRect(GATE_X * W - 7, 3, 14, 6);
   // north arrow and corner brackets
   g.fillStyle = '#d8d4cb';
   g.fillRect(W - 12, 8, 1, 10);
@@ -1089,18 +1206,46 @@ export function createHub({ renderer, pixel, onDeploy }) {
     menu.querySelector('.back').addEventListener('click', closeRoom);
   }
   // the briefing: the campaign map in the middle, the zone's details beside it
+  // two pages: the city, and out past its wall. The map opens on the page
+  // with the furthest level you can play; an arrow at its edge turns the
+  // page (glowing when that's where your next level is).
   let selLevel = CAMPAIGN[0];
-  const mapCanvas = campaignMap();
+  const mapCanvases = [campaignMap(), outerMap()];
+  let mapPage = 0;
+  const pageOf = (z) => z.page || 0;
+  const newest = () => [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
   function openBriefing() {
-    // start on the furthest level you can play
-    selLevel = [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
+    selLevel = newest();
+    mapPage = pageOf(selLevel);
     brief.hidden = false;
-    brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : ''}</button>`).join('')}</div>
-      <div class="info panel"></div>`;
-    brief.querySelector('.map').prepend(mapCanvas);
-    for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
+    brief.innerHTML = `<div class="map"></div><div class="info panel"></div>`;
+    renderMap();
     showLevel(selLevel, true);
+  }
+  function renderMap() {
+    const map = brief.querySelector('.map');
+    const nodes = CAMPAIGN.filter((z) => pageOf(z) === mapPage);
+    const next = newest();
+    // the way to the other page: up off the top (out through the wall), or
+    // back down off the bottom
+    const turn = (dir) => {
+      const to = mapPage + dir;
+      if (to < 0 || to >= PAGES) return '';
+      const glow = pageOf(next) === to && !save.cleared().includes(clearKey(next.id, 'easy'));
+      const label = dir > 0 ? 'Beyond the wall' : 'The city';
+      return `<button type="button" class="pageturn ${dir > 0 ? 'up' : 'down'}${glow ? ' glow' : ''}" data-to="${to}"><i></i><span>${label}</span>${glow ? '<em>New</em>' : ''}</button>`;
+    };
+    map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;
+    map.prepend(mapCanvases[mapPage]);
+    for (const b of map.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
+    for (const b of map.querySelectorAll('.pageturn'))
+      b.addEventListener('click', () => {
+        mapPage = +b.dataset.to;
+        renderMap();
+        // on the new page: its furthest open level, else its first
+        const here = CAMPAIGN.filter((z) => pageOf(z) === mapPage);
+        showLevel([...here].reverse().find((z) => isOpen(z, save.cleared())) || here[0], true);
+      });
   }
   // the Hard mode box; a level whose Hard first clear is a part shows it
   // under the words: its picture in a gold frame, its tier, its description

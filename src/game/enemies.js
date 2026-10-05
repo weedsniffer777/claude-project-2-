@@ -8,6 +8,7 @@ import { createBridgeGun } from '../models/bridgeGun.js';
 import { createDrone } from '../models/drone.js';
 import { createSpider } from '../models/spider.js';
 import { pushOut } from './collide.js';
+import { shieldCross } from './shield.js';
 import { ENEMY_LAYER } from '../render/pixel.js';
 
 const DOG = {
@@ -173,6 +174,7 @@ const SPIDER = {
   ...WALKER,
   model: createSpider,
   spider: true,
+  heavy: true, // (rams, shoves and shockwaves hurt it but never move it)
   kinetic: true,
   shatterOnDeath: true,
   hp: 6000,
@@ -210,6 +212,37 @@ const SPIDER = {
   dashDamage: 40,
   daze: 2, // stunned after it hits the wall: takes extra damage
   dazeTaken: 1.5,
+};
+
+// The artillery drone (level 4's boss): a small mech, about a quarter of
+// the big one's size, with no gun: only a rocket launcher on its back. It
+// keeps its distance (scuttles off when you close in) and drops volley
+// after volley on red rings round the tank.
+const ARTY = {
+  ...SPIDER,
+  model: () => createSpider({ arty: true }),
+  heavy: false,
+  noGun: true,
+  noStage2: true,
+  hp: 1600,
+  runSpeed: 4.2,
+  walkSpeed: 2.0,
+  turnRate: 2.6,
+  range: 30,
+  tooClose: 13,
+  flee: true, // too close: it runs, not walks, away
+  box: { hx: 1.6, hz: 1.6 },
+  scale: 0.55,
+  modelScale: 0.55,
+  aimY: 1.3,
+  muzzleY: 1.4,
+  hit: [5.6, 3.2, 4.8, 1.6], // (in the model's own size: scaled with it)
+  scrap: 40,
+  artyEvery: 4.6,
+  artyRockets: 8,
+  artyFall: [1.5, 2.3],
+  artyBlast: 1.8,
+  artyDamage: 10,
 };
 
 const DRONE = {
@@ -290,6 +323,12 @@ export class Enemies {
     const e = this.spawn(SPIDER, 'spider', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
     e.arena = opts.arena || null; // (x, z) => inside where it can dash
+    e.mctx = {};
+    return e;
+  }
+  spawnArty(x, z, opts = {}) {
+    const e = this.spawn(ARTY, 'arty', x, z, opts);
+    e.model.group.rotation.y = opts.yaw ?? Math.PI;
     e.mctx = {};
     return e;
   }
@@ -466,7 +505,7 @@ export class Enemies {
       if (Math.abs(lx) > tankBox.hx + r || Math.abs(lz) > tankBox.hz + r) continue;
       e.rammedAt = now;
       const killed = this.damage(e, amount, e.stats.scale < 1.5 ? new THREE.Vector3(tankBox.x, 0, tankBox.z) : null);
-      if (!killed && e.stats.scale < 1.5) {
+      if (!killed && e.stats.scale < 1.5 && !e.stats.heavy) {
         // knocked back: thrown along the way the tank's going and off to its side
         e.kb ??= new THREE.Vector3();
         e.kb.x += tankVel.x * push + Math.sign(lz || 1) * -sn * side;
@@ -488,7 +527,7 @@ export class Enemies {
     const c = Math.cos(tankBox.yaw);
     const sn = Math.sin(tankBox.yaw);
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying) continue;
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying || e.stats.heavy) continue;
       const r = e.stats.box.hx * 0.8;
       const dx = e.pos.x - tankBox.x;
       const dz = e.pos.z - tankBox.z;
@@ -521,7 +560,7 @@ export class Enemies {
   // A shockwave: machines within radius are shoved away from its centre.
   shove(at, radius, dist) {
     for (const e of this.list) {
-      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying) continue;
+      if (!e.alive || e.delay > 0 || e.stats.scale > 1.5 || e.stats.flying || e.stats.heavy) continue;
       const dx = e.pos.x - at.x;
       const dz = e.pos.z - at.z;
       const d = Math.hypot(dx, dz);
@@ -659,11 +698,12 @@ export class Enemies {
         }
         vx = -tz * e.strafe;
         vz = tx * e.strafe;
+        speed = DOG.walkSpeed;
         if (dist < DOG.tooClose) {
           vx -= tx * 1.5;
           vz -= tz * 1.5;
+          if (DOG.flee) speed = DOG.runSpeed;
         }
-        speed = DOG.walkSpeed;
       }
       if (e.sidestep > 0) {
         // stuck on something: slide sideways for a moment
@@ -739,9 +779,10 @@ export class Enemies {
         const oz = e.pos.z - o.pos.z;
         const d = Math.hypot(ox, oz);
         const min = 0.55 * (e.stats.scale + o.stats.scale);
-        if (d < min && d > 0.001) {
-          e.pos.x += (ox / d) * (min - d) * 0.5;
-          e.pos.z += (oz / d) * (min - d) * 0.5;
+        if (d < min && d > 0.001 && !e.stats.heavy) {
+          const k = o.stats.heavy ? 1 : 0.5; // (a heavy one doesn't give: the other moves all the way)
+          e.pos.x += (ox / d) * (min - d) * k;
+          e.pos.z += (oz / d) * (min - d) * k;
         }
       }
       const moved = Math.hypot(e.pos.x - before.x, e.pos.z - before.z);
@@ -985,7 +1026,7 @@ export class Enemies {
         if (S.kinetic) this.fireShell(e, ctx);
         else this.fireBeam(e, ctx);
       }
-    } else if (e.fireTimer <= 0 && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
+    } else if (!S.noGun && e.fireTimer <= 0 && dist < S.range && e.los && !(e.blind > 0) && !(e.stun > 0)) {
       e.charge = S.charge;
       e.lockYaw = want;
       e.lostT = 0;
@@ -1128,7 +1169,8 @@ export class Enemies {
       e.model.update(dt, t, { speed: mctx.dash ? 3 : 0, aimYaw, aimPitch: 0, recoil: e.recoil, charge: 0, ...mctx });
       return true;
     };
-    const hull = (spread = 2.2) => new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * spread * 1.6, 1.4 + Math.random() * 1.4, e.pos.z + (Math.random() - 0.5) * spread);
+    const k = S.modelScale || 1; // (the small one's blasts come closer together, lower down)
+    const hull = (spread = 2.2) => new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * spread * 1.6 * k, (1.4 + Math.random() * 1.4) * k, e.pos.z + (Math.random() - 0.5) * spread * k);
     // dying: a string of blasts over the hull, pieces flung off, then apart
     if (e.dying > 0) {
       e.dying -= dt;
@@ -1146,7 +1188,7 @@ export class Enemies {
       }
       return own({ ...e.mctx, dark: Math.random() < 0.4, dash: false });
     }
-    if (!e.stage2 && e.hp < e.maxHp * 0.5) {
+    if (!e.stage2 && !S.noStage2 && e.hp < e.maxHp * 0.5) {
       e.stage2 = 'down';
       e.st = 0;
       e.invuln = true;
@@ -1354,13 +1396,20 @@ export class Enemies {
     const S = e.stats;
     const from = e.model.muzzle();
     const dir = new THREE.Vector3(Math.cos(e.lockYaw), 0, -Math.sin(e.lockYaw));
-    const len = this.beamLength(e, from, ctx.colliders, S.range + 4);
-    const end = from.clone().addScaledVector(dir, len).setY(e.pos.y + HULL_Y);
+    let len = this.beamLength(e, from, ctx.colliders, S.range + 4);
+    let end = from.clone().addScaledVector(dir, len).setY(e.pos.y + HULL_Y);
+    // the tank's shield in the way: it stops there
+    const sc = shieldCross(ctx.shield, from.clone().setY(e.pos.y + HULL_Y), end);
+    if (sc) {
+      len *= sc.k;
+      end = sc.point;
+      ctx.onShieldHit?.(sc.point);
+    }
     e.recoil = 1;
     e.fireTimer = S.reload + Math.random() * 0.8;
     // did it catch the tank? (its footprint against the line)
     const tb = ctx.tankBox;
-    if (tb) {
+    if (tb && !sc) {
       const rx = tb.x - from.x;
       const rz = tb.z - from.z;
       const along = rx * dir.x + rz * dir.z;
@@ -1436,6 +1485,15 @@ export class Enemies {
       const prev = b.pos.clone();
       b.pos.addScaledVector(b.vel, dt);
       b.life -= dt;
+      // the tank's shield up in its way: stopped on it
+      const sc = shieldCross(ctx.shield, prev, b.pos);
+      if (sc) {
+        b.pos.copy(sc.point);
+        b.hitTank = true; // (no splash on the tank behind it)
+        ctx.onShieldHit?.(sc.point);
+        this.endBolt(i, ctx);
+        continue;
+      }
       // a round stops on anything solid in its way
       if (ctx.colliders?.length) {
         losDir.subVectors(b.pos, prev);

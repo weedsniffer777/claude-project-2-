@@ -51,6 +51,12 @@ export const BASE_STATS = {
   boostRefund: 0, // Legendary High-power boost: seconds of recharge back per kill while boosting
   directHit: 1, // x the damage to the machine a shell or missile actually strikes (Rangefinder)
   rangeBurst: false, // Legendary Optics (Spotter): the view opens out 50% for 3 s after every reload
+  // Grenade launcher: the machine guns (all of them, with Extra MGs) lob
+  // small grenades instead of firing bullets
+  gmg: false,
+  gmgDamage: 0, // each grenade, on the machine it lands on (x mgDamage / 3: grows with it)
+  gmgRate: 0.36, // seconds between grenades (from each gun)
+  gmgSplash: 1.4, // its little blast: half damage out to here
 };
 
 const RUST = 0x6d5a48;
@@ -104,6 +110,33 @@ function onGlacis(parent, x, z) {
 }
 
 export const PARTS = {
+  gmg: {
+    type: 'weapons',
+    name: 'Grenade launcher',
+    text: 'The machine guns become automatic grenade launchers: slower, lobbed grenades with a small blast. Shorter range, and they scatter: some fall short. Works with Extra MGs.',
+    icon: ['................', '....------......', '..-########--...', '#####-###-####..', '..-########--...', '....-+++-.......', '.....+++........', '................', '................', '................'],
+    apply(s) {
+      s.gmg = true;
+      s.gmgDamage = 15; // (scaled by mgDamage / 3 in the game: about the MG's damage over time on one target, plus the blast)
+      s.mgRange *= 0.8;
+    },
+    tiers: [
+      { text: 'Faster: a grenade every 0.3 s.', apply: (s) => (s.gmgRate = 0.3) },
+      { text: 'Bigger blasts.', apply: (s) => (s.gmgSplash = 1.9) },
+    ],
+    // the roof gun gets a launcher's chunky receiver, a short fat barrel and
+    // a big ammo can over the top of it (it turns with the gun)
+    build(t) {
+      return gmgOn(t.mgGun);
+    },
+    light(t) {
+      return gmgOn(t.mgGun);
+    },
+    missile(t) {
+      return gmgOn(t.mgGun);
+    },
+    model: () => gmgLauncher(),
+  },
   dozer: {
     type: 'armor',
     name: 'Dozer blade',
@@ -669,6 +702,28 @@ export const PARTS = {
     },
   },
 };
+// An automatic grenade launcher (an Mk 19-like): a boxy receiver, a short
+// fat barrel with a ribbed jacket, a flash hider, a big ammo can on its
+// side, the feed tray on top. Sized to sit over a roof MG (barrel along +x).
+export function gmgLauncher() {
+  const g = new THREE.Group();
+  put(g, box(0.5, 0.2, 0.24, 0x3a4030, { r: 0.03 }), 0.02, 0.01, 0); // receiver
+  put(g, box(0.3, 0.06, 0.2, DARK, { r: 0.01 }), 0.0, 0.14, 0); // feed tray cover
+  put(g, cyl(0.07, 0.5, DARK, { axis: 'x', seg: 10 }), 0.5, 0.01, 0); // barrel jacket
+  for (const x of [0.36, 0.48, 0.6]) put(g, cyl(0.078, 0.03, 0x1d2024, { axis: 'x', seg: 10 }), x, 0.01, 0); // its ribs
+  put(g, cyl(0.085, 0.14, 0x1d2024, { axis: 'x', seg: 10 }), 0.86, 0.01, 0); // flash hider
+  put(g, box(0.26, 0.24, 0.18, OLIVE, { r: 0.02 }), 0.0, -0.04, 0.21); // ammo can
+  put(g, box(0.27, 0.03, 0.19, DARKOLIVE), 0.0, 0.09, 0.21);
+  put(g, box(0.12, 0.05, 0.12, 0xc9a24a, { r: 0.01 }), 0.0, 0.11, 0.1); // a belt of fat brass rounds
+  for (const dz of [-0.06, 0.06]) put(g, box(0.1, 0.04, 0.04, DARK), -0.28, 0.03, dz); // spade grips
+  return g;
+}
+function gmgOn(gun) {
+  const g = gmgLauncher();
+  if (gun) gun.add(g);
+  return g;
+}
+
 function vulcanBarrels() {
   const g = new THREE.Group();
   const spin = new THREE.Group();
@@ -883,6 +938,9 @@ const STAT_ROWS = [
   ['extraMgs', 'Machine guns', (v) => `${v + 1}`, 1],
   ['mgDamage', 'MG damage', (v) => `${+v.toFixed(1)}`, 1],
   ['mgRange', 'MG range', (v) => `${Math.round(v)} m`, 1],
+  ['gmgDamage', 'Grenade damage', (v) => `${Math.round(v)}`, 1],
+  ['gmgRate', 'Grenade rate', secs, -1],
+  ['gmgSplash', 'Grenade blast', (v) => `${v.toFixed(1)} m`, 1],
   ['ramDamage', 'Ram damage without boost', (v) => `${Math.round(v)}`, 1],
   ['view', 'View', pct, 1],
   ['directHit', 'Direct hit damage', pct, 1],

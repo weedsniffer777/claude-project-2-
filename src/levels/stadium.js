@@ -1,4 +1,4 @@
-// Level 4: the destroyed stadium, on a grey winter afternoon. A short
+// Level 5: the destroyed stadium, on a grey winter afternoon. A short
 // level: one more city street to a checkpoint, a huge empty plaza, and the
 // ruined stadium standing in it, the mech inside.
 //
@@ -193,7 +193,7 @@ function groundTexture(rand) {
 
 export const stadium = {
   id: 'stadium',
-  name: 'Level 4 · Destroyed stadium',
+  name: 'Level 5 · Destroyed stadium',
   build(scene) {
     setLowPoly(true);
     try {
@@ -765,7 +765,7 @@ function buildStadium(scene) {
     api.revealScraps(false);
     api.giveRockets();
     if (api.tank.ability) api.giveAbility();
-    api.sectors(SECTORS, 0, 'Level 4');
+    api.sectors(SECTORS, 0, 'Level 5');
     api.objective('Reach the stadium');
   }
 
@@ -827,7 +827,7 @@ function buildStadium(scene) {
     S.sector = 1;
     go(0);
     setBounds(api, B2);
-    api.sectors(SECTORS, 1, 'Level 4');
+    api.sectors(SECTORS, 1, 'Level 5');
     api.objective('Enter the stadium');
     api.arrow(new THREE.Vector3(W_IN - 4, 1.4, CZ), 'Stadium');
   }
@@ -884,7 +884,7 @@ function buildStadium(scene) {
       case 3:
         if (x > END_X) {
           api.arrow(null);
-          api.sectors(SECTORS, 2, 'Level 4');
+          api.sectors(SECTORS, 2, 'Level 5');
           api.win('Level clear', { path: [[END_X + 30, CZ], [END_X + 200, CZ]] }); // (on out of the shot)
           go(4);
         }

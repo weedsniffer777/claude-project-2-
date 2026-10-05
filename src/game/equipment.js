@@ -3,7 +3,7 @@
 // pixel icons on a cyan tile with cut corners (parts are pictures of the
 // part in a square frame), so the two never get mixed up.
 
-import { artilleryCanvas, atgmCanvas } from '../ui/icons.js';
+import { artilleryCanvas, atgmCanvas, shieldCanvas } from '../ui/icons.js';
 
 export const EQUIPMENT = {
   artillery: {
@@ -32,6 +32,16 @@ export const EQUIPMENT = {
     blast: 3.0,
     speed: 30, // top speed, units/s
     art: () => atgmCanvas(2), // a missile on its smoke trail into a lock box
+  },
+  shield: {
+    name: 'Shield',
+    text: 'Press Q: a curved energy shield goes up in front of the turret and stops every shot that hits it. It turns with the turret.',
+    rows: [['Blocks', 'All shots from the front', true], ['Lasts', '4 s', true], ['Shells from above', 'Not blocked', false], ['Recharge', '18 s', false]],
+    cooldown: 18,
+    time: 4, // seconds it's up
+    radius: 3.1, // out from the tank's middle
+    height: 2.2,
+    art: () => shieldCanvas(2), // a tank behind its curved shield, rounds bursting on it
   },
 };
 

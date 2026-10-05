@@ -39,7 +39,7 @@ const LEGS = [
   return { ...L, foot: [L.hip[0] + Math.sign(L.hip[0]) * r, L.hip[2] + Math.sign(L.hip[2]) * r] };
 });
 
-export function createSpider() {
+export function createSpider({ arty = false } = {}) {
   const group = new THREE.Group();
   const body = new THREE.Group();
   body.position.y = BODY_Y;
@@ -70,73 +70,118 @@ export function createSpider() {
   for (let k = 0; k < 5; k++) put(body, box(0.05, 0.08, 0.5, C.dark), -1.95 + k * 0.1, 0.6, -0.05);
   put(body, box(0.3, 0.25, 0.3, C.panel, { r: 0.02 }), 1.7, 0.6, 0.85);
 
-  // --------------------------------------------- the rocket artillery pods
-  // on each side of the hull, angled up and out, three by two tubes
   const pods = [];
   const podGlow = [];
-  for (const s of [-1, 1]) {
-    const pod = new THREE.Group();
-    pod.position.set(-0.6, 0.75, s * 1.05);
-    pod.rotation.set(s * -0.15, 0, 0.45); // tilted up toward the front
-    body.add(pod);
-    put(pod, box(1.4, 0.55, 0.62, C.hull, { r: 0.03 }), 0, 0, 0);
-    put(pod, box(1.42, 0.08, 0.64, C.dark, { r: 0.01 }), 0, 0.3, 0);
-    put(pod, box(0.08, 0.57, 0.64, C.hazard, { r: 0.01 }), -0.55, 0, 0);
-    const mouths = [];
-    for (const dy of [-0.13, 0.13]) {
-      for (const dz of [-0.19, 0, 0.19]) {
-        put(pod, box(0.04, 0.17, 0.15, 0x161512, { r: 0.01 }), 0.71, dy, dz);
-        const m = new THREE.Object3D();
-        m.position.set(0.78, dy, dz);
-        pod.add(m);
-        mouths.push(m);
-      }
-    }
-    const gl = put(pod, box(0.02, 0.5, 0.56, C.eye, { r: 0.01, glow: true }), 0.735, 0, 0);
-    gl.visible = false;
-    podGlow.push(gl);
-    pods.push({ pod, mouths });
-  }
-  glowy.push(...podGlow);
-
-  // ------------------------------------------------------------ the turret
   const turret = new THREE.Group();
   turret.position.set(0.1, 0.55, 0);
   body.add(turret);
-  put(turret, cyl(0.9, 0.18, C.joint, { seg: 16 }), 0, 0.09, 0); // the ring
-  put(turret, box(2.4, 0.7, 1.6, C.hull, { r: 0.03 }), -0.1, 0.5, 0);
-  put(turret, box(2.0, 0.12, 1.3, C.panel, { r: 0.02 }), -0.2, 0.9, 0);
-  const tn = put(turret, box(0.7, 0.55, 1.4, C.panel, { r: 0.03 }), 1.2, 0.45, 0);
-  tn.rotation.z = -0.4;
-  // the sensor block on the front left: a searchlight lens, glowing
-  put(turret, box(0.6, 0.4, 0.42, C.dark, { r: 0.02 }), 1.25, 0.4, -0.72);
-  const lamp = put(turret, cyl(0.13, 0.05, C.lamp, { axis: 'x', seg: 12, glow: true }), 1.57, 0.4, -0.72);
-  glowy.push(lamp);
-  // greebles: boxes, a pipe loop, bolts
-  put(turret, box(0.5, 0.3, 0.4, C.joint, { r: 0.02 }), -0.6, 1.0, 0.45);
-  put(turret, cyl(0.06, 1.0, C.dark, { axis: 'z', seg: 6 }), -0.9, 0.95, 0);
-  for (const z of [-0.6, 0.6]) put(turret, cyl(0.1, 0.06, C.dark, { axis: 'z', seg: 8 }), 0.4, 0.55, z * 1.38);
-  // the sensor dome at the back, with its red eye, a mast
-  put(turret, box(0.5, 0.4, 0.5, C.joint, { r: 0.04 }), -0.85, 1.1, -0.35);
-  put(turret, new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), toon(C.panel)), -0.85, 1.48, -0.35);
-  const eye = put(turret, cyl(0.1, 0.04, C.eye, { axis: 'x', seg: 10, glow: true }), -0.55, 1.5, -0.35);
-  glowy.push(eye);
-  put(turret, cyl(0.025, 1.6, C.dark, { seg: 5 }), -1.1, 1.8, 0.55);
-  // the main gun: a long barrel out of a heavy mantlet, a big muzzle brake
   const gun = new THREE.Group();
   gun.position.set(1.0, 0.6, 0.15);
-  turret.add(gun);
-  put(gun, box(0.6, 0.5, 0.6, C.panel, { r: 0.03 }), 0.2, 0, 0);
-  put(gun, cyl(0.16, 0.8, C.gun, { axis: 'x', seg: 10 }), 0.85, 0, 0);
-  put(gun, cyl(0.1, 4.2, C.gun, { axis: 'x', seg: 10 }), 3.1, 0, 0);
-  put(gun, cyl(0.13, 0.2, C.gun, { axis: 'x', seg: 10 }), 2.4, 0, 0); // a collar part way along
-  for (const dx of [5.15, 5.45]) put(gun, box(0.16, 0.3, 0.34, C.gun, { r: 0.02 }), dx, 0, 0); // the brake
-  put(gun, box(0.46, 0.08, 0.2, C.dark), 5.3, 0, 0);
-  const cells = [-1, 1].map((s) => put(gun, box(0.5, 0.06, 0.03, C.eye, { r: 0.01, glow: true }), 0.2, -0.05, s * 0.31));
-  glowy.push(...cells);
-  const muzzleGlow = put(gun, box(0.2, 0.2, 0.2, 0xffffff, { glow: true, r: 0.04 }), 5.6, 0, 0);
-  muzzleGlow.visible = false;
-  glowy.push(muzzleGlow);
+  let cells = [];
+  let muzzleGlow = null;
+  let lamp = null;
+  let eye = null;
+  if (arty) {
+    // ---------------------------------------- the artillery drone's launcher
+    // no gun, no side pods: a launcher box on a turntable on its back, its
+    // tubes angled up steeply toward the front (four by three), hazard
+    // bands, a sensor head on a short mast beside it
+    put(turret, cyl(0.95, 0.2, C.joint, { seg: 16 }), 0, 0.1, 0);
+    put(turret, box(1.6, 0.35, 1.5, C.hull, { r: 0.03 }), -0.2, 0.35, 0);
+    for (const z of [-0.62, 0.62]) put(turret, box(0.5, 0.9, 0.16, C.panel, { r: 0.02 }), -0.3, 0.8, z); // the cradle's cheeks
+    const pod = new THREE.Group();
+    pod.position.set(-0.3, 1.05, 0);
+    pod.rotation.z = 0.95; // steeply up toward the front
+    turret.add(pod);
+    put(pod, box(2.0, 0.95, 1.1, C.hull, { r: 0.03 }), 0, 0, 0);
+    put(pod, box(2.02, 0.1, 1.12, C.dark, { r: 0.01 }), 0, 0.5, 0);
+    for (const x of [-0.75, 0.35]) put(pod, box(0.1, 0.97, 1.12, C.hazard, { r: 0.01 }), x, 0, 0);
+    for (let k = 0; k < 4; k++) put(pod, box(1.6, 0.04, 0.05, C.dark), 0, -0.3 + k * 0.2, 0.57); // ribs down its side
+    const mouths = [];
+    for (const dy of [-0.3, -0.1, 0.1, 0.3])
+      for (const dz of [-0.33, 0, 0.33]) {
+        put(pod, box(0.05, 0.15, 0.24, 0x161512, { r: 0.01 }), 1.01, dy, dz);
+        const m = new THREE.Object3D();
+        m.position.set(1.1, dy, dz);
+        pod.add(m);
+        mouths.push(m);
+      }
+    const gl = put(pod, box(0.02, 0.86, 1.02, C.eye, { r: 0.01, glow: true }), 1.04, 0, 0);
+    gl.visible = false;
+    podGlow.push(gl);
+    pods.push({ pod, mouths });
+    put(turret, cyl(0.04, 1.1, C.dark, { seg: 5 }), 0.75, 0.9, -0.55);
+    put(turret, box(0.4, 0.3, 0.34, C.dark, { r: 0.02 }), 0.75, 1.5, -0.55);
+    lamp = put(turret, cyl(0.1, 0.05, C.lamp, { axis: 'x', seg: 12, glow: true }), 0.97, 1.5, -0.55);
+    eye = put(turret, cyl(0.08, 0.04, C.eye, { axis: 'x', seg: 10, glow: true }), 0.97, 1.5, -0.42);
+    glowy.push(lamp, eye, ...podGlow);
+    turret.add(gun); // (an empty gun: there's nothing on it)
+  } else {
+    // --------------------------------------------- the rocket artillery pods
+    // on each side of the hull, angled up and out, three by two tubes
+    for (const s of [-1, 1]) {
+      const pod = new THREE.Group();
+      pod.position.set(-0.6, 0.75, s * 1.05);
+      pod.rotation.set(s * -0.15, 0, 0.45); // tilted up toward the front
+      body.add(pod);
+      put(pod, box(1.4, 0.55, 0.62, C.hull, { r: 0.03 }), 0, 0, 0);
+      put(pod, box(1.42, 0.08, 0.64, C.dark, { r: 0.01 }), 0, 0.3, 0);
+      put(pod, box(0.08, 0.57, 0.64, C.hazard, { r: 0.01 }), -0.55, 0, 0);
+      const mouths = [];
+      for (const dy of [-0.13, 0.13]) {
+        for (const dz of [-0.19, 0, 0.19]) {
+          put(pod, box(0.04, 0.17, 0.15, 0x161512, { r: 0.01 }), 0.71, dy, dz);
+          const m = new THREE.Object3D();
+          m.position.set(0.78, dy, dz);
+          pod.add(m);
+          mouths.push(m);
+        }
+      }
+      const gl = put(pod, box(0.02, 0.5, 0.56, C.eye, { r: 0.01, glow: true }), 0.735, 0, 0);
+      gl.visible = false;
+      podGlow.push(gl);
+      pods.push({ pod, mouths });
+    }
+    glowy.push(...podGlow);
+
+    // ------------------------------------------------------------ the turret
+    put(turret, cyl(0.9, 0.18, C.joint, { seg: 16 }), 0, 0.09, 0); // the ring
+    put(turret, box(2.4, 0.7, 1.6, C.hull, { r: 0.03 }), -0.1, 0.5, 0);
+    put(turret, box(2.0, 0.12, 1.3, C.panel, { r: 0.02 }), -0.2, 0.9, 0);
+    const tn = put(turret, box(0.7, 0.55, 1.4, C.panel, { r: 0.03 }), 1.2, 0.45, 0);
+    tn.rotation.z = -0.4;
+    // the sensor block on the front left: a searchlight lens, glowing
+    put(turret, box(0.6, 0.4, 0.42, C.dark, { r: 0.02 }), 1.25, 0.4, -0.72);
+    lamp = put(turret, cyl(0.13, 0.05, C.lamp, { axis: 'x', seg: 12, glow: true }), 1.57, 0.4, -0.72);
+    glowy.push(lamp);
+    // greebles: boxes, a pipe loop, bolts
+    put(turret, box(0.5, 0.3, 0.4, C.joint, { r: 0.02 }), -0.6, 1.0, 0.45);
+    put(turret, cyl(0.06, 1.0, C.dark, { axis: 'z', seg: 6 }), -0.9, 0.95, 0);
+    for (const z of [-0.6, 0.6]) put(turret, cyl(0.1, 0.06, C.dark, { axis: 'z', seg: 8 }), 0.4, 0.55, z * 1.38);
+    // the sensor dome at the back, with its red eye, a mast
+    put(turret, box(0.5, 0.4, 0.5, C.joint, { r: 0.04 }), -0.85, 1.1, -0.35);
+    put(turret, new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), toon(C.panel)), -0.85, 1.48, -0.35);
+    eye = put(turret, cyl(0.1, 0.04, C.eye, { axis: 'x', seg: 10, glow: true }), -0.55, 1.5, -0.35);
+    glowy.push(eye);
+    put(turret, cyl(0.025, 1.6, C.dark, { seg: 5 }), -1.1, 1.8, 0.55);
+    // the main gun: a long barrel out of a heavy mantlet, a big muzzle brake
+    turret.add(gun);
+    put(gun, box(0.6, 0.5, 0.6, C.panel, { r: 0.03 }), 0.2, 0, 0);
+    put(gun, cyl(0.16, 0.8, C.gun, { axis: 'x', seg: 10 }), 0.85, 0, 0);
+    put(gun, cyl(0.1, 4.2, C.gun, { axis: 'x', seg: 10 }), 3.1, 0, 0);
+    put(gun, cyl(0.13, 0.2, C.gun, { axis: 'x', seg: 10 }), 2.4, 0, 0); // a collar part way along
+    for (const dx of [5.15, 5.45]) put(gun, box(0.16, 0.3, 0.34, C.gun, { r: 0.02 }), dx, 0, 0); // the brake
+    put(gun, box(0.46, 0.08, 0.2, C.dark), 5.3, 0, 0);
+    cells = [-1, 1].map((s) => put(gun, box(0.5, 0.06, 0.03, C.eye, { r: 0.01, glow: true }), 0.2, -0.05, s * 0.31));
+    glowy.push(...cells);
+    muzzleGlow = put(gun, box(0.2, 0.2, 0.2, 0xffffff, { glow: true, r: 0.04 }), 5.6, 0, 0);
+    muzzleGlow.visible = false;
+    glowy.push(muzzleGlow);
+  }
+  if (!muzzleGlow) {
+    muzzleGlow = put(gun, box(0.2, 0.2, 0.2, 0xffffff, { glow: true, r: 0.04 }), 0, 0, 0);
+    muzzleGlow.visible = false;
+  }
 
   // --------------------------------------------------------------- the legs
   // each: a turning hip hub on the hull's corner, an open box-girder thigh,
@@ -177,7 +222,7 @@ export function createSpider() {
       const toe = put(shin, box(0.3, 0.3, 0.4, C.dark, { r: 0.03 }), sx * 0.3, -0.05, SHIN + 0.05);
       toe.rotation.y = sx * 0.2;
     }
-    legs.push({ ...L, thigh, knee, shin });
+    legs.push({ ...L, thigh, knee, shin, stepT: -1 });
   }
   // ----------------------------------------------- stage 2: the overload
   // hidden till then: armour flaps on the hull sides that swing open over
@@ -260,6 +305,7 @@ export function createSpider() {
     inv.copy(group.matrixWorld).invert();
     const spread = 1 + limp * 0.5; // slumped: the feet slide out
     const gy = group.position.y;
+    const k0 = group.scale.x; // (world distances: the small one's steps are small)
     // which pair steps next: the one whose feet are furthest behind
     if (stepGroup < 0 && limp < 0.05) {
       let worst = -1;
@@ -269,12 +315,16 @@ export function createSpider() {
         restW.set(L.foot[0] * spread, 0, L.foot[1] * spread);
         group.localToWorld(restW).setY(gy);
         const d = L.plant.distanceTo(restW);
+        if (d > 3.2 * k0 && !(L.stepT >= 0)) {
+          L.plant.copy(restW); // (way off: just put down there)
+          continue;
+        }
         if (d > need) {
           need = d;
           worst = i;
         }
       }
-      if (need > 0.7) {
+      if (need > 0.7 * k0) {
         stepGroup = legs[worst].phase > 1 ? 1 : 0;
         for (const L of legs) {
           if ((L.phase > 1 ? 1 : 0) !== stepGroup) continue;
@@ -294,12 +344,12 @@ export function createSpider() {
       restW.set(L.foot[0] * spread, 0, L.foot[1] * spread);
       group.localToWorld(restW).setY(gy);
       if (!L.plant || limp > 0.05) L.plant = restW.clone(); // (first frame; slumped: the feet just go)
-      else if (L.stepT < 0 && L.plant.distanceTo(restW) > 3.2) L.plant.copy(restW); // (far too far behind: a dash)
+      else if (L.stepT < 0 && L.plant.distanceTo(restW) > 3.2 * k0) L.plant.copy(restW); // (far too far behind: a dash; or just put down)
       if (L.stepT >= 0 && L.to) {
         L.stepT += dt * (3.2 + speed * 2.5);
         const k = Math.min(1, L.stepT);
         curW.lerpVectors(L.from, L.to, k);
-        curW.y = gy + Math.sin(Math.PI * k) * 0.7;
+        curW.y = gy + Math.sin(Math.PI * k) * 0.7 * k0;
         if (k >= 1) {
           L.plant.copy(L.to);
           L.stepT = -1;
