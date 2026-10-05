@@ -22,7 +22,15 @@ const K = {
   ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
 };
+// A run's part progress (parts found, their levels and stars, what each
+// level has given, the loadouts) is held in memory while the level's being
+// played, and only written when the level properly ends (won or lost):
+// restarting, quitting from the pause menu, or closing the game drops it.
+const STAGED = [K.owned, K.partLevels, K.stars, K.levelFinds, K.tiers];
+const staged = (key) => STAGED.includes(key) || key.startsWith(K.loadout);
+let stage = null; // key -> value, while a run's open
 function read(key, fallback) {
+  if (stage && staged(key) && key in stage) return structuredClone(stage[key]);
   try {
     const v = localStorage.getItem(key);
     return v == null ? fallback : JSON.parse(v);
@@ -31,6 +39,10 @@ function read(key, fallback) {
   }
 }
 function write(key, value) {
+  if (stage && staged(key)) {
+    stage[key] = structuredClone(value);
+    return;
+  }
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -39,6 +51,20 @@ function write(key, value) {
 }
 
 export const save = {
+  // a run's part progress: held (beginRun), written (commitRun: the level
+  // ended properly) or dropped (discardRun)
+  beginRun() {
+    stage = {};
+  },
+  commitRun() {
+    if (!stage) return;
+    const st = stage;
+    stage = null;
+    for (const [k, v] of Object.entries(st)) write(k, v);
+  },
+  discardRun() {
+    stage = null;
+  },
   bank: () => read(K.bank, 0) | 0,
   addBank(n) {
     const total = save.bank() + n;

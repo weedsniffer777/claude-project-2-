@@ -150,6 +150,10 @@ const CSS = `
 /* the first part ever found: its box lit up, a spotlight on it, Equip pulsing */
 .fit .msg.teach { position: relative; z-index: 4; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 0 0 0 200vmax rgba(4, 3, 6, 0.55); }
 .fit .msg.teach .teachline { color: #b6ffc4; }
+.fit .btn.bigbtn.teach { z-index: 6; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 0 0 0 200vmax rgba(4, 3, 6, 0.55); animation: fitTeachGlow 0.8s steps(2) infinite; overflow: visible; }
+@keyframes fitTeachGlow { 50% { filter: brightness(1.25); } }
+.fit .bigbtn .contnote { position: absolute; left: 50%; bottom: calc(100% + 16px); transform: translateX(-50%); width: max-content; max-width: min(360px, 80vw); padding: 8px 12px 9px; font: 400 14px/1.3 'Pixelify Sans', monospace; text-transform: none; color: #b6ffc4; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go); pointer-events: none; }
+.fit .bigbtn .contnote::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -8px; width: 16px; height: 10px; background: var(--go); clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .fit .msg.teach .equip { animation: fitTeach 0.8s steps(2) infinite; }
 @keyframes fitTeach { 50% { filter: brightness(1.3); box-shadow: 0 0 0 2px #000, 0 0 14px 3px #6be08a; } }
 .fit .btn { padding: 8px 14px 9px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
@@ -583,6 +587,15 @@ export function createFitting({ renderer, cursor }) {
       // checkpoint's Continue)
       if (center) root.append(b);
       else btns.append(b);
+      // the first time through a checkpoint, once the part's on: Continue lit
+      // up, a note saying what it does
+      if (center && o.teachContinue) {
+        b.classList.add('teach');
+        const note = document.createElement('div');
+        note.className = 'contnote';
+        note.textContent = 'Press Continue when you\'re ready to move on to the next part of the level!';
+        b.append(note);
+      }
     }
   }
 

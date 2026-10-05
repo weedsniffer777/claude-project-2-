@@ -113,6 +113,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   // ------------------------------------------------------- level loading
   function loadLevel(id) {
+    // a fresh run: anything the last one found and didn't finish with is dropped
+    save.discardRun();
+    save.beginRun();
     enemies?.dispose();
     levelDef = LEVELS.find((l) => l.id === id) || LEVELS[0];
     scene = new THREE.Scene();
@@ -610,6 +613,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         }
       }
       pickups.collectAll(collect);
+      save.commitRun(); // the level's done: what it found is kept
       hud.clearPrompt();
       hud.setMarker(null);
       hud.setSpot(null);
@@ -828,7 +832,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           () => revive(),
           '',
           [],
-          onExit ? ['Exit', () => (bank(Math.floor(run.scrap / 2)), onExit())] : null,
+          onExit ? ['Exit', () => (save.commitRun(), bank(Math.floor(run.scrap / 2)), onExit())] : null,
           null,
         );
         setCursor();
@@ -836,6 +840,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       const kept = Math.floor(run.scrap / 2);
       const total = bank(kept);
+      save.commitRun(); // (destroyed: the level's over, the parts found are kept)
       hud.showEnd(
         'lose',
         'Destroyed',
@@ -1702,6 +1707,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
             exit: onExit
               ? () => {
                   setPaused(false);
+                  save.discardRun(); // quitting mid-level: its finds go too
                   onExit();
                 }
               : null,
@@ -2063,6 +2069,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       owned: save.owned(),
       highlight: st.found,
       teachEquip: st.teach && !st.improved && !run.parts.includes(st.found),
+      teachContinue: st.teach && (st.improved || run.parts.includes(st.found)),
       improved: st.improved, // its icon glows and the new star flies on (the first time only)
       buttons: [['Continue', () => leaveDepot(), true, true]],
       onSet(list, added) {
@@ -2415,6 +2422,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       keys.clear();
       trigger = false;
       hud.unmount();
+      save.discardRun(); // (left without finishing: nothing kept)
       fitting.hide();
       fitting.el.remove();
       window.removeEventListener('pointerup', onWinUp);
