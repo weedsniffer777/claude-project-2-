@@ -22,7 +22,7 @@ const DEFAULTS = {
   showFps: false,
   keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR' },
   // touch
-  aimAssist: true, // FIRE aims at the nearest machine
+  aimAssist: true, // touch: lock onto a machine (again after each reload); off: drag to aim
   buttons: 'normal', // 'small' | 'normal' | 'large'
   hand: 'right', // 'right': stick left, FIRE right; 'left': mirrored
   stick: 1, // stick sensitivity
@@ -212,7 +212,7 @@ export function createSettingsMenu({ touch = () => false } = {}) {
 
     if (touch()) {
       box.append(head('Touch controls'));
-      box.append(row('Aim assist', toggle(s.aimAssist, (v) => setSetting('aimAssist', v)), 'FIRE aims at the nearest enemy'));
+      box.append(row('Aiming', dropdown(s.aimAssist ? 'assist' : 'manual', [['assist', 'Aim assist'], ['manual', 'Manual aim']], (v) => setSetting('aimAssist', v === 'assist')), s.aimAssist ? 'Locks onto an enemy, and a new one after each reload. Drag to aim yourself.' : 'Drag on the screen to aim; FIRE shoots there.'));
       box.append(row('Button size', dropdown(s.buttons, [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], (v) => setSetting('buttons', v))));
       box.append(row('Layout', dropdown(s.hand, [['right', 'Stick left, fire right'], ['left', 'Stick right, fire left']], (v) => setSetting('hand', v))));
       box.append(row('Stick sensitivity', dropdown(s.stick, [[0.7, 'Low'], [1, 'Normal'], [1.35, 'High']], (v) => setSetting('stick', +v))));

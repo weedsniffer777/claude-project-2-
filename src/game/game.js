@@ -1570,6 +1570,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let trigger = false;
   // Legendary Optics (Spotter): a reload done, the view opens right out for a moment
   function ranging() {
+    run.relock = true; // (touch aim assist: a fresh lock after every reload)
     if (!stats.rangeBurst || run.over || run.mode !== 'field') return;
     run.rangeT = 3;
     pulse('optics');
@@ -1738,7 +1739,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   }
 
   let fireTouch = null; // the finger on FIRE
-  let manualAim = 0; // seconds the touch aim holds after the finger lifts
+  let manualAim = false; // touch: aimed by hand (held till the next reload)
   let autoTarget = null;
   const onMove = (e) => {
     if (e.pointerType === 'touch') {
@@ -1795,7 +1796,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         aimAt(e.clientX, e.clientY);
         if (run.arty > 0) strikeOnAim = true; // the spot tapped, once the aim ray's found it
         else if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
-        else aimTouch = e.pointerId; // just aiming (FIRE fires)
+        else {
+          aimTouch = e.pointerId; // just aiming (FIRE fires)
+          manualAim = true;
+        }
       }
       return;
     }
@@ -1816,10 +1820,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const onUp = (e) => {
     if (e.pointerType === 'mouse' && e.button === 0) trigger = false;
     if (e.pointerId === pierceTouch) firePierce();
-    if (e.pointerId === aimTouch) {
-      aimTouch = null;
-      manualAim = 1.5;
-    }
+    if (e.pointerId === aimTouch) aimTouch = null;
     if (e.pointerId === fireTouch) {
       trigger = false;
       fireTouch = null;
@@ -1837,14 +1838,18 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType !== 'touch') client = null;
   };
 
-  // touch, with no finger aiming: the turret takes the nearest machine in
-  // view (sticking with the one it has while it's there), else straight on
-  function touchAim(dt) {
-    if (aimTouch !== null || pierceTouch !== null || run.arty > 0 || run.mode !== 'field' || !settings().aimAssist) return;
-    if (manualAim > 0) {
-      manualAim -= dt;
-      return;
+  // touch aim assist: the turret locks onto a machine (the nearest in view)
+  // and stays on it till it's gone, then takes the next; after each reload
+  // it picks again (the nearest then). Aiming by hand holds till the next
+  // reload. Manual aim (Settings): only the finger aims.
+  function touchAim() {
+    if (!settings().aimAssist || pierceTouch !== null || run.arty > 0 || run.mode !== 'field') return;
+    if (run.relock) {
+      run.relock = false;
+      autoTarget = null;
+      if (aimTouch === null) manualAim = false;
     }
+    if (aimTouch !== null || manualAim) return;
     const reach = ((camera.top - camera.bottom) / camera.zoom) * 0.62;
     const ok = (e) => e?.alive && !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach;
     if (!ok(autoTarget)) {
@@ -2808,7 +2813,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       enemies.setHover(outlined);
       hud.showReticle(!!client && !run.over && run.mode === 'field');
-      if (touch) touchAim(realDt);
+      if (touch) touchAim();
       if (client) {
         const reloading = stats.mag && run.magT > 0;
         if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME)); // the ring counts down the aim

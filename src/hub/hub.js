@@ -171,7 +171,7 @@ const CSS = `
 .base-gear { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; align-items: center; padding: 7px 12px 8px; border: 0; pointer-events: auto; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
 .base-gear i { width: 14px; height: 14px; background: #f1e9d8; clip-path: polygon(40% 0, 60% 0, 62% 16%, 78% 8%, 92% 22%, 84% 38%, 100% 40%, 100% 60%, 84% 62%, 92% 78%, 78% 92%, 62% 84%, 60% 100%, 40% 100%, 38% 84%, 22% 92%, 8% 78%, 16% 62%, 0 60%, 0 40%, 16% 38%, 8% 22%, 22% 8%, 38% 16%); }
 .base-gear:hover { filter: brightness(1.2); }
-@media (max-width: 600px) { .base-gear span { display: none; } }
+@media (max-width: 600px) { .base-gear span { display: none; } .base-promo img { width: 80px; height: 47px; } .base-promo b { max-width: 110px; font-size: 9px; } }
 .base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; text-align: center; }
 /* phones: nothing past the screen's edges; overlays scroll instead */
 .base-news, .base-menu { max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; }
@@ -1510,9 +1510,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
       // camera: the whole base, leaning a little toward the crewman; eased
       // in close on an open room
-      view += ((open ? open.view : VIEW_FAR) - view) * (1 - Math.exp(-dt * 4));
+      // (on a tall screen the whole base is fitted across its width)
+      const far = aspect < 1.2 ? Math.max(VIEW_FAR, 52 / aspect / Math.min(1.6, 1.2 / aspect)) : VIEW_FAR;
+      view += ((open ? open.view : far) - view) * (1 - Math.exp(-dt * 4));
       if (open) camWant.copy(open.focus);
-      else camWant.copy(BASE_CENTER).lerp(me, aspect < 1.2 ? 0.7 : 0.15);
+      else camWant.copy(BASE_CENTER).lerp(me, 0.15);
       camWant.setY(0.8);
       camTarget.lerp(camWant, 1 - Math.exp(-dt * 4));
       const viewH = aspect < 1.2 ? view * Math.min(1.6, 1.2 / aspect) : view;
