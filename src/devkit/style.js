@@ -68,6 +68,20 @@ const CSS = `
 .dk-setting select option { color: #111; }
 .dk-menu button span { font: 400 12px/1.35 var(--dk-font-body); text-transform: none; letter-spacing: 0; opacity: 0.8; }
 .dk-panel [hidden], .dk-menu[hidden] { display: none !important; }
+/* always reachable: above the game's own layers, scrolling if it's taller
+   than the screen, and compact on small screens */
+.dk-button, .dk-menu { z-index: 120; }
+.dk-menu { max-height: calc(100dvh - 50px - env(safe-area-inset-top, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.dk-menu select, .dk-menu option { -webkit-user-select: auto; user-select: auto; }
+@media (max-height: 520px), (max-width: 520px) {
+  .dk-menu { width: min(220px, calc(100vw - 20px)); padding: 6px; top: calc(34px + env(safe-area-inset-top, 0px)); }
+  .dk-menu h2 { margin: 2px 2px 4px; font-size: 10px; }
+  .dk-setting { margin: 0 2px 6px; font-size: 10px; gap: 3px; }
+  .dk-setting select { padding: 4px 5px; font-size: 12px; }
+  .dk-menu button { padding: 6px 8px; font-size: 11px; gap: 2px; }
+  .dk-menu button span { display: none; }
+  .dk-button { top: calc(6px + env(safe-area-inset-top, 0px)); right: 6px; }
+}
 .dk-fps { position: fixed; z-index: 30; right: 6px; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); padding: 2px 6px; border-radius: 4px;
   background: var(--dk-panel); color: var(--dk-muted); font: 600 10px/1.3 var(--dk-font-label); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; pointer-events: none; }
 .dk-ammo { position: fixed; left: 18px; bottom: calc(64px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px; background: #1d1b1ecc; box-shadow: 0 0 0 2px #000; pointer-events: none; }
