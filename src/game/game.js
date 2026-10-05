@@ -2848,6 +2848,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.update(realDt, camera, canvas);
     },
     loadLevel,
+    // (the phone's been turned upright: stop and show the pause menu)
+    pause() {
+      if (!run.paused && !run.over && run.mode === 'field') setPaused(true);
+    },
     setQuality({ shadow, lamps: n }) {
       quality.shadow = shadow;
       quality.lamps = n;

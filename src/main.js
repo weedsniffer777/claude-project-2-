@@ -272,6 +272,34 @@ window.addEventListener('keydown', (e) => {
   else if (mode === viewer) setMode(game);
 });
 
+// Landscape only on phones: held upright, the game stops (the pause menu,
+// in a run) and a "turn your phone" card shows over it, darkened behind
+{
+  const st = document.createElement('style');
+  st.textContent = `
+.rotate { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(6, 5, 8, 0.78); color: #f1e9d8; text-align: center; font: 400 15px/1.35 'Pixelify Sans', monospace; }
+.rotate[hidden] { display: none; }
+.rotate .card { display: grid; gap: 14px; justify-items: center; padding: 20px 22px 22px; max-width: 300px; background: rgba(12, 11, 13, 0.94); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 4px 4px 0 4px #000; }
+.rotate b { font: 400 18px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: #ffb347; font-weight: 400; }
+.rotate .ph { width: 40px; height: 66px; border: 4px solid #f1e9d8; box-shadow: 0 0 0 2px #000; position: relative; animation: rotPhone 2.2s steps(1) infinite; }
+.rotate .ph::after { content: ''; position: absolute; left: 50%; bottom: 4px; width: 8px; height: 4px; margin-left: -4px; background: #f1e9d8; }
+@keyframes rotPhone { 0%, 35% { transform: rotate(0deg); } 45%, 100% { transform: rotate(-90deg); } }
+`;
+  document.head.append(st);
+  const el = document.createElement('div');
+  el.className = 'rotate';
+  el.hidden = true;
+  el.innerHTML = '<div class="card"><i class="ph"></i><b>Turn your phone</b><span>This game plays sideways. Rotate your phone to landscape to carry on.</span></div>';
+  document.body.append(el);
+  const upright = matchMedia('(orientation: portrait) and (pointer: coarse)');
+  const check = () => {
+    el.hidden = !upright.matches;
+    if (upright.matches && mode === game) game.pause();
+  };
+  upright.addEventListener('change', check);
+  setTimeout(check, 0);
+}
+
 // straight into level 1 until it's been beaten once; after that, the base
 const beatenOne = save.cleared().some((k) => k === 'avenue' || k === 'avenue:hard');
 setMode(params.get('devkit') === 'viewer' ? viewer : params.has('base') || (beatenOne && !params.has('level')) ? hub : game);

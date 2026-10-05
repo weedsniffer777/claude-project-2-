@@ -985,7 +985,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     <div class="base-brief" hidden></div>
     <div class="base-news panel" hidden></div>
     <div class="base-promo panel" hidden><span class="t">New tank</span><img alt=""><b>Beat level 2 for a new tank!</b><i></i></div>
-    <div class="base-hint panel">${matchMedia('(pointer: coarse)').matches ? 'Tap a room to open it, or tap the floor to walk' : 'Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk'}</div>
+    <div class="base-hint panel" ${matchMedia('(pointer: coarse)').matches ? 'hidden' : ''}>Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
   const tags = new Map(ROOMS.map((r) => [r.id, root.querySelector(`.base-tag[data-id="${r.id}"]`)]));
@@ -1523,7 +1523,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       // camera: the whole base, leaning a little toward the crewman; eased
       // in close on an open room
       // (on a tall screen the whole base is fitted across its width)
-      const far = aspect < 1.2 ? Math.max(VIEW_FAR, 52 / aspect / Math.min(1.6, 1.2 / aspect)) : VIEW_FAR;
+      const far = aspect < 1.2 ? Math.max(VIEW_FAR, 36 / aspect / Math.min(1.6, 1.2 / aspect)) : VIEW_FAR;
       view += ((open ? open.view : far) - view) * (1 - Math.exp(-dt * 4));
       if (open) camWant.copy(open.focus);
       else camWant.copy(BASE_CENTER).lerp(me, 0.15);
