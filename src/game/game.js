@@ -1905,10 +1905,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (pad) {
         const at = new THREE.Vector3(pad.x, 1.2, pad.z);
         combat.glow.flash(at, 0xffffff, 0.4, 2.4, 0.15);
-        combat.glow.flash(at, 0xffc24a, 0.6, 3.2, 0.4);
-        combat.glow.ring(new THREE.Vector3(pad.x, 0.08, pad.z), 0xffc24a, 0.3, 2.6, 0.5);
-        combat.fx.burst(at, { count: 30, speed: 6, color: 0xffd36b, life: 0.6, size: 0.08, gravity: 6 });
-        hud.damage(at.clone().setY(2.4), 0, 'chain', `▲ +${(to || from) - from} Lv ★`);
+        combat.glow.flash(at, 0x6be08a, 0.6, 3.2, 0.4);
+        combat.glow.ring(new THREE.Vector3(pad.x, 0.08, pad.z), 0x6be08a, 0.3, 2.6, 0.5);
+        combat.fx.burst(at, { count: 30, speed: 6, color: 0xa8f5b8, life: 0.6, size: 0.08, gravity: 6 });
+        hud.damage(at.clone().setY(2.4), 0, 'heal', `▲ +${(to || from) - from} Lv ★`); // (green: gold is for Legendary)
       }
     } else save.own(id);
     if (!run.found.includes(id)) run.found.push(id);

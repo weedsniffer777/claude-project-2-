@@ -81,7 +81,6 @@ const CSS = `
   color: #141416; background: #f1e9d8; box-shadow: 0 0 0 2px #000; }
 .base-brief .node.open { background: var(--amber); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #ffb347aa; }
 .base-brief .node.locked { background: #3a3b3f; color: #8a8a8e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; }
-.base-brief .node.open.easydone { background: #e0463a; color: #fff; box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 0 0 16px #ff3b2faa; }
 .base-brief .node.open.alldone { background: #5d7fa8; color: #e8eef6; box-shadow: 0 0 0 2px #000, 0 0 0 4px #b9c6d6; }
 .base-brief .node.alldone::after { content: ''; position: absolute; right: -9px; top: -9px; width: 16px; height: 16px; background: #6be08a; box-shadow: 0 0 0 2px #000; clip-path: polygon(14% 52%, 30% 36%, 42% 50%, 72% 16%, 88% 32%, 42% 82%); }
 .base-brief .node.sel { outline: 3px solid #f1e9d8; outline-offset: 3px; }
@@ -1042,7 +1041,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     selLevel = [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${hardNext(z) ? ' easydone' : allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : ''}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));

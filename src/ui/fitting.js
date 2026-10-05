@@ -90,13 +90,13 @@ const CSS = `
 .fit .upbtn.evolve { background: #c77dff; box-shadow: 0 3px 0 #6a2fa0, 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; }
 @keyframes fitbounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); box-shadow: 0 8px 0 #6a2fa0, 0 0 0 2px #000, 0 0 16px #c77dffaa; } }
 .fit .upbtn .evtag { padding: 2px 5px; font-size: 9px; color: #fff; background: #6a2fa0; box-shadow: 0 0 0 2px #000; }
-.fit .stb { position: absolute; left: -6px; top: -8px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
+.fit .stb { position: absolute; left: -6px; top: -8px; z-index: 2; padding: 2px 3px; font: 400 9px/1 'Silkscreen', monospace; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; pointer-events: none; white-space: nowrap; }
 /* an improvement just picked: a quick level-up: a white flash and glow,
    sparks flying up off it, and the new star dropping into the corner */
 .fit .improved { animation: impFlash 0.5s ease-out both; }
-@keyframes impFlash { 0% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 30px 10px #ffffff; filter: brightness(2.2); } 100% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 10px 2px #ffc24a88; filter: none; } }
+@keyframes impFlash { 0% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #fff, 0 0 30px 10px #ffffff; filter: brightness(2.2); } 100% { box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 10px 2px #6be08a88; filter: none; } }
 .fit .improved::before { content: ''; position: absolute; left: 50%; bottom: 30%; width: 4px; height: 4px; z-index: 3; pointer-events: none; background: #fff;
-  box-shadow: -18px 0 #ffc24a, 14px -4px #fff, -8px -6px #ffd36b, 20px 2px #ffc24a, 4px -10px #fff, -24px -2px #fff, 10px 4px #ffd36b;
+  box-shadow: -18px 0 #6be08a, 14px -4px #fff, -8px -6px #a8f5b8, 20px 2px #6be08a, 4px -10px #fff, -24px -2px #fff, 10px 4px #a8f5b8;
   animation: impSparks 0.6s ease-out 0.05s both; }
 @keyframes impSparks { 0% { transform: translate(-50%, 0) scale(1); opacity: 1; } 100% { transform: translate(-50%, -46px) scale(0.6); opacity: 0; } }
 .fit .improved .stb { animation: starDrop 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) 0.25s both; }
@@ -266,6 +266,12 @@ export function createFitting({ renderer, cursor }) {
       justClosed = owner && owner.contains(e.target) ? owner : null;
     }
   }, true); // (capture: the screen's own panels stop clicks bubbling, and a click on any of them closes it too)
+  // asking which slot to replace: a click anywhere but on a slot calls it off
+  document.addEventListener('pointerdown', (e) => {
+    if (!replacing || root.hidden || e.target.closest?.('.fit .slots .slot')) return;
+    replacing = null;
+    render();
+  }, true);
   // The storage's controls: a sort menu, and a filter button opening a
   // checklist (tanks one column, part kinds the other). Our own menus,
   // closed by a click anywhere else.
