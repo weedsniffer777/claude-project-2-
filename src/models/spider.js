@@ -1,4 +1,4 @@
-// The siege mech: level 4's boss. A low, wide, four-legged walking tank:
+// The mech: level 4's boss. A low, wide, four-legged walking tank:
 // a long armoured hull slung low between four splayed legs (heavy hip
 // hubs, short thighs out and up to the knee, armoured shins down to broad
 // feet, struts between), an angular turret on top with a very long gun
@@ -204,10 +204,12 @@ export function createSpider() {
   engine.position.set(-2.65, 0.15, 0);
   over.add(engine);
   put(engine, box(0.5, 0.7, 1.3, C.joint, { r: 0.04 }), 0.1, 0, 0);
+  const cores = [];
   for (const z of [-0.35, 0.35]) {
     put(engine, cyl(0.26, 0.4, C.dark, { axis: 'x', seg: 12 }), -0.25, 0, z);
     const core = put(engine, cyl(0.2, 0.05, VENT, { axis: 'x', seg: 12, glow: true }), -0.46, 0, z);
     vents.push(core);
+    cores.push(core);
   }
   const flame = new THREE.Group();
   flame.position.set(-0.5, 0, 0);
@@ -221,6 +223,9 @@ export function createSpider() {
   flame.traverse((m) => m.isMesh && glowy.push(m));
   const lights = [eye, lamp, ...cells];
   let limp = 0; // 0 standing .. 1 slumped on its belly, legs splayed
+  let limpV = 0; // (it falls: gravity, a bounce)
+  let slump = 0; // the lean it lands with
+  let thud = false;
   let dark = false; // its lights out (flickering)
   let opened = 0; // the overload parts out: 0 .. 1
 
@@ -244,16 +249,65 @@ export function createSpider() {
     seg.lookAt(group.localToWorld(bW.copy(b)));
   };
   const inv = new THREE.Matrix4();
-  function poseLegs(lift) {
+  // The feet: each planted where it last stood (in the world), and stepped
+  // to a new spot only when the body has moved or turned too far from it,
+  // the diagonal pairs taking turns, each step a quick arc. No sliding.
+  const restW = new THREE.Vector3();
+  const curW = new THREE.Vector3();
+  let stepGroup = -1; // which diagonal pair is mid-step (0 or 1), -1 none
+  function poseLegs(dt, speed = 0) {
     group.updateWorldMatrix(true, true);
     inv.copy(group.matrixWorld).invert();
+    const spread = 1 + limp * 0.5; // slumped: the feet slide out
+    const gy = group.position.y;
+    // which pair steps next: the one whose feet are furthest behind
+    if (stepGroup < 0 && limp < 0.05) {
+      let worst = -1;
+      let need = 0;
+      for (const [i, L] of legs.entries()) {
+        if (!L.plant) continue;
+        restW.set(L.foot[0] * spread, 0, L.foot[1] * spread);
+        group.localToWorld(restW).setY(gy);
+        const d = L.plant.distanceTo(restW);
+        if (d > need) {
+          need = d;
+          worst = i;
+        }
+      }
+      if (need > 0.7) {
+        stepGroup = legs[worst].phase > 1 ? 1 : 0;
+        for (const L of legs) {
+          if ((L.phase > 1 ? 1 : 0) !== stepGroup) continue;
+          restW.set(L.foot[0] * spread, 0, L.foot[1] * spread);
+          group.localToWorld(restW).setY(gy);
+          L.from = L.plant.clone();
+          // a little past the rest spot, the way it's going
+          L.to = restW.clone().addScaledVector(restW.clone().sub(L.plant), 0.35);
+          L.stepT = 0;
+        }
+      }
+    }
+    let stepping = false;
     for (const L of legs) {
       hipW.set(L.hip[0], L.hip[1], L.hip[2]);
       body.localToWorld(hipW).applyMatrix4(inv);
-      const s = Math.sin(walk + L.phase);
-      const c = Math.cos(walk + L.phase);
-      const spread = 1 + limp * 0.35; // slumped: the feet slide out
-      footW.set(L.foot[0] * spread + s * 0.55 * lift, Math.max(0, c) * 0.5 * lift + 0.05, L.foot[1] * spread);
+      restW.set(L.foot[0] * spread, 0, L.foot[1] * spread);
+      group.localToWorld(restW).setY(gy);
+      if (!L.plant || limp > 0.05) L.plant = restW.clone(); // (first frame; slumped: the feet just go)
+      else if (L.stepT < 0 && L.plant.distanceTo(restW) > 3.2) L.plant.copy(restW); // (far too far behind: a dash)
+      if (L.stepT >= 0 && L.to) {
+        L.stepT += dt * (3.2 + speed * 2.5);
+        const k = Math.min(1, L.stepT);
+        curW.lerpVectors(L.from, L.to, k);
+        curW.y = gy + Math.sin(Math.PI * k) * 0.7;
+        if (k >= 1) {
+          L.plant.copy(L.to);
+          L.stepT = -1;
+          L.to = null;
+        } else stepping = true;
+      } else curW.copy(L.plant);
+      footW.copy(curW).applyMatrix4(inv);
+      footW.y += 0.05;
       // the knee: up and out between them
       const d = hipW.distanceTo(footW);
       const a = Math.min(THIGH, (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d));
@@ -269,6 +323,7 @@ export function createSpider() {
       L.knee.quaternion.copy(L.thigh.quaternion);
       lay(L.shin, kneeW, footW);
     }
+    if (!stepping) stepGroup = -1;
   }
   poseLegs(0);
 
@@ -283,7 +338,25 @@ export function createSpider() {
     walk += dt * (1.4 + speed * 3.4);
     const lift = Math.min(1, speed * 1.6);
     // ctx.limp / ctx.dark / ctx.open / ctx.dash: stage 2's overload and its dashes
-    limp += ((ctx.limp ? 1 : 0) - limp) * Math.min(1, dt * (ctx.limp ? 3 : 2));
+    // going limp: it drops like a dead weight, bounces, settles crooked;
+    // coming back: hauled up slowly
+    if (ctx.limp) {
+      limpV += dt * 16;
+      limp += limpV * dt;
+      if (limp >= 1) {
+        limp = 1;
+        if (!thud) {
+          thud = true;
+          slump = (Math.random() < 0.5 ? -1 : 1) * (0.1 + Math.random() * 0.06);
+        }
+        limpV = Math.abs(limpV) > 1.2 ? -limpV * 0.32 : 0;
+      }
+    } else {
+      limpV = 0;
+      thud = false;
+      limp = Math.max(0, limp - dt * 0.9);
+      slump *= Math.max(0, 1 - dt * 1.5);
+    }
     opened = Math.min(1, ctx.open ? opened + dt * 2 : opened);
     over.visible = opened > 0;
     for (const f of flaps) f.hinge.rotation.x = -f.s * opened * 1.9;
@@ -294,13 +367,13 @@ export function createSpider() {
       dark = !!ctx.dark;
       for (const l of lights) l.visible = !dark;
     }
-    body.position.y = BODY_Y - limp * 1.0 + Math.abs(Math.sin(walk)) * 0.08 * lift + Math.sin(t * 1.3) * 0.03 * (1 - limp);
-    body.rotation.x = limp * 0.06;
+    body.position.y = BODY_Y - limp * 1.15 + Math.abs(Math.sin(walk)) * 0.08 * lift + Math.sin(t * 1.3) * 0.03 * (1 - limp);
+    body.rotation.x = limp * 0.06 + slump * limp;
     body.rotation.z = Math.sin(walk * 2) * 0.015 * lift;
     let d = (ctx.aimYaw ?? 0) - turret.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     turret.rotation.y += d * Math.min(1, dt * 2.2);
-    gun.rotation.z = THREE.MathUtils.lerp(gun.rotation.z, ctx.aimPitch ?? 0, Math.min(1, dt * 4));
+    gun.rotation.z = THREE.MathUtils.lerp(gun.rotation.z, limp > 0.3 ? -0.32 : ctx.aimPitch ?? 0, Math.min(1, dt * (limp > 0.3 ? 9 : 4))); // (the gun flops down with it)
     recoil = Math.max(recoil, ctx.recoil || 0);
     recoil = Math.max(0, recoil - dt * 2.5);
     gun.position.x = 1.0 - recoil * 0.45;
@@ -310,7 +383,7 @@ export function createSpider() {
     muzzleGlow.scale.setScalar(0.4 + charge * 1.4);
     for (const g of podGlow) g.visible = (ctx.rockets || 0) > 0.02 && Math.sin(t * 24) > -0.3;
     eye.scale.set(1, 1, 0.8 + Math.sin(t * 6) * 0.2 + charge * 0.6);
-    poseLegs(lift);
+    poseLegs(dt, speed);
     if (flash > 0) {
       flash -= dt;
       if (flash <= 0) group.traverse((m) => m.isMesh && flashMats.has(m) && (m.material = flashMats.get(m)));
@@ -373,10 +446,15 @@ export function createSpider() {
     podN++;
     return m.getWorldPosition(new THREE.Vector3());
   }
+  // the dash engine's two nozzles, in the world
+  function engineNozzles() {
+    group.updateWorldMatrix(true, true);
+    return cores.map((c) => c.getWorldPosition(new THREE.Vector3()));
+  }
   function eyeWorld() {
     group.updateWorldMatrix(true, true);
     return lamp.getWorldPosition(new THREE.Vector3());
   }
 
-  return { group, update, hitFlash, kill, setOutline, muzzle, rocketMuzzle, eyeWorld, events: [] };
+  return { group, update, hitFlash, kill, setOutline, muzzle, rocketMuzzle, eyeWorld, engineNozzles, events: [] };
 }

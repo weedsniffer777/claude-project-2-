@@ -1,6 +1,6 @@
 // Level 4: the destroyed stadium, on a grey winter afternoon. A short
 // level: one more city street to a checkpoint, a huge empty plaza, and the
-// ruined stadium standing in it, the siege mech inside.
+// ruined stadium standing in it, the mech inside.
 //
 // Layout (world +X runs bottom-left to top-right on screen):
 //  1 The approach: a street of panel blocks and works buildings. Dogs,
@@ -11,7 +11,7 @@
 //    round (deep on the far side under a concourse and a broken canopy,
 //    shallow on the near side), moss and snow on the steps, a few seats
 //    left, whole sections collapsed. In through the west gate onto the
-//    churned-up ground inside; the gate shuts and the siege mech comes.
+//    churned-up ground inside; the gate shuts and the mech comes.
 //    Kill it; the east gate opens; out and done.
 import * as THREE from 'three';
 import { addDawn } from '../render/setup.js';
@@ -745,7 +745,7 @@ function buildStadium(scene) {
     if (text) api.prompt('Zone clear', text, { go: true });
     api.arrow(shack.door, 'Checkpoint');
   }
-  const PARTS4 = ['rangefinder', 'twinmg', 'optics', 'autoloader', 'he', 'era', 'afterburner', 'dozer'];
+  const PARTS4 = ['rangefinder', 'twinmg', 'optics']; // (its own parts only: campaign.js rewards)
   // where the tank can go: on the plaza, out to just past its barricade
   // lines (the barricades and the stands hold it, nothing invisible);
   // inside the stadium, its walls
@@ -822,7 +822,7 @@ function buildStadium(scene) {
     }
   }
 
-  // 2: the plaza, the stadium, the siege mech
+  // 2: the plaza, the stadium, the mech
   function startSector2(api) {
     S.sector = 1;
     go(0);
@@ -851,9 +851,9 @@ function buildStadium(scene) {
           api.arrow(null);
           if (api.enemiesAlive) api.clearEnemies();
           S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI, arena: (x, z) => inPill(x, z, 3.2) });
-          api.boss(S.boss, 'Siege mech');
-          api.objective('Destroy the siege mech');
-          api.prompt('Siege mech', 'A <b>siege mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
+          api.boss(S.boss, 'Mech');
+          api.objective('Destroy the mech');
+          api.prompt('Mech', 'A <b>mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
           api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 4, S.boss.pos.z) : null)], r: 190 }, () => S.t > 2.4, { maxTime: 3, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
           S.waveT = 18;
           go(2);
@@ -864,7 +864,7 @@ function buildStadium(scene) {
         // camera on it, the HUD away, the world at full speed
         if (S.boss.alive && S.boss.stage2 === 'down' && !S.overload) {
           S.overload = true;
-          api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 3, S.boss.pos.z) : null)], r: 190 }, () => S.boss.stage2 !== 'down', { maxTime: 4.2, slow: false, hideHud: true, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
+          api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 3, S.boss.pos.z) : null)], r: 190 }, () => S.boss.stage2 !== 'down', { maxTime: 5.6, slow: false, hideHud: true, lock: true, camRate: 1.4, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
         }
         S.waveT -= dt;
         if (S.boss.alive && S.waveT <= 0 && api.enemiesAlive < 4) {
@@ -874,7 +874,7 @@ function buildStadium(scene) {
         if (!S.boss.alive) {
           api.clearEnemies();
           setGate(gates[1], true);
-          api.prompt('Siege mech destroyed', 'The east gate is opening. <b>Drive out!</b>', { go: true, seconds: 5 });
+          api.prompt('Mech destroyed', 'The east gate is opening. <b>Drive out!</b>', { go: true, seconds: 5 });
           setBounds(api, { maxX: END_X + 4 });
           api.arrow(new THREE.Vector3(E_IN + 6, 1.4, CZ), 'Exit');
           go(3);

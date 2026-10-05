@@ -91,8 +91,16 @@ function shadowFollower(light, offset, size) {
   const x = new THREE.Vector3(0, 1, 0).cross(z).normalize();
   const y = z.clone().cross(x);
   const q = new THREE.Vector3();
-  return (p) => {
-    const texel = (2 * size) / light.shadow.mapSize.x;
+  const cam = light.shadow.camera;
+  // k: how much further out than usual the view reaches (wide-view parts,
+  // a salvo's pull-back): the shadow box grows to keep up
+  return (p, k = 1) => {
+    const sz = size * Math.max(1, k);
+    if (Math.abs(cam.right - sz) > 0.01) {
+      Object.assign(cam, { left: -sz, right: sz, top: sz, bottom: -sz });
+      cam.updateProjectionMatrix();
+    }
+    const texel = (2 * sz) / light.shadow.mapSize.x;
     const a = Math.round(p.dot(x) / texel) * texel;
     const b = Math.round(p.dot(y) / texel) * texel;
     q.copy(x).multiplyScalar(a).addScaledVector(y, b).addScaledVector(z, p.dot(z));

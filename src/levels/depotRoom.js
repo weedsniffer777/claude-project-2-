@@ -339,14 +339,18 @@ export function buildDepotRoom(scene) {
       p.material.opacity = 0.3 * k;
     });
   }
-  // the sun through the broken roof: one strong shaft onto the floor
+  // the low sun through one of the back wall's high windows: a shaft from
+  // the window's pane down onto the floor
   {
     const dir = DUSK_SUN.clone().negate().normalize();
     const ground = (p) => {
       const t = p.y / -dir.y;
       return new THREE.Vector3(p.x + dir.x * t, 0.03, p.z + dir.z * t);
     };
-    const top = [new THREE.Vector3(11.5, H, -6), new THREE.Vector3(14.5, H, -6), new THREE.Vector3(14.5, H, -3.4), new THREE.Vector3(11.5, H, -3.4)];
+    // (the fifth window along: the wall's texture puts them every 2.6 from x 0.4, 4.1 to 5.4 up)
+    const wx = 0.4 + 2.6 * 4;
+    const wz = -D + 0.02;
+    const top = [new THREE.Vector3(wx, H - 1.0, wz), new THREE.Vector3(wx + 2, H - 1.0, wz), new THREE.Vector3(wx + 2, H - 2.3, wz), new THREE.Vector3(wx, H - 2.3, wz)];
     const bottom = top.map(ground);
     const pos = [];
     const col = [];

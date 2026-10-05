@@ -11,7 +11,7 @@
 import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
-import { tankPicture } from './fitting.js';
+import { tankPicture, tankStars } from './fitting.js';
 import { save } from '../game/save.js';
 import { tokenIconURL } from './icons.js';
 
@@ -323,7 +323,7 @@ export function createWorkshop({ renderer, cursor }) {
       b.style.setProperty('--tc', '#ffb347');
       const promo = tankPromotes(lvl);
       const can = lvl < TANK_MAX && (promo ? save.bank() >= tankPromoteCost(lvl).scraps && save.tokens() >= tankPromoteCost(lvl).tokens : save.bank() >= tankLevelCost(lvl));
-      b.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}"><span class="tn">Lv ${lvl}</span><span class="nm"></span>${can ? `<span class="can${promo ? ' ev' : ''}">${promo ? 'Can promote' : 'Can level up'}</span>` : ''}`;
+      b.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}">${tankStars(lvl)}<span class="tn">Lv ${lvl}</span><span class="nm"></span>${can ? `<span class="can${promo ? ' ev' : ''}">${promo ? 'Can promote' : 'Can level up'}</span>` : ''}`;
       b.querySelector('.nm').textContent = TANKS[id].name;
       b.addEventListener('click', () => {
         if (busy) return;
@@ -397,7 +397,6 @@ export function createWorkshop({ renderer, cursor }) {
   // a level: redrawn, the picture pops, sparks, "+1" by the level, the
   // bars grow
   function levelPop(redraw) {
-    busy = true;
     redraw();
     const frame = $('.detail .frame');
     frame.animate([{ transform: 'scale(1.1)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' });
@@ -413,8 +412,7 @@ export function createWorkshop({ renderer, cursor }) {
         .animate([{ transform: 'translateY(6px)', opacity: 0 }, { transform: 'translateY(-4px)', opacity: 1, offset: 0.25 }, { transform: 'translateY(-14px)', opacity: 0 }], { duration: 900, easing: 'ease-out' })
         .finished.then(() => plus.remove());
     }
-    growBars();
-    setTimeout(() => (busy = false), 250);
+    growBars(); // (no wait after a level: click away as fast as you like)
   }
   // an evolve (or a tank's tenth level): the full show
   function evolve(id, to, sub, redraw) {

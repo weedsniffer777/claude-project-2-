@@ -118,6 +118,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     level = levelDef.build(scene);
     colliders = level.colliders;
     blocks = level.blocks;
+    // far below everything, a plain ground going on past the level's own
+    // edges, for when the view's pulled right out
+    {
+      const skirt = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: level.skirt ?? 0x8e8f93 }));
+      skirt.position.y = -6;
+      skirt.renderOrder = -10;
+      scene.add(skirt);
+    }
     for (const m of partMeshes) m.removeFromParent();
     partMeshes.length = 0;
     if (run.dying) tankId = null; // it was blown apart: a fresh one
@@ -405,8 +413,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // frameK: how far it leans (1: all the way, for something far off)
     // slow: false runs the world at full speed (a scene playing out);
     // hideHud fades the HUD away till it's done
-    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false } = {}) {
-      run.spot = { until, t: 0, maxTime: Math.min(maxTime, slow ? 3 : 4.5), frame, frameK, slow }; // never holds the game up for long
+    // lock: the player can't let it go or act till it's done; camRate: how
+    // fast the camera glides over (and back)
+    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false, lock = false, camRate = 6 } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, slow ? 3 : 6), frame, frameK, slow, lock }; // never holds the game up for long
+      run.camRate = camRate;
       hud.setSpot(spec);
       if (hideHud) {
         run.spotHud = true;
@@ -486,6 +497,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // parts not found yet first; then ones you own, as improvements
       // (free levels), if they can still go up
       const have = save.owned();
+      // only the level's own parts, ever: each one once (found, or as an
+      // improvement if you already had it); once they're all had, a
+      // checkpoint just repairs
+      const pool = campaignLevel(levelDef.id)?.rewards;
+      if (pool) offers = offers.filter((id) => pool.includes(id));
       const already = save.levelFinds(levelDef.id); // already had from this level (as the part, or its improvement): once each, ever
       offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id) && !already.includes(id))].slice(0, count);
       hud.banner('Checkpoint reached');
@@ -938,11 +954,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // motion and the spotlight end at once, the camera holds a beat (so a
   // quick strike on the boss still lands where you see it), then swings back
   const letGoFrame = () => {
-    if (!run.spot?.frame || run.spot.hold != null) return;
+    if (!run.spot?.frame || run.spot.hold != null || run.spot.lock) return;
     run.spot.hold = 0.5;
     hud.setSpot(null);
   };
   function fire() {
+    if (run.spot?.lock) return; // (a scene playing: hands off)
     letGoFrame();
     if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
     queued = 0.7;
@@ -950,6 +967,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // Shift: boost. The battle tank's drums swing round and light, the light
   // tank's exhausts flare; either way it charges.
   function boost() {
+    if (run.spot?.lock) return; // (a scene playing: hands off)
     letGoFrame();
     if (!run.rockets || run.over || run.mode !== 'field' || run.locked || run.boostCd > 0) return;
     if (def.move === 'retreat') {
@@ -1021,6 +1039,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   // E: the tank's signature ability.
   function ability() {
+    if (run.spot?.lock) return; // (a scene playing: hands off)
     letGoFrame();
     if (!run.ability || run.over || run.mode !== 'field' || run.locked) return;
     if (def.ability === 'pierce') {
@@ -1040,6 +1059,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     return id && EQUIPMENT[id] && save.ownedEquipment().includes(id) ? id : null;
   }
   function equipment() {
+    if (run.spot?.lock) return; // (a scene playing: hands off)
     letGoFrame();
     const id = equipId();
     if (!id || !run.gun || run.over || run.mode !== 'field' || run.locked) return;
@@ -1262,6 +1282,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     for (const ms of missiles) if (ms.top) locks.push(ms.e?.alive ? { pos: ms.e.pos.clone().setY(mslAim(ms.e).y + 0.3), label: 'MSL LOCK', locked: false } : { pos: ms.aim.clone(), label: '', locked: false });
     hud.setLocks(locks);
   }
+  // the ground's height and tilt at a spot (markers lie along a ramp's slope)
+  const UP = new THREE.Vector3(0, 1, 0);
+  const spinQ = new THREE.Quaternion();
+  const tiltQ = new THREE.Quaternion();
+  const groundAt = (x, z) => (level.heightAt ? level.heightAt(x, z) : 0);
+  function groundTilt(x, z) {
+    const d = 0.8;
+    const n = new THREE.Vector3(-(groundAt(x + d, z) - groundAt(x - d, z)) / (2 * d), 1, -(groundAt(x, z + d) - groundAt(x, z - d)) / (2 * d)).normalize();
+    return tiltQ.setFromUnitVectors(UP, n);
+  }
   function callStrike(at) {
     const E = EQUIPMENT.artillery;
     run.arty = 0;
@@ -1274,8 +1304,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       p.y = level.heightAt ? level.heightAt(p.x, p.z) : 0;
       // its impact circle on the ground, closing in as it comes
       const marker = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 24), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
-      marker.rotation.x = -Math.PI / 2;
-      marker.position.set(p.x, p.y + 0.06, p.z);
+      marker.quaternion.copy(groundTilt(p.x, p.z)).multiply(spinQ.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)); // (on a slope, along it)
+      marker.position.set(p.x, groundAt(p.x, p.z) + 0.08, p.z);
       scene.add(marker);
       // each comes in from high up behind, on its own line
       const from = p.clone().add(new THREE.Vector3(-9 - Math.random() * 4, 22 + Math.random() * 4, 4 + (Math.random() - 0.5) * 6));
@@ -1538,11 +1568,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // the autocannon: holding the trigger fires a round every reload until the
   // magazine's empty, then it changes magazines
   let trigger = false;
-  // Legendary Rangefinder (Ranging): a reload done, the view opens right out for a moment
+  // Legendary Optics (Spotter): a reload done, the view opens right out for a moment
   function ranging() {
     if (!stats.rangeBurst || run.over || run.mode !== 'field') return;
     run.rangeT = 3;
-    pulse('rangefinder');
+    pulse('optics');
   }
   function autoFire(dt) {
     if (!stats.mag) return;
@@ -1563,7 +1593,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.trickleT = 0;
         run.mReload = false;
       }
-      if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1 || run.mag < 1) return;
+      if (!trigger || run.spot?.lock || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1 || run.mag < 1) return;
       if (hasAim && tank.aimError() > 0.12) return;
       reload = 0;
       run.shots++;
@@ -1580,7 +1610,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       return;
     }
-    if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1) return;
+    if (!trigger || run.spot?.lock || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1) return;
     if (hasAim && tank.aimError() > 0.12) return;
     reload = 0;
     run.shots++;
@@ -1598,6 +1628,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   }
   const holdFire = () => def.gun === 'autocannon' || def.gun === 'missile';
   function tryFire(dt) {
+    if (run.spot?.lock) return; // (a scene playing: hands off)
     if (queued <= 0) return;
     queued -= dt;
     if (run.over) return void (queued = 0);
@@ -2001,12 +2032,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function passives() {
     const list = [];
     const add = (id, name, o = {}) => list.push({ id, name, img: partShot(id), pulse: run.pulse?.[id] || 0, ...o });
-    if (stats.spotter) add('optics', 'Spotter', { k: 1 - Math.max(0, run.spotT) / 5, left: run.spotT });
+    if (stats.spotter) add('rangefinder', 'Ranging', { k: 1 - Math.max(0, run.spotT) / 5, left: run.spotT });
     if (stats.reactive) add('era', 'Explosion', { k: 1 - run.reactT / 8, left: run.reactT, ready: !(run.reactT > 0) });
     if (stats.hotLoader) add('autoloader', 'Ready rack');
     if (stats.boostRefund) add('afterburner', 'Afterburner');
     if (stats.dozerStun) add('dozer', 'Disorient');
-    if (stats.rangeBurst) add('rangefinder', 'Ranging', { k: run.rangeT > 0 ? run.rangeT / 3 : 1, ready: run.rangeT > 0 });
+    if (stats.rangeBurst) add('optics', 'Spotter', { k: run.rangeT > 0 ? run.rangeT / 3 : 1, ready: run.rangeT > 0 });
     return list;
   }
 
@@ -2225,7 +2256,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     }
   }
 
-  // Spotter (Legendary Optics): every few seconds the farthest machines
+  // Ranging (Legendary Rangefinder): every few seconds the farthest machines
   // in sight are marked; marked ones take extra damage until it wears off
   function spotter(dt) {
     if (!stats.spotter || run.over || run.mode !== 'field') return;
@@ -2235,7 +2266,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const reach = 24 * stats.view;
     const seen = enemies.alive.filter((e) => e.los && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach);
     seen.sort((a, b) => Math.hypot(b.pos.x - pos.x, b.pos.z - pos.z) - Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z));
-    if (seen.length) pulse('optics');
+    if (seen.length) pulse('rangefinder');
     for (const e of seen.slice(0, stats.spotter)) {
       e.markT = 5;
       combat.glow.flash(new THREE.Vector3(e.pos.x, 1.6 * e.stats.scale, e.pos.z), 0xffffff, 0.2, 1.0, 0.15);
@@ -2586,7 +2617,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // hovered) while there's a pick to make; for the refit, the tank
       const refit = run.depot && ['edit', 'fit', 'opening'].includes(run.depot.step) && !run.depot.focus;
       if (run.depot && run.mode === 'depot' && run.depot.step !== 'enter' && !refit) camWant.lerp(run.depot.focus || run.depot.room.focus, run.depot.focus ? 0.6 : 0.5);
-      if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : 6))); // once the zone's won the camera stays put
+      if (!run.spot && run.camRate !== 6) run.camRate = Math.min(6, (run.camRate || 6) + realDt * 1.2); // (eases back up after a scene's slow glide)
+      if (!run.won) camTarget.lerp(camWant, 1 - Math.exp(-realDt * (run.depot?.focus ? 4 : run.camRate || 6))); // once the zone's won the camera stays put
       // boosting: the view pulls back a touch (and punches out as it kicks
       // in), speed lines rush in from the edges
       speedK += ((boosting ? 1 : 0) - speedK) * (1 - Math.exp(-realDt * (boosting ? 8 : 4)));
@@ -2633,7 +2665,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           hovered = pick.object.userData.enemy || null;
         }
       }
-      level.light.follow(camTarget); // the shadow box follows the view, not the tank
+      level.light.follow(camTarget, stats.view / camera.zoom); // the shadow box follows the view (and grows with it), not the tank
       if (fireOnAim) {
         fireOnAim = false;
         fire();
@@ -2645,9 +2677,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // the strike's ring follows the aim while it's being called in
       artyRing.visible = run.arty > 0 && run.armed === 'artillery' && hasAim && !run.over;
       if (artyRing.visible) {
-        artyRing.position.set(aimPoint.x, (level.heightAt ? level.heightAt(aimPoint.x, aimPoint.z) : 0) + 0.05, aimPoint.z);
+        artyRing.position.set(aimPoint.x, groundAt(aimPoint.x, aimPoint.z) + 0.08, aimPoint.z);
         artyRing.scale.setScalar(EQUIPMENT.artillery.radius + EQUIPMENT.artillery.blast * 0.5);
-        artyRing.rotation.y = t * 0.6;
+        artyRing.quaternion.copy(groundTilt(aimPoint.x, aimPoint.z)).multiply(spinQ.setFromAxisAngle(UP, t * 0.6)); // (lying on a ramp's slope)
       }
 
       // machines

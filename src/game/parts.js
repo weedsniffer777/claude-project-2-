@@ -43,14 +43,14 @@ export const BASE_STATS = {
   breakShield: 0.25, // damage cut while it (or the dash) runs: grows with the tank's level to 0.5
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
-  spotter: 0, // Legendary Optics: enemies marked every few seconds (how many)
+  spotter: 0, // Legendary Rangefinder (Ranging): enemies marked every few seconds (how many)
   apRounds: false, // Armor-piercing shells: white tracers, a sharp hit instead of a fireball
   hotLoader: false, // Legendary Autoloader (Ready rack): a kill reloads the main gun
   reactive: false, // Legendary Reactive armour: blocks a hit every few seconds
   dozerStun: 0, // Legendary Dozer blade: seconds a rammed enemy is stunned
   boostRefund: 0, // Legendary High-power boost: seconds of recharge back per kill while boosting
   directHit: 1, // x the damage to the machine a shell or missile actually strikes (Rangefinder)
-  rangeBurst: false, // Legendary Rangefinder (Ranging): the view opens out 50% for 3 s after every reload
+  rangeBurst: false, // Legendary Optics (Spotter): the view opens out 50% for 3 s after every reload
 };
 
 const RUST = 0x6d5a48;
@@ -477,13 +477,14 @@ export const PARTS = {
     name: 'Optics',
     text: 'See further around you. Machine gun reaches further.',
     icon: ['................', '....######......', '...#------#.....', '..#--****--#####', '..#--*##*--#....', '..#--****--#####', '...#------#.....', '....######......', '................', '................'],
+    grow: Math.log(1.5) / Math.log(1.25) - 1, // (its +25% grows to exactly +50% at level 30)
     apply(s) {
-      s.view *= 1.25; // +25% view, growing with the part's level to about +50% at 30
+      s.view *= 1.25; // +25% view, growing with the part's level to +50% at 30
       s.mgRange += 2;
     },
     tiers: [
       { text: 'Machine guns reach further.', apply: (s) => (s.mgRange += 2) },
-      { text: '', perk: 'Spotter', perkText: 'Every 5 s the 2 farthest enemies in sight are marked: +30% damage to them for 5 s.', apply: (s) => (s.spotter = 2) },
+      { text: '', perk: 'Spotter', perkText: 'After every reload the view opens out 50% for 3 s.', apply: (s) => (s.rangeBurst = true) },
     ],
     build(t) {
       const g = sightHead();
@@ -559,12 +560,6 @@ export const PARTS = {
       const c = heCrate(4);
       c.rotation.y = -0.5;
       g.add(c);
-      // one more round lying in front of it
-      const r = new THREE.Group();
-      heRound(r, 0, 0, 0);
-      r.position.set(0.15, 0.08, 0.55);
-      r.rotation.y = -0.35;
-      g.add(r);
       return g;
     },
   },
@@ -576,13 +571,14 @@ export const PARTS = {
     name: 'Rangefinder',
     text: 'See 10% further. Direct hits deal 10% more damage.',
     icon: ['................', '..############..', '.#############-.', '.#**##****###--.', '.#**##*##*###--.', '.#**##****###--.', '.#############-.', '..############..', '.....-....-.....', '....--....--....'],
+    grow: Math.log(1.25) / Math.log(1.1) - 1, // (+10% growing to +25% at level 30)
     apply(s) {
       s.view *= 1.1;
       s.directHit *= 1.1;
     },
     tiers: [
-      { text: 'Sees further, direct hits harder.', apply: (s) => ((s.view *= 1.09), (s.directHit *= 1.09)) },
-      { text: '', perk: 'Ranging', perkText: 'After every reload the view opens out 50% for 3 s.', apply: (s) => (s.rangeBurst = true) },
+      { text: 'Sees further, direct hits harder.', apply: () => {} },
+      { text: '', perk: 'Ranging', perkText: 'Every 5 s the 2 farthest enemies in sight are marked with a reticle: +30% damage to them for 5 s.', apply: (s) => (s.spotter = 2) },
     ],
     build(t) {
       const g = rangefinderHead();
@@ -848,7 +844,7 @@ function applyPart(s, id, lvl) {
   const S = { ...s };
   p.apply(S);
   for (let k = 0; k < tier; k++) p.tiers?.[k]?.apply(S);
-  const n = (lvl - 1) * PER_LEVEL;
+  const n = (lvl - 1) * (p.grow != null ? p.grow / 29 : PER_LEVEL);
   if (n > 0) {
     for (const [key, , , dir] of STAT_ROWS) {
       const a = bare[key];

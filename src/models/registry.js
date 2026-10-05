@@ -15,6 +15,6 @@ export const MODELS = [
   { id: 'dog', name: 'Robot dog', create: createDog },
   { id: 'walker', name: 'Anti-tank walker', create: createWalker },
   { id: 'bridgegun', name: 'Bridge gun', create: createBridgeGun },
-  { id: 'spider', name: 'Siege mech', create: createSpider },
+  { id: 'spider', name: 'Mech', create: createSpider },
   { id: 'drone', name: 'Attack drone', create: createDrone },
 ];

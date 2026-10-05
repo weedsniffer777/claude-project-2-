@@ -800,7 +800,7 @@ function buildHighway(scene) {
     if (api.lesson('drone')) api.prompt('Attack drones', 'When a drone <b>stops and its pods glow</b>, rockets are coming: <b>keep moving</b>, or shoot it while it hangs there!', { danger: true, seconds: 8 });
   };
   // the parts this level can turn up
-  const PARTS3 = ['he', 'era', 'afterburner', 'dozer', 'autoloader', 'twinmg', 'optics'];
+  const PARTS3 = ['he', 'era', 'afterburner']; // (its own parts only: campaign.js rewards)
   // machines coming in: on the deck ahead; drones over the roofs either side
   // (always ahead of the tank, however far it's got: never behind it)
   const ahead = (api, x) => Math.min(Math.max(x, api.tankPos.x + 14), Math.max(x, Math.min(bounds.maxX, BAR_X) - 2)); // (but not past the end of the area)

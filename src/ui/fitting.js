@@ -202,6 +202,11 @@ function bars(s) {
   return { Armour: clamp01(s.maxHp / s.armor / 320), Gun: clamp01(dps / 100), Speed: clamp01((s.speed - 0.55) / 1.2) };
 }
 
+// a tank's promotions (at levels 10, 20, 30, 40): a purple star each
+export const tankStars = (lvl) => {
+  const n = Math.floor((lvl - 1) / 10);
+  return n ? `<span class="tst" style="position:absolute;left:3px;top:3px;z-index:2;padding:2px 3px;font:400 9px/1 'Silkscreen',monospace;color:#fff;background:#8a4fd0;box-shadow:0 0 0 2px #000;pointer-events:none">${'★'.repeat(n)}</span>` : '';
+};
 // pictures of the tanks for the carousel, drawn once
 // (front three-quarters, framed on the hull so it's centred and big)
 const tankPics = new Map();
@@ -526,7 +531,7 @@ export function createFitting({ renderer, cursor }) {
       const el = document.createElement('button');
       el.type = 'button';
       el.className = `tcard${id === o.tankId ? ' sel' : ''}${have ? '' : ' locked'}${o.newTanks?.includes(id) ? ' newtank' : ''}`;
-      el.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}"><span></span>${have ? '' : '<span class="lock"></span>'}`;
+      el.innerHTML = `<img alt="" src="${tankPicture(renderer, id)}">${have ? tankStars(save.tankLevel(id)) : ''}<span></span>${have ? '' : '<span class="lock"></span>'}`;
       el.querySelector('span').textContent = TANKS[id].name;
       if (!have) el.querySelector('.lock').textContent = TANKS[id].unlockText || 'Locked';
       if (have && id !== o.tankId) el.addEventListener('click', () => (closePop(), (replacing = null), o.onTank(id)));
