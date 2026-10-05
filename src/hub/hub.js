@@ -191,6 +191,11 @@ const CSS = `
 .base-brief .node .hardtag .rw { position: relative; display: block; width: 60px; height: 40px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 10px #ffc24a99; }
 .base-brief .node .hardtag .rw img { width: 100%; height: 100%; image-rendering: pixelated; }
 .base-brief .node .hardtag em { margin-top: 3px; padding: 2px 5px; font: 400 8px/1 'Silkscreen', monospace; font-style: normal; color: #111; background: #ffc24a; box-shadow: 0 0 0 2px #000; }
+.base-brief .node .hardtag.tanktag { background: #2f8a4a; animation-duration: 1.4s; }
+.base-brief .node .hardtag.tanktag::after { background: #2f8a4a; }
+.base-brief .node .hardtag.tanktag small { color: #c9f5d4; }
+.base-brief .node .hardtag .rw.tk { width: 84px; height: 49px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 10px #6be08a99; }
+.base-brief .node .hardtag.tanktag em { background: #6be08a; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news h2.warn { color: #ff4a3a; }
@@ -1091,7 +1096,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     selLevel = [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
     brief.hidden = false;
     brief.innerHTML = `
-      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : ''}</button>`).join('')}</div>
+      <div class="map">${CAMPAIGN.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : ''}</button>`).join('')}</div>
       <div class="info panel"></div>`;
     brief.querySelector('.map').prepend(mapCanvas);
     for (const b of brief.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
@@ -1100,6 +1105,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // the Hard mode box; a level whose Hard first clear is a part shows it
   // under the words: its picture in a gold frame, its tier, its description
   // on hover
+  // not yet beaten, and its first clear gives a tank: a green box over it
+  // with that tank's picture
+  const newTank = (z) => z.id && z.first?.easy?.tank && TANKS[z.first.easy.tank] && !save.cleared().includes(clearKey(z.id, 'easy'));
+  const tankTag = (z) => `<span class="hardtag rich tanktag">New tank<small>First clear:</small><span class="rw tk"><img alt="" src="${tankPicture(renderer, z.first.easy.tank, 120, 70)}"></span><em>${esc(TANKS[z.first.easy.tank].name)}</em></span>`;
   const hardTag = (z) => {
     const id = z.first?.hard?.part;
     if (!id || !PARTS[id]) return '<span class="hardtag">Hard mode</span>';
