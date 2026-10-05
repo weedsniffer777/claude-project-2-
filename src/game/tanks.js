@@ -16,7 +16,7 @@ export const TANKS = {
     moveName: 'Boost',
     ability: 'pierce',
     abilityName: 'Piercing shot',
-    blurb: 'Heavy and slow, with a big gun. Boost to ram, Piercing shot to punch through a line of enemies.',
+    blurb: 'Heavy and slow, with a big gun. Rams, and punches through lines.',
     stats: { boostTime: 0.65 }, // a short, heavy shove
     // footprint for collisions (hull, covers, the rear drums), tank-local
     box: { cx: -0.25, hx: 2.25, hz: 1.15 },
@@ -44,7 +44,7 @@ export const TANKS = {
     moveName: 'Boost',
     ability: 'breakthrough',
     abilityName: 'Breakthrough',
-    blurb: 'Fast and fragile. Hold to fire the autocannon; quick boosts on its exhaust rockets; Breakthrough charges through anything in the way, shielded, spoiling enemy aim.',
+    blurb: 'Fast and fragile, with a rapid-fire autocannon. Charges through anything.',
     unlockText: 'Beat level 2 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
     // Shift: a quick, hard dash that recharges fast (boostCooldown)
@@ -71,7 +71,7 @@ export const TANKS = {
     moveName: 'Retreat',
     ability: 'salvo',
     abilityName: 'Missile salvo',
-    blurb: 'Recon and long range: it sees further than the others. Eight homing missiles to a pack. Press R to top the pack up: it reloads a missile at a time and can fire whatever is loaded meanwhile. Retreat rockets it straight back out of trouble (and patches it up a little); Missile salvo pulls the view out and fires eight at once.',
+    blurb: 'Long-range recon: sees further, fires homing missiles, and backs out of trouble.',
     unlockText: 'Beat level 4 to unlock',
     // reload: seconds between missiles; cannonDamage / splash: each missile's hit
     // a recon / sniper tank: it sees further (+25% view), and its salvo pulls

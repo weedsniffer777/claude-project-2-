@@ -1066,6 +1066,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function openRoom(r) {
     open = r;
     hint.hidden = true;
+    root.querySelector('.base-gear').hidden = true; // (out of the way of the room's panels)
     if (r.id === 'briefing') return openBriefing();
     menu.hidden = false;
     if (r.id === 'hangar') {
@@ -1268,6 +1269,16 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // a new tank, equipment, a first clear part (the Vulcan): one popup after
   // another
   let newsQueue = [];
+  // the popups (new tank, new part, confirms) always fit the screen whole,
+  // shrunk if they must: no scrolling to find their buttons
+  const fitNews = () => {
+    if (news.hidden) return;
+    news.style.maxHeight = 'none';
+    news.style.overflow = 'visible';
+    fitInside(news, window.innerWidth - 24, window.innerHeight - 24);
+  };
+  new MutationObserver(() => requestAnimationFrame(fitNews)).observe(news, { attributes: true, attributeFilter: ['hidden'], childList: true });
+  window.addEventListener('resize', fitNews);
   function showNews() {
     const all = save.news();
     save.clearNews();
@@ -1333,6 +1344,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
 
   function closeRoom() {
     open = null;
+    root.querySelector('.base-gear').hidden = false;
     fitting.hide();
     workshop.hide();
     tags.get('hangar').classList.toggle('alert', upgradeHint());

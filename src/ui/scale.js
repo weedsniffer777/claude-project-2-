@@ -33,10 +33,12 @@ if (typeof document !== 'undefined') {
 }
 
 // zoom el down (never up) so it fits within maxW x maxH screen pixels
+// (on top of any zoom it already has from the stylesheet)
 export function fitInside(el, maxW, maxH) {
   el.style.zoom = '';
+  const base = parseFloat(getComputedStyle(el).zoom) || 1;
   const r = el.getBoundingClientRect();
   const k = Math.min(1, maxW / Math.max(1, r.width), maxH / Math.max(1, r.height));
-  if (k < 0.999) el.style.zoom = String(Math.max(0.4, k));
+  if (k < 0.999) el.style.zoom = String(Math.max(0.4, base * k));
   return k;
 }
