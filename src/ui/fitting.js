@@ -8,6 +8,7 @@
 // storage asks which one to replace (or Cancel). A part just found at a
 // checkpoint is shown as New with an "Equip now" button. Upgrades have a
 // screen of their own (workshop.js), opened from the hangar.
+import { uiZoom } from './scale.js';
 import * as THREE from 'three';
 import { fitsTank, unfitLabel, PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
@@ -171,39 +172,27 @@ const CSS = `
 .fit .tcard .lock { position: absolute; left: 6px; right: 6px; top: 20px; font: 400 9px/1.2 'Pixelify Sans', monospace; text-transform: none; color: #b9b0a0; }
 .fit .tcard.newtank::after { content: 'New'; position: absolute; right: -6px; top: -8px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 2px 4px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
 .fit .btns { display: flex; gap: 12px; pointer-events: auto; }
-@media (max-width: 860px) {
+@media (max-width: 860px) and (orientation: portrait) {
   .fit .left { top: calc(12px + env(safe-area-inset-top, 0px)); transform: none; left: 12px; width: min(220px, 44vw); padding: 10px 12px 12px; gap: 7px; }
   .fit .left p, .fit .left .kit { display: none; }
   .fit .right { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: none; right: 12px; width: min(300px, 52vw); padding: 10px 12px 12px; gap: 8px; }
   .fit .slot img { width: 48px; height: 32px; }
   .fit .tcard img { width: 72px; height: 42px; }
 }
-@media (max-width: 560px) {
+@media (max-width: 560px) and (orientation: portrait) {
   .fit .right { left: 12px; right: 12px; width: auto; }
   .fit .left { width: calc(100vw - 24px); }
 }
 /* phones. Portrait: the panels stacked in one scrolling column. Landscape
    (short): info top left, slots down the right (scrolling), tanks between. */
 .fit .pop, .fit .tip { max-width: calc(100vw - 16px); box-sizing: border-box; }
-@media (max-width: 600px) {
+@media (max-width: 600px) and (orientation: portrait) {
   .fit { overflow-y: auto; pointer-events: auto; display: flex; flex-direction: column; gap: 18px; padding: calc(14px + env(safe-area-inset-top, 0px)) 14px calc(20px + env(safe-area-inset-bottom, 0px)); background: rgba(8, 7, 9, 0.6); box-sizing: border-box; }
   .fit svg { display: none; }
   .fit .left, .fit .right { position: relative; left: auto; right: auto; top: auto; bottom: auto; transform: none; width: auto; flex: none; box-sizing: border-box; }
   .fit .bottom { position: relative; left: auto; bottom: auto; transform: none; pointer-events: auto; flex: none; }
   .fit .tanks { flex-wrap: wrap; justify-content: center; }
   .fit .btns { flex-wrap: wrap; justify-content: center; }
-}
-@media (max-height: 520px) and (min-width: 601px) {
-  .fit .left { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; transform: none; left: calc(8px + env(safe-area-inset-left, 0px)); width: 200px; padding: 8px 10px 10px; gap: 6px; max-height: calc(100dvh - 16px); overflow-y: auto; box-sizing: border-box; }
-  .fit .left p, .fit .left .kit { display: none; }
-  .fit .left h2 { font-size: 15px; }
-  .fit .right { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: none; right: calc(8px + env(safe-area-inset-right, 0px)); width: 270px; padding: 8px 10px 10px; gap: 6px; overflow-y: auto; box-sizing: border-box; align-content: start; }
-  .fit .slot img { width: 44px; height: 30px; }
-  .fit .bottom { left: calc(224px + env(safe-area-inset-left, 0px)); right: calc(294px + env(safe-area-inset-right, 0px)); transform: none; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
-  .fit .tanks { gap: 8px; padding: 6px; flex-wrap: wrap; justify-content: center; }
-  .fit .tcard img { width: 60px; height: 35px; }
-  .fit .tcard { font-size: 9px; }
-  .fit .btns { flex-wrap: wrap; justify-content: center; gap: 8px; }
 }
 `;
 
@@ -392,8 +381,8 @@ export function createFitting({ renderer, cursor }) {
     tip.querySelector('b').innerHTML = `${PARTS[id].name} <span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span>`;
     // what it does at its tier, in numbers
     tip.querySelector('span').innerHTML = `${effectsHtml(id, o.tankId)}${where(id) ? `<br>On the ${where(id)}.` : ''}`;
-    tip.style.left = `${Math.round(Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100)))}px`;
-    tip.style.top = `${Math.round(r.top - 12)}px`;
+    tip.style.left = `${Math.round((Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100))) / uiZoom())}px`;
+    tip.style.top = `${Math.round((r.top - 12) / uiZoom())}px`;
     tip.style.transform = 'translateY(-100%)';
   }
   const hideTip = () => (tip.hidden = true);
@@ -638,8 +627,8 @@ export function createFitting({ renderer, cursor }) {
       }
       root.append(pop);
       const r = box.getBoundingClientRect();
-      pop.style.left = `${Math.round(r.left)}px`;
-      pop.style.top = `${Math.round(r.bottom + 22)}px`;
+      pop.style.left = `${Math.round((r.left) / uiZoom())}px`;
+      pop.style.top = `${Math.round((r.bottom + 22) / uiZoom())}px`;
     });
   }
 
@@ -722,8 +711,8 @@ export function createFitting({ renderer, cursor }) {
     root.append(pop);
     const r = el.getBoundingClientRect();
     const pr = pop.getBoundingClientRect();
-    pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)))}px`;
-    pop.style.top = `${Math.round(Math.min(r.bottom + 10, window.innerHeight - pr.height - 8))}px`;
+    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / uiZoom())}px`;
+    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / uiZoom())}px`;
     el.classList.add('on');
   }
   function openPop(id, el) {
@@ -758,8 +747,8 @@ export function createFitting({ renderer, cursor }) {
     root.append(pop);
     const r = el.getBoundingClientRect();
     const pr = pop.getBoundingClientRect();
-    pop.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8)))}px`;
-    pop.style.top = `${Math.round(Math.min(r.bottom + 10, window.innerHeight - pr.height - 8))}px`;
+    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / uiZoom())}px`;
+    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / uiZoom())}px`;
     el.classList.add('on');
   }
 
@@ -794,9 +783,12 @@ export function createFitting({ renderer, cursor }) {
       let lines = '';
       for (const { id, el } of slotEls) {
         if (!id) continue;
-        const at = o.anchor(id);
+        let at = o.anchor(id);
         if (!at) continue;
-        const r = el.getBoundingClientRect();
+        const zr = el.getBoundingClientRect();
+        const k = uiZoom(); // (screen pixels into the zoomed overlay's own)
+        const r = { left: zr.left / k, right: zr.right / k, top: zr.top / k, height: zr.height / k };
+        at = [at[0] / k, at[1] / k];
         const ex = at[0] < r.left ? r.left - 4 : r.right + 4;
         const y = r.top + r.height / 2;
         const pts = `${ex},${y} ${(ex + at[0]) / 2},${y} ${at[0]},${at[1]}`;

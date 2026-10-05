@@ -23,6 +23,7 @@ import { save } from '../game/save.js';
 import { EQUIPMENT, equipmentIcon, equipmentHtml } from '../game/equipment.js';
 import { tokenIconURL } from '../ui/icons.js';
 import { partPicture } from '../render/partPictures.js';
+import { fitInside } from '../ui/scale.js';
 import { openSettings } from '../ui/settings.js';
 import { CAMPAIGN, clearKey, isOpen } from '../game/campaign.js';
 
@@ -107,10 +108,12 @@ const CSS = `
   font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
 .base-brief .rewards > span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
-@media (max-width: 760px) {
-  .base-brief { flex-direction: column; gap: 14px; padding: 56px 16px 16px; overflow-y: auto; justify-content: flex-start; }
-  .base-brief .map { width: 100%; height: auto; }
-  .base-brief .info { width: auto; align-self: stretch; }
+/* portrait: the map on top, the details under it, all on one screen (the
+   details shrink to fit what's left: fitBrief) */
+@media (orientation: portrait) and (max-width: 760px) {
+  .base-brief { flex-direction: column; gap: 12px; padding: 56px 12px 12px; overflow: hidden; justify-content: flex-start; align-items: center; }
+  .base-brief .map { height: min(40dvh, 150vw); width: auto; flex: none; }
+  .base-brief .info { width: min(420px, calc(100vw - 24px)); align-self: center; flex: none; transform-origin: top center; }
 }
 .base-brief .diffs { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .base-brief .dtab { display: grid; gap: 4px; justify-items: start; padding: 8px 10px 9px; border: 0; cursor: var(--cursor); text-align: left; color: #b9b0a0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; }
@@ -176,13 +179,6 @@ const CSS = `
 /* phones: nothing past the screen's edges; overlays scroll instead */
 .base-news, .base-menu { max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; }
 .base-brief { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
-@media (max-height: 520px) and (min-width: 761px) {
-  .base-brief { padding: 10px 16px; gap: 16px; align-items: center; }
-  .base-brief .map { height: calc(100dvh - 20px); }
-  .base-brief .info { width: min(340px, 46vw); max-height: calc(100dvh - 20px); overflow-y: auto; box-sizing: border-box; padding: 12px 14px; gap: 8px; }
-  .base-bank { transform: scale(0.8); transform-origin: top left; }
-  .base-news img { width: 144px; height: 84px; }
-}
 .base-fade { position: absolute; inset: 0; background: #070609; opacity: 1; transition: opacity 0.45s steps(5); }
 .base-fade.off { opacity: 0; }
 .base [hidden] { display: none !important; }
@@ -1093,7 +1089,23 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const stars = (z) => ['easy', 'hard'].map((d) => `<i class="star ${d} ${save.cleared().includes(clearKey(z.id, d)) ? 'got' : ''}"></i>`).join('');
   // picked: just picked on the map (not a tab switch). A level already
   // beaten on Easy then opens on Hard.
+  // (portrait: the details shrunk to fit under the map; landscape: beside
+  // it, fitted to the screen's height)
+  function fitBrief() {
+    const info = brief.querySelector('.info');
+    if (!info || brief.hidden) return;
+    const tall = window.innerHeight > window.innerWidth && window.innerWidth <= 760;
+    if (tall) {
+      const map = brief.querySelector('.map').getBoundingClientRect();
+      fitInside(info, window.innerWidth - 24, window.innerHeight - map.bottom - 24);
+    } else info.style.zoom = '';
+  }
+  window.addEventListener('resize', () => fitBrief());
   function showLevel(z, picked = false) {
+    showLevelInner(z, picked);
+    requestAnimationFrame(fitBrief);
+  }
+  function showLevelInner(z, picked = false) {
     selLevel = z;
     if (picked && z?.id && save.cleared().includes(clearKey(z.id, 'easy'))) save.setDifficulty('hard');
     for (const b of brief.querySelectorAll('.node')) b.classList.toggle('sel', +b.dataset.n === z.n);

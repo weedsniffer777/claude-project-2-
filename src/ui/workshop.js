@@ -8,6 +8,7 @@
 //    speed every level.
 // A level up pops; an evolve flashes the screen in the new tier's colour,
 // throws sparks, slams a banner down and grows the bars.
+import { uiZoom } from './scale.js';
 import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
@@ -102,7 +103,7 @@ const CSS = `
 .ws .banner small { display: block; margin-top: 10px; font-size: 18px; color: #f1e9d8; text-align: center; }
 .ws .plus { position: absolute; left: 100%; top: -4px; margin-left: 10px; font: 400 16px/1 'Silkscreen', monospace; color: var(--go); text-shadow: 2px 2px 0 #000; pointer-events: none; white-space: nowrap; }
 .ws .spark { position: fixed; z-index: 3; width: 8px; height: 8px; pointer-events: none; box-shadow: 0 0 0 2px #000; }
-@media (max-width: 860px) {
+@media (max-width: 860px) and (orientation: portrait) {
   .ws { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr); align-content: start; overflow-y: auto; }
   .ws .list { display: flex; overflow-x: auto; overflow-y: hidden; max-height: none; padding: 12px; }
   .ws .card { flex: none; width: 120px; }
@@ -113,7 +114,7 @@ const CSS = `
 }
 /* phones: the list over the details, the whole screen scrolling */
 .ws .banner { max-width: calc(100vw - 24px); white-space: normal; text-align: center; }
-@media (max-width: 860px) {
+@media (max-width: 860px) and (orientation: portrait) {
   .ws { grid-template-rows: none; grid-auto-rows: max-content; background: rgba(8, 7, 9, 0.94); }
   .ws .list { grid-row: 4; }
   .ws .detail { grid-row: 5; overflow: visible; }
@@ -127,11 +128,6 @@ const CSS = `
   .ws .stats { grid-template-columns: auto minmax(0, 1fr); }
   .ws .stats .val { grid-column: 1 / -1; text-align: left; }
   .ws .go { font-size: 15px; padding: 14px 12px 15px; }
-}
-@media (max-height: 520px) and (min-width: 861px) {
-  .ws { align-content: start; overflow-y: auto; padding-top: calc(10px + env(safe-area-inset-top, 0px)); gap: 10px 20px; }
-  .ws .list { max-height: none; }
-  .ws .frame { width: 144px; height: 96px; }
 }
 `;
 
@@ -491,8 +487,8 @@ export function createWorkshop({ renderer, cursor }) {
   }
   // pixel sparks flung off the picture
   function sparks(rect, color, count, reach) {
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
+    const cx = (rect.left + rect.width / 2) / uiZoom(); // (into the zoomed overlay's pixels)
+    const cy = (rect.top + rect.height / 2) / uiZoom();
     for (let i = 0; i < count; i++) {
       const s = document.createElement('i');
       s.className = 'spark';

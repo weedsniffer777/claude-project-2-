@@ -3,6 +3,8 @@
 // bindings; touch has the stick and buttons. Every choice is one of our own
 // dropdowns or toggles, styled like the rest of the game.
 
+import { fitInside } from './scale.js';
+
 const KEY = 'scavenger.settings';
 export const ACTIONS = [
   ['up', 'Drive forward'],
@@ -253,7 +255,16 @@ export function createSettingsMenu({ touch = () => false } = {}) {
     bar.append(reset, done);
     box.append(bar);
     root.append(box);
+    fitBox();
   }
+  // the whole menu on screen at once, shrunk to fit if it must
+  function fitBox() {
+    const box = root.querySelector('.box');
+    if (!box || root.hidden) return;
+    box.style.maxHeight = 'none';
+    fitInside(box, window.innerWidth - 24, window.innerHeight - 24);
+  }
+  window.addEventListener('resize', fitBox);
 
   // rebinding: the next key pressed (Esc cancels); a key already used
   // elsewhere swaps over
@@ -296,8 +307,8 @@ export function createSettingsMenu({ touch = () => false } = {}) {
     open(cb = null) {
       onClose = cb;
       waiting = null;
-      render();
       root.hidden = false;
+      render();
     },
     close,
     get isOpen() {
