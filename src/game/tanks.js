@@ -78,7 +78,7 @@ export const TANKS = {
     // the view back further still (salvoZoom, growing with the tank's level)
     // a missile every reload (about the autocannon's pace), eight in the
     // pack, then a long reload
-    stats: { maxHp: 85, speed: 1.08, view: 1.25, reload: 0.42, mag: 8, magReload: 5.0, cannonDamage: 34, splash: 1.8, boostCooldown: 6, salvoZoom: 1.25 },
+    stats: { maxHp: 85, speed: 1.08, view: 1.25, reload: 0.42, mag: 8, magReload: 6.5, cannonDamage: 34, splash: 1.8, boostCooldown: 6, salvoZoom: 1.25 },
     box: { cx: 0.05, hx: 2.15, hz: 1.02 },
     pic: { target: [-0.1, 1.0, 0], half: 1.38 },
     anchors: {

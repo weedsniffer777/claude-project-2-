@@ -393,7 +393,7 @@ export function createHud() {
     <div class="hud-numbers"></div>
     <div class="hud-stick idle" hidden><canvas class="base" width="22" height="22"></canvas><canvas class="knob" width="9" height="9"></canvas></div>
     <div class="hud-end panel" hidden><h2></h2><div class="stats"></div><div class="parts" hidden><span class="px">Parts found</span><div class="icons"></div></div><div class="bank px"></div><div class="btns"><button type="button" class="main"></button><button type="button" class="alt" hidden></button></div></div>
-    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>You keep the parts you found, but this run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
+    <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
     <div class="hud-fade"></div>

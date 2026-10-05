@@ -179,6 +179,51 @@ export function createSpider() {
     }
     legs.push({ ...L, thigh, knee, shin });
   }
+  // ----------------------------------------------- stage 2: the overload
+  // hidden till then: armour flaps on the hull sides that swing open over
+  // glowing orange vents, and a big engine on the rear that fires for the dash
+  const VENT = 0xff7a2a;
+  const over = new THREE.Group();
+  body.add(over);
+  over.visible = false;
+  const flaps = [];
+  const vents = [];
+  for (const s of [-1, 1]) {
+    for (const x of [-1.1, -0.2, 0.7]) {
+      const v = put(over, box(0.6, 0.3, 0.03, VENT, { r: 0.01, glow: true }), x, 0.05, s * 1.38);
+      vents.push(v);
+      for (let k = 0; k < 3; k++) put(over, box(0.56, 0.03, 0.04, C.dark), x, -0.05 + k * 0.1, s * 1.4); // its slats
+      const hinge = new THREE.Group();
+      hinge.position.set(x, 0.22, s * 1.4);
+      over.add(hinge);
+      put(hinge, box(0.64, 0.34, 0.05, C.panel, { r: 0.01 }), 0, -0.17, s * 0.03);
+      flaps.push({ hinge, s });
+    }
+  }
+  const engine = new THREE.Group();
+  engine.position.set(-2.65, 0.15, 0);
+  over.add(engine);
+  put(engine, box(0.5, 0.7, 1.3, C.joint, { r: 0.04 }), 0.1, 0, 0);
+  for (const z of [-0.35, 0.35]) {
+    put(engine, cyl(0.26, 0.4, C.dark, { axis: 'x', seg: 12 }), -0.25, 0, z);
+    const core = put(engine, cyl(0.2, 0.05, VENT, { axis: 'x', seg: 12, glow: true }), -0.46, 0, z);
+    vents.push(core);
+  }
+  const flame = new THREE.Group();
+  flame.position.set(-0.5, 0, 0);
+  engine.add(flame);
+  for (const z of [-0.35, 0.35]) {
+    put(flame, cyl(0.2, 1.4, 0xffb060, { axis: 'x', seg: 10, radiusEnd: 0.02, glow: true }), -0.7, 0, z);
+    put(flame, cyl(0.1, 0.9, 0xffffff, { axis: 'x', seg: 8, radiusEnd: 0.01, glow: true }), -0.45, 0, z);
+  }
+  flame.visible = false;
+  glowy.push(...vents);
+  flame.traverse((m) => m.isMesh && glowy.push(m));
+  const lights = [eye, lamp, ...cells];
+  let limp = 0; // 0 standing .. 1 slumped on its belly, legs splayed
+  let dark = false; // its lights out (flickering)
+  let opened = 0; // the overload parts out: 0 .. 1
+
   group.traverse((m) => {
     if (m.isMesh && !glowy.includes(m)) m.castShadow = true;
   });
@@ -207,7 +252,8 @@ export function createSpider() {
       body.localToWorld(hipW).applyMatrix4(inv);
       const s = Math.sin(walk + L.phase);
       const c = Math.cos(walk + L.phase);
-      footW.set(L.foot[0] + s * 0.55 * lift, Math.max(0, c) * 0.5 * lift + 0.05, L.foot[1]);
+      const spread = 1 + limp * 0.35; // slumped: the feet slide out
+      footW.set(L.foot[0] * spread + s * 0.55 * lift, Math.max(0, c) * 0.5 * lift + 0.05, L.foot[1] * spread);
       // the knee: up and out between them
       const d = hipW.distanceTo(footW);
       const a = Math.min(THIGH, (THIGH * THIGH - SHIN * SHIN + d * d) / (2 * d));
@@ -236,7 +282,20 @@ export function createSpider() {
     const speed = ctx.speed || 0;
     walk += dt * (1.4 + speed * 3.4);
     const lift = Math.min(1, speed * 1.6);
-    body.position.y = BODY_Y + Math.abs(Math.sin(walk)) * 0.08 * lift + Math.sin(t * 1.3) * 0.03;
+    // ctx.limp / ctx.dark / ctx.open / ctx.dash: stage 2's overload and its dashes
+    limp += ((ctx.limp ? 1 : 0) - limp) * Math.min(1, dt * (ctx.limp ? 3 : 2));
+    opened = Math.min(1, ctx.open ? opened + dt * 2 : opened);
+    over.visible = opened > 0;
+    for (const f of flaps) f.hinge.rotation.x = -f.s * opened * 1.9;
+    flame.visible = !!ctx.dash;
+    if (ctx.dash) flame.scale.set(0.8 + Math.random() * 0.5, 1, 1);
+    for (const v of vents) v.visible = !dark;
+    if (!!ctx.dark !== dark) {
+      dark = !!ctx.dark;
+      for (const l of lights) l.visible = !dark;
+    }
+    body.position.y = BODY_Y - limp * 1.0 + Math.abs(Math.sin(walk)) * 0.08 * lift + Math.sin(t * 1.3) * 0.03 * (1 - limp);
+    body.rotation.x = limp * 0.06;
     body.rotation.z = Math.sin(walk * 2) * 0.015 * lift;
     let d = (ctx.aimYaw ?? 0) - turret.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));

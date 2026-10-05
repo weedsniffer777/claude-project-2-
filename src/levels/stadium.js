@@ -757,7 +757,7 @@ function buildStadium(scene) {
   }
 
   function start(api) {
-    Object.assign(S, { sector: 0, step: 0, t: 0, boss: null, waveT: 0 });
+    Object.assign(S, { sector: 0, step: 0, t: 0, boss: null, waveT: 0, overload: false });
     setBounds(api, B1);
     setGate(gates[0], true);
     setGate(gates[1], false);
@@ -850,7 +850,7 @@ function buildStadium(scene) {
           setBounds(api, { minX: W_IN + 1.5, minZ: CZ - R + 1, maxZ: CZ + R - 1 });
           api.arrow(null);
           if (api.enemiesAlive) api.clearEnemies();
-          S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI });
+          S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI, arena: (x, z) => inPill(x, z, 3.2) });
           api.boss(S.boss, 'Siege mech');
           api.objective('Destroy the siege mech');
           api.prompt('Siege mech', 'A <b>siege mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
@@ -860,6 +860,12 @@ function buildStadium(scene) {
         }
         break;
       case 2:
+        // at half health it goes down and comes back up overloaded: the
+        // camera on it, the HUD away, the world at full speed
+        if (S.boss.alive && S.boss.stage2 === 'down' && !S.overload) {
+          S.overload = true;
+          api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 3, S.boss.pos.z) : null)], r: 190 }, () => S.boss.stage2 !== 'down', { maxTime: 4.2, slow: false, hideHud: true, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
+        }
         S.waveT -= dt;
         if (S.boss.alive && S.waveT <= 0 && api.enemiesAlive < 4) {
           S.waveT = 22;

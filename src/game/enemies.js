@@ -29,7 +29,7 @@ const DOG = {
   boltSpeed: 22,
 };
 
-// The large quadruped: the zone's boss, a walker twice the size that comes
+// The large drone: the zone's boss, a walker twice the size that comes
 // in slowly and hoses the tank with long bursts. (Small ones in the game's
 // text are "quadruped walkers"; in code they're dogs.)
 const HOUND = {
@@ -175,7 +175,7 @@ const SPIDER = {
   spider: true,
   kinetic: true,
   shatterOnDeath: true,
-  hp: 2700,
+  hp: 3000,
   runSpeed: 2.0,
   walkSpeed: 1.3,
   turnRate: 1.2,
@@ -201,6 +201,15 @@ const SPIDER = {
   artyFall: [1.7, 2.5], // seconds in the air (the first lands soonest)
   artyBlast: 1.9,
   artyDamage: 12,
+  // stage 2 (below half): no artillery; a quicker gun, and dashes
+  charge2: 1.6,
+  dashEvery: [8, 10],
+  dashPlant: 1.2, // the red path showing before it goes
+  dashSpeed: 18,
+  dashWidth: 3.6,
+  dashDamage: 40,
+  daze: 2, // stunned after it hits the wall: takes extra damage
+  dazeTaken: 1.5,
 };
 
 const DRONE = {
@@ -280,6 +289,8 @@ export class Enemies {
   spawnSpider(x, z, opts = {}) {
     const e = this.spawn(SPIDER, 'spider', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
+    e.arena = opts.arena || null; // (x, z) => inside where it can dash
+    e.mctx = {};
     return e;
   }
   spawnWalker(x, z, opts) {
@@ -381,6 +392,8 @@ export class Enemies {
   // machine apart instead of dropping it.
   damage(e, amount, blastFrom = null) {
     if (!e.alive) return false;
+    if (e.invuln) return false; // (the siege mech, mid-overload)
+    if (e.dazed > 0) amount *= e.stats.dazeTaken || 1;
     if (e.markT > 0) amount *= 1.3; // spotted (Spotter): takes extra
     e.hp -= amount;
     e.model.hitFlash();
@@ -646,6 +659,7 @@ export class Enemies {
         speed = DOG.runSpeed * 0.7;
       }
       if (DOG.sniper && (e.charge > 0 || DOG.static)) speed = 0; // planted while it lines up a shot
+      if (e.hold) speed = 0; // (the siege mech: down, or planted for / in a dash)
       const len = Math.hypot(vx, vz) || 1;
       const before = e.pos.clone();
       if (e.stun > 0) {
@@ -708,7 +722,10 @@ export class Enemies {
       let aimYaw = (DOG.sniper && e.charge > 0 ? e.lockYaw : locked ? Math.atan2(-(e.lock.z - e.pos.z), e.lock.x - e.pos.x) : Math.atan2(-tz, tx)) - g.rotation.y;
       aimYaw = Math.atan2(Math.sin(aimYaw), Math.cos(aimYaw));
       if (DOG.sniper) {
-        if (DOG.spider) this.spiderWeapons(e, dt, t, ctx, dist);
+        if (DOG.spider) {
+          this.spiderWeapons(e, dt, t, ctx, dist);
+          if (this.mechStage2(e, dt, t, ctx, dist, aimYaw)) continue;
+        }
         this.sniperFrame(e, dt, t, ctx, dist, aimYaw);
         continue;
       }
@@ -919,6 +936,7 @@ export class Enemies {
         e.charge = 0; // lost it: the shot's spoiled
         e.fireTimer = 1.2;
       } else if (e.charge <= 0) {
+        e.shotSinceDash = true;
         if (S.kinetic) this.fireShell(e, ctx);
         else this.fireBeam(e, ctx);
       }
@@ -949,7 +967,7 @@ export class Enemies {
     e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
     // the barrel dips to lay on the hull
     const pitch = -Math.atan2(Math.max(0, (S.muzzleY || 1.8) - HULL_Y), Math.max(4, dist));
-    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k, rockets: e.rocketK || 0 });
+    e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: pitch, recoil: e.recoil, charge: k, rockets: e.rocketK || 0, ...e.mctx });
   }
 
   // The siege mech's rocket artillery, on top of its main gun (sniperFrame):
@@ -959,7 +977,8 @@ export class Enemies {
   spiderWeapons(e, dt, t, ctx, dist) {
     const S = e.stats;
     const { tankPos } = ctx;
-    const pace = e.hp < e.maxHp * 0.5 ? 0.7 : 1; // angrier when hurt
+    if (e.stage2) return; // (stage 2: no artillery)
+    const pace = 1;
     e.artyT = (e.artyT ?? 3) - dt;
     const gy = (x, z) => (ctx.heightAt ? ctx.heightAt(x, z) : 0);
     if (e.artyT <= 0 && !(e.charge > 0) && !(e.artyLeft > 0) && !ctx.over && dist < S.range + 8) {
@@ -1047,6 +1066,139 @@ export class Enemies {
         if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.artyBlast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(S.artyDamage, at);
       }
     }
+  }
+  // The siege mech's second stage. At half health it goes down: legs limp,
+  // lights flickering out (it can't be hurt meanwhile), then the lights come
+  // back, armour flaps swing open over glowing vents, an engine on its back.
+  // From then on: a quicker gun, and dashes: it plants, a red path shows
+  // from it through the tank to the wall, then it charges down it; at the
+  // wall it's stunned a moment (and takes extra damage).
+  // Returns true while it has the frame to itself (down, planted, dashing).
+  mechStage2(e, dt, t, ctx, dist, aimYaw) {
+    const S = e.stats;
+    const gy = (x, z) => (ctx.heightAt ? ctx.heightAt(x, z) : 0);
+    const own = (mctx) => {
+      e.mctx = mctx;
+      e.pos.y = gy(e.pos.x, e.pos.z);
+      e.model.update(dt, t, { speed: 0, aimYaw, aimPitch: 0, recoil: e.recoil, charge: 0, ...mctx });
+      return true;
+    };
+    if (!e.stage2 && e.hp < e.maxHp * 0.5) {
+      e.stage2 = 'down';
+      e.st = 0;
+      e.invuln = true;
+      e.hold = true;
+      e.charge = 0;
+      e.funnel.visible = false;
+      this.clearShells(e);
+      this.onStage?.(e);
+    }
+    if (!e.stage2) return false;
+    e.st += dt;
+    if (e.stage2 === 'down') {
+      // slump, flicker out, dark, lights back on, stand, open up
+      const T = e.st;
+      const dark = T < 1.4 ? Math.random() < T / 1.4 : T < 2.3;
+      if (T > 0.3 && T < 0.4) this.combat.puffs.spawn(e.pos.clone().setY(1), new THREE.Vector3(0, 1, 0), { color: 0x8f8b84, s0: 0.6, s1: 2, life: 1.2, drag: 2, lift: 0.5, fadeAt: 0.3 });
+      if (T > 2.6 && Math.random() < dt * 20) this.combat.puffs.spawn(e.pos.clone().setY(1.8), new THREE.Vector3((Math.random() - 0.5) * 3, 1.5, (Math.random() - 0.5) * 3), { color: 0xd0cabe, s0: 0.2, s1: 0.8, life: 0.8, drag: 2, lift: 0.8, fadeAt: 0.3 }); // venting steam
+      if (T >= 3.6) {
+        e.stage2 = 'fight';
+        e.invuln = false;
+        e.hold = false;
+        e.stats = { ...S, charge: S.charge2 };
+        e.fireTimer = 1.2;
+        e.dashT = 3;
+        e.shotSinceDash = true;
+        e.mctx = { open: true };
+        return false;
+      }
+      return own({ limp: T < 2.4, dark, open: T > 2.5 });
+    }
+    // planted, the path showing
+    if (e.stage2 === 'plant') {
+      const k = e.st / S.dashPlant;
+      e.warn.material.opacity = (0.25 + 0.25 * k) * (Math.sin(t * (14 + k * 30)) > 0 ? 1 : 0.55);
+      e.model.group.rotation.y = Math.atan2(-e.dashDir.z, e.dashDir.x);
+      if (e.st >= S.dashPlant) {
+        e.stage2 = 'dash';
+        e.st = 0;
+        e.dashGone = 0;
+        e.dashHit = false;
+        this.combat.shake = Math.max(this.combat.shake, 0.3);
+      }
+      return own({ open: true, dash: e.st > S.dashPlant - 0.3 });
+    }
+    if (e.stage2 === 'dash') {
+      const step = Math.min(S.dashSpeed * dt, e.dashLen - e.dashGone);
+      e.pos.addScaledVector(e.dashDir, step);
+      e.dashGone += step;
+      if (Math.random() < 0.7) this.combat.puffs.spawn(e.pos.clone().addScaledVector(e.dashDir, -2.5).setY(0.6), new THREE.Vector3((Math.random() - 0.5) * 2, 0.6, (Math.random() - 0.5) * 2), { color: 0x8f8b84, s0: 0.4, s1: 1.4, life: 0.8, drag: 2, lift: 0.4, fadeAt: 0.3 });
+      // running the tank down
+      const tb = ctx.tankBox;
+      if (tb && !e.dashHit && !ctx.over) {
+        const rx = tb.x - e.pos.x;
+        const rz = tb.z - e.pos.z;
+        const along = rx * e.dashDir.x + rz * e.dashDir.z;
+        const off = Math.abs(rx * e.dashDir.z - rz * e.dashDir.x);
+        if (along > -2 && along < 3.2 && off < S.dashWidth / 2 + Math.max(tb.hx, tb.hz) * 0.6) {
+          e.dashHit = true;
+          ctx.onTankHit?.(S.dashDamage, new THREE.Vector3(tb.x, 1, tb.z));
+          this.combat.shake = Math.max(this.combat.shake, 0.6);
+        }
+      }
+      if (e.dashGone >= e.dashLen - 1e-3) {
+        // into the wall: a crash, then it's stunned
+        e.warn.visible = false;
+        e.stage2 = 'fight';
+        e.hold = false;
+        e.dazed = S.daze;
+        e.stun = S.daze;
+        e.dashT = THREE.MathUtils.lerp(S.dashEvery[0], S.dashEvery[1], Math.random());
+        e.shotSinceDash = false;
+        const at = e.pos.clone().addScaledVector(e.dashDir, 2.6).setY(1);
+        this.combat.explode(at);
+        this.combat.fx.burst(at, { count: 30, speed: 8, color: 0xc9c2b4, life: 0.6, size: 0.12, gravity: 12 });
+        this.combat.shake = Math.max(this.combat.shake, 0.7);
+        return false;
+      }
+      return own({ open: true, dash: true });
+    }
+    // fighting: count down to the next dash (only after a shot in between)
+    if (e.dazed > 0) {
+      e.dazed -= dt;
+      if (Math.random() < dt * 12) this.combat.puffs.spawn(e.pos.clone().setY(2.2), new THREE.Vector3((Math.random() - 0.5), 1.2, (Math.random() - 0.5)), { color: 0x4a4744, s0: 0.3, s1: 1, life: 1, drag: 2, lift: 0.8, fadeAt: 0.3 });
+    }
+    e.dashT -= dt;
+    if (e.dashT <= 0 && e.shotSinceDash && !(e.charge > 0) && !(e.dazed > 0) && e.los && !ctx.over) {
+      const tp = ctx.tankPos;
+      const dir = new THREE.Vector3(tp.x - e.pos.x, 0, tp.z - e.pos.z);
+      if (dir.lengthSq() < 1) return false;
+      dir.normalize();
+      // the path: on until the wall
+      let L = 2;
+      while (L < 80 && (e.arena ? e.arena(e.pos.x + dir.x * (L + 0.5), e.pos.z + dir.z * (L + 0.5)) : L < 30)) L += 0.5;
+      if (L < 6) {
+        e.dashT = 1; // (too close to the wall that way: try again in a moment)
+        return false;
+      }
+      e.dashDir = dir;
+      e.dashLen = L;
+      e.stage2 = 'plant';
+      e.st = 0;
+      e.hold = true;
+      e.charge = 0;
+      e.funnel.visible = false;
+      if (!e.warn) {
+        e.warn = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0.5, 0, 0), new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.4, depthWrite: false }));
+        this.scene.add(e.warn);
+      }
+      e.warn.visible = true;
+      e.warn.position.set(e.pos.x, gy(e.pos.x, e.pos.z) + 0.07, e.pos.z);
+      e.warn.rotation.y = Math.atan2(-dir.z, dir.x);
+      e.warn.scale.set(L + 2.5, 1, S.dashWidth);
+      return own({ open: true });
+    }
+    return false;
   }
   // The siege mech's main gun: a slow explosive shell down the locked line
   // (a glowing slug you can see coming; it bursts on whatever it hits)

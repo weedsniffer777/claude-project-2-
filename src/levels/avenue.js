@@ -1561,7 +1561,7 @@ function buildAvenue(scene) {
     // Three sectors, a depot shack across the street between each:
     //  1 The avenue: learn to drive, shoot, crush, collect scrap
     //  2 The bridge: rocket-ram the barricade, blow the gate
-    //  3 The intersection: hold out, the airstrike, the large quadruped
+    //  3 The intersection: hold out, the airstrike, the large drone
     const SECTORS = ['The avenue', 'The bridge', 'The intersection'];
     const [shackA, shackB] = shacks;
     const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: -21, maxZ: 9.9 };
@@ -1842,7 +1842,7 @@ function buildAvenue(scene) {
     }
 
     // ------------------------------------------- sector 3: the intersection
-    // Hold the crossing for a short while, then the large quadruped climbs
+    // Hold the crossing for a short while, then the large drone climbs
     // over the rubble; the moment it dies the airstrike opens the wall.
     const HOLD = 15;
     const JX = (JUNCTION.x0 + JUNCTION.x1) / 2;
@@ -1890,7 +1890,7 @@ function buildAvenue(scene) {
             S.boss = api.spawnHound(way.at.x, way.at.z, { via: [way.via], noclip: true });
             fromSouth(api, -3, 1.5);
             fromSouth(api, 3, 2);
-            api.boss(S.boss, 'Large quadruped');
+            api.boss(S.boss, 'Large drone');
             api.prompt('Warning', '<b>Defeat the boss</b> to complete the level!', { danger: true, seconds: 7 });
             api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null), () => api.tankPos.clone().setY(1)], r: 130 }, () => S.t > 1.4, { maxTime: 2.5, frame: () => (S.boss.alive ? S.boss.pos.clone() : null) });
             go(1);
