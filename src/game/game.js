@@ -959,7 +959,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     hud.setSpot(null);
   };
   function fire() {
-    if (run.spot?.lock) return; // (a scene playing: hands off)
     letGoFrame();
     if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
     queued = 0.7;
@@ -1593,7 +1592,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.trickleT = 0;
         run.mReload = false;
       }
-      if (!trigger || run.spot?.lock || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1 || run.mag < 1) return;
+      if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1 || run.mag < 1) return;
       if (hasAim && tank.aimError() > 0.12) return;
       reload = 0;
       run.shots++;
@@ -1610,7 +1609,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       return;
     }
-    if (!trigger || run.spot?.lock || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1) return;
+    if (!trigger || run.over || run.mode !== 'field' || run.locked || !run.gun || reload < 1) return;
     if (hasAim && tank.aimError() > 0.12) return;
     reload = 0;
     run.shots++;
@@ -1628,7 +1627,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   }
   const holdFire = () => def.gun === 'autocannon' || def.gun === 'missile';
   function tryFire(dt) {
-    if (run.spot?.lock) return; // (a scene playing: hands off)
     if (queued <= 0) return;
     queued -= dt;
     if (run.over) return void (queued = 0);

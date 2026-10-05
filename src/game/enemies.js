@@ -732,7 +732,7 @@ export class Enemies {
         m.mat.opacity = Math.min(1, e.markT * 2) * (0.75 + Math.sin(t * 8) * 0.25);
       }
       // keep out of walls, wrecks and each other
-      if (!DOG.static && !(e.noclip && e.via.length)) pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
+      if (!DOG.static && !(e.noclip && e.via.length) && e.stage2 !== 'dash' && e.stage2 !== 'plant') pushOut(e.pos, () => ({ x: e.pos.x, z: e.pos.z, hx: DOG.box.hx, hz: DOG.box.hz, yaw: e.model.group.rotation.y }), blocks, 1);
       for (const o of DOG.static ? [] : this.list) {
         if (o === e || !o.alive || o.delay > 0) continue;
         const ox = e.pos.x - o.pos.x;
@@ -1203,7 +1203,7 @@ export class Enemies {
         e.dashHit = false;
         this.combat.shake = Math.max(this.combat.shake, 0.3);
       }
-      if (e.st > S.dashPlant - 0.3) this.mechExhaust(e, dt, 0.6);
+      this.mechExhaust(e, dt, 0.25 + 0.5 * (e.st / S.dashPlant)); // (spooling up)
       return own({ open: true, dash: e.st > S.dashPlant - 0.3 });
     }
     if (e.stage2 === 'dash') {
@@ -1284,18 +1284,20 @@ export class Enemies {
   mechExhaust(e, dt, k) {
     const back = new THREE.Vector3(-Math.cos(e.model.group.rotation.y), 0, Math.sin(e.model.group.rotation.y));
     for (const n of e.model.engineNozzles()) {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 4; i++) {
         if (Math.random() > k) continue;
-        this.combat.puffs.spawn(n.clone().addScaledVector(back, 0.4), back.clone().multiplyScalar(5 + Math.random() * 4).add(new THREE.Vector3((Math.random() - 0.5) * 2, 0.6, (Math.random() - 0.5) * 2)), {
-          color: i ? 0x6b6a6f : 0xffa040,
-          s0: i ? 0.3 : 0.25,
-          s1: i ? 1.1 : 0.5,
-          life: i ? 0.9 : 0.2,
-          drag: 3,
-          lift: 0.8,
+        const smoke = i > 1;
+        this.combat.puffs.spawn(n.clone().addScaledVector(back, 0.6 + Math.random() * 0.6), back.clone().multiplyScalar(5 + Math.random() * 5).add(new THREE.Vector3((Math.random() - 0.5) * 2.5, 0.8 + Math.random(), (Math.random() - 0.5) * 2.5)), {
+          color: smoke ? [0x6b6a6f, 0x55545a, 0x807f84][(Math.random() * 3) | 0] : [0xffa040, 0xffc070, 0xff7a2a][(Math.random() * 3) | 0],
+          s0: smoke ? 0.45 : 0.35,
+          s1: smoke ? 1.1 + Math.random() * 0.6 : 0.8,
+          life: smoke ? 1.1 + Math.random() * 0.6 : 0.25,
+          drag: 2.5,
+          lift: 0.9,
           fadeAt: 0.3,
         });
       }
+      this.combat.glow.flash(n, 0xffd08a, 0.3, 1.6 * k, 0.08);
       if (Math.random() < 0.6 * k) this.combat.fx.spawn(n, back.clone().multiplyScalar(8).add(new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), { color: 0xffd36b, life: 0.3, size: 0.09, gravity: 6, glow: true });
       this.combat.glow.light(n, 0xff8a2a, 30 * k, 0.05);
     }
