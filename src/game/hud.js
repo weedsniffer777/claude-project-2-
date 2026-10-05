@@ -99,6 +99,7 @@ const CSS = `
 .hud-ability { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; display: grid; place-items: center; }
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
 .hud-ability.cooling canvas { filter: brightness(0.55) saturate(0.6); }
+.hud-ability.running canvas { filter: drop-shadow(3px 0 0 #6be08a) drop-shadow(-3px 0 0 #6be08a) drop-shadow(0 3px 0 #6be08a) drop-shadow(0 -3px 0 #6be08a) drop-shadow(0 0 8px #6be08aaa); }
 .hud-ability .key { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); }
 .hud-ability.ready canvas { filter: drop-shadow(0 0 4px #ffe2a0) drop-shadow(0 0 10px #ffb347aa); }
 .hud-ability.ready::before { content: 'Ready'; position: absolute; left: 50%; top: -24px; transform: translateX(-50%); padding: 3px 6px 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; white-space: nowrap; }
@@ -887,7 +888,11 @@ export function createHud() {
         drawAbility(el.querySelector('canvas'), state.k, state.lit, state.art, state.active);
       }
       el.classList.toggle('ready', state.k >= 1 && !state.lit);
-      const cooling = state.left > 0 && !state.lit;
+      // running (boosting, charging, aiming...): a green outline; only once
+      // it's done does it grey out to recharge
+      const running = !!state.lit || state.active != null;
+      el.classList.toggle('running', running);
+      const cooling = state.left > 0 && !running;
       el.classList.toggle('cooling', cooling);
       el.querySelector('.cd').textContent = cooling ? Math.ceil(state.left) : '';
       const c = a.center();
