@@ -190,6 +190,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     Object.assign(run, {
       bossSlow: 0, // a boss down: slow motion (bossFinale)
       finaleCam: null,
+      camShot: null, // api.cameraTo
       finaleQ: null,
       hp: stats.maxHp,
       time: 0,
@@ -486,6 +487,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // the scraps counter appears, glowing for a moment (no slow-down)
     revealScraps(highlight = true) {
       hud.showScrap(true, highlight);
+    },
+    // the camera glides over to a spot, holds it a moment, glides back
+    cameraTo(at, hold = 2) {
+      run.camShot = { at: at.clone(), t: hold + 1 };
+      run.camRate = 2.2; // (a slow glide)
     },
     boss(e, name = 'Large drone') {
       run.boss = e ? { e, name } : null;
@@ -1807,6 +1813,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const c = hud.stickCenter();
       const f = hud.fireCenter();
       const bs = { small: 0.82, normal: 1, large: 1.18 }[settings().buttons] || 1;
+      const sw = hud.swapCenter();
+      if (settings().aimAssist && run.gun && Math.abs(e.clientX - sw.x) < 36 * bs && Math.abs(e.clientY - sw.y) < 24 * bs) {
+        swapTarget();
+        return;
+      }
       if (run.gun && fireTouch === null && Math.hypot(e.clientX - f.x, e.clientY - f.y) < 50 * bs) {
         fireTouch = e.pointerId;
         if (run.arty > 0) return; // (calling in a strike: the spot's tapped on the ground)
@@ -1913,6 +1924,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const p = new THREE.Vector3(autoTarget.pos.x, (autoTarget.pos.y || 0) + 0.8 * (autoTarget.stats.scale || 1), autoTarget.pos.z).project(camera);
     const r = canvas.getBoundingClientRect();
     aimAt(r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height);
+  }
+  // the swap button: lock onto another machine (the next nearest after the
+  // one it's on, round again after the farthest); nothing locked: the nearest
+  function swapTarget() {
+    const reach = ((camera.top - camera.bottom) / camera.zoom) * 0.62;
+    const list = enemies.alive.filter((e) => !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach).sort((a, b) => Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z) - Math.hypot(b.pos.x - pos.x, b.pos.z - pos.z));
+    manualAim = false;
+    if (!list.length) return void (autoTarget = null);
+    const i = list.indexOf(autoTarget);
+    autoTarget = list[(i + 1) % list.length];
+    hud.swapPulse();
   }
   function tankBox() {
     const yaw = tank.group.rotation.y;
@@ -2732,6 +2754,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.finaleCam.t -= realDt;
         if (run.finaleCam.t <= 0) run.finaleCam = null;
         else camWant.lerp(run.finaleCam.at.clone().setY(camWant.y), Math.min(1, run.finaleCam.t) * 0.85);
+      } else if (run.camShot) {
+        run.camShot.t -= realDt;
+        if (run.camShot.t <= 0) run.camShot = null;
+        else camWant.lerp(run.camShot.at.clone().setY(camWant.y), Math.min(1, run.camShot.t) * 0.9);
       }
       // in the checkpoint: frame the room and its pallets (or the part
       // hovered) while there's a pick to make; for the refit, the tank
@@ -2885,6 +2911,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
       hud.setFire(live && !!run.gun, fireTouch !== null, reload < 1 && !stats.mag);
+      hud.setSwap(live && !!run.gun && settings().aimAssist);
       if (!run.gun || !live) hud.setAmmo(null);
       else if (def.gun === 'missile') hud.setAmmo({ n: run.mag, max: stats.mag, load: run.mReload && run.mag < stats.mag ? (run.mag + (run.trickleT || 0) / (stats.magReload / stats.mag)) / stats.mag : null, kind: 'missile' }); // (the next one filling as it reloads)
       else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });

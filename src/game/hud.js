@@ -115,6 +115,10 @@ const CSS = `
 .hud-fire canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; filter: drop-shadow(0 0 6px #ffc24a88); }
 .hud-fire.down canvas { filter: brightness(0.85); }
 .hud-fire.reloading canvas { filter: saturate(0.35) brightness(0.7); }
+.hud-swap { position: absolute; left: 0; top: 0; width: 66px; height: 42px; margin: -21px 0 0 -33px; pointer-events: none; }
+.hud-swap canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.hud-swap.pulse canvas { animation: hudSwap 0.25s steps(2); }
+@keyframes hudSwap { 50% { filter: brightness(1.6); } }
 .hud-pausebtn { position: absolute; right: calc(72px + env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); width: 40px; height: 40px; display: flex; gap: 6px; align-items: center; justify-content: center; border: 0; padding: 0; pointer-events: auto;
   background: rgba(12, 11, 13, 0.85); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .hud-pausebtn i { width: 6px; height: 16px; background: #f1e9d8; }
@@ -302,6 +306,35 @@ function drawStick(base, knob) {
 // The touch FIRE button, 26 px of pixel art: a chunky yellow button with a
 // dark rim and a lit top edge, a shell flying out of it to the right with
 // speed streaks behind.
+// The swap-target button, 22 x 14 pixel art: a dark rounded slab with a
+// pale rim and a cyan crosshair in the middle.
+function drawSwapButton(c) {
+  const g = c.getContext('2d');
+  const px = (x, y, w, h, col) => {
+    g.fillStyle = col;
+    g.fillRect(x, y, w, h);
+  };
+  px(1, 0, 20, 14, '#111');
+  px(0, 1, 22, 12, '#111');
+  px(1, 1, 20, 12, '#f1e9d8');
+  px(2, 2, 18, 10, '#2a2628');
+  px(2, 2, 18, 1, '#3a3638');
+  // the reticle: a ring and four ticks
+  px(9, 4, 4, 1, '#5fe6ff');
+  px(9, 9, 4, 1, '#5fe6ff');
+  px(8, 5, 1, 4, '#5fe6ff');
+  px(13, 5, 1, 4, '#5fe6ff');
+  px(10, 3, 2, 1, '#5fe6ff');
+  px(10, 10, 2, 1, '#5fe6ff');
+  px(6, 6, 2, 2, '#5fe6ff');
+  px(14, 6, 2, 2, '#5fe6ff');
+  px(10, 6, 2, 2, '#ffffff');
+  // little arrows either side: swap
+  px(3, 6, 1, 2, '#b9b0a0');
+  px(4, 5, 1, 4, '#b9b0a0');
+  px(18, 6, 1, 2, '#b9b0a0');
+  px(17, 5, 1, 4, '#b9b0a0');
+}
 function drawFireButton(c) {
   const g = c.getContext('2d');
   const px = (x, y, w, h, col) => {
@@ -455,6 +488,7 @@ export function createHud() {
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
     <div class="hud-fire" hidden><canvas width="26" height="26"></canvas></div>
+    <div class="hud-swap" hidden><canvas width="22" height="14"></canvas></div>
     <button type="button" class="hud-pausebtn" hidden aria-label="Pause"><i></i><i></i></button>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
     <div class="hud-ability two" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">E</kbd></div>
@@ -569,7 +603,7 @@ export function createHud() {
     const k = bscale();
     const step = 80 * k;
     const tall = window.innerHeight > window.innerWidth;
-    return mirror(tall ? { x: f.x, y: f.y - 92 * k - i * step } : { x: f.x - 92 * k - i * step, y: f.y + 6 * k });
+    return mirror(tall ? { x: f.x, y: f.y - 148 * k - i * step } : { x: f.x - 92 * k - i * step, y: f.y + 6 * k });
   };
   const abilityCenter = () => (touchMode ? lineAt(0) : { x: window.innerWidth - 72, y: window.innerHeight - 72 });
   const ability2Center = () => {
@@ -584,6 +618,14 @@ export function createHud() {
     return { x: c.x - 110, y: c.y };
   };
   const fireEl = $('.hud-fire');
+  // the swap-target button, just above FIRE
+  const swapEl = $('.hud-swap');
+  drawSwapButton(swapEl.querySelector('canvas'));
+  const swapCenter = () => {
+    const f = fireCenter();
+    const k = bscale();
+    return { x: f.x, y: f.y - 44 * k - 12 - 21 * k };
+  };
   drawFireButton(fireEl.querySelector('canvas'));
   const pauseBtn = $('.hud-pausebtn');
   let onPauseBtn = null;
@@ -867,6 +909,18 @@ export function createHud() {
     ability2Center,
     ability3Center,
     fireCenter,
+    swapCenter,
+    setSwap(show) {
+      swapEl.hidden = !(show && touchMode);
+      if (swapEl.hidden) return;
+      const c = swapCenter();
+      swapEl.style.transform = `translate(${c.x}px, ${c.y}px) scale(${bscale()})`;
+    },
+    swapPulse() {
+      swapEl.classList.remove('pulse');
+      void swapEl.offsetWidth;
+      swapEl.classList.add('pulse');
+    },
     // the touch FIRE button: shown (in battle, with a gun), held down, reloading
     setFire(show, down = false, reloading = false) {
       fireEl.hidden = !(show && touchMode);

@@ -1917,6 +1917,7 @@ function buildAvenue(scene) {
           if (S.strike.update(dt)) {
             S.strike = null;
             api.arrow(new THREE.Vector3(END_X + 3, 0.6, 0), 'Exit');
+            api.cameraTo(new THREE.Vector3(END_X + 1, 0, 0), 2.2); // (over to the way out, then back)
             go(3);
           }
           break;
