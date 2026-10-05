@@ -185,6 +185,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const loadout = save.loadout(tankId).filter((id) => PARTS[id]).slice(0, def.slots);
     fitParts(loadout);
     Object.assign(run, {
+      bossSlow: 0, // a boss down: slow motion (bossFinale)
+      finaleCam: null,
+      finaleQ: null,
       hp: stats.maxHp,
       time: 0,
       over: false,
@@ -675,6 +678,38 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (Math.random() < tokenChance) pickups.spawn(at, e.stats.scale > 1.5 ? 2 : 1, 'token', 1);
     if (blasted) run.hitstop = Math.max(run.hitstop, e.stats.scale > 1.5 ? 0.25 : 0.075);
     if (run.chain >= 2) hud.damage(at.clone().setY(at.y + 1.2), 0, 'chain', `x${mult}`);
+    if (run.boss?.e === e) bossFinale(e);
+  }
+  // A boss down: the world drops into slow motion and eases back, the
+  // camera glides over to the wreck and holds there; the big ones go up in
+  // a chain of huge bright blasts, sparks everywhere.
+  const FINALE_SLOW = 2.4; // seconds (real) of slow motion, easing out
+  function bossFinale(e) {
+    run.bossSlow = FINALE_SLOW;
+    run.finaleCam = { at: new THREE.Vector3(e.pos.x, 0, e.pos.z), t: 3 };
+    if (e.stats.scale > 1.5 && !e.stats.spider) {
+      const s = e.stats.scale;
+      run.finaleQ = [0, 0.12, 0.26, 0.42, 0.6, 0.85].map((t, i) => ({ t, at: new THREE.Vector3(e.pos.x + (i ? (Math.random() - 0.5) * 2.4 * s : 0), (0.6 + Math.random() * 0.8) * s, e.pos.z + (i ? (Math.random() - 0.5) * 2 * s : 0)), big: i === 0 || i === 5 }));
+    }
+  }
+  function finaleFrame(realDt) {
+    if (!run.finaleQ?.length) return;
+    for (let i = run.finaleQ.length - 1; i >= 0; i--) {
+      const b = run.finaleQ[i];
+      b.t -= realDt;
+      if (b.t > 0) continue;
+      run.finaleQ.splice(i, 1);
+      const g = new THREE.Vector3(b.at.x, 0.06, b.at.z);
+      combat.explode(b.at);
+      combat.glow.flash(b.at, 0xffffff, b.big ? 1.4 : 0.8, b.big ? 10 : 6, b.big ? 0.35 : 0.2);
+      combat.glow.flash(b.at, 0xffb347, b.big ? 1.8 : 1.1, b.big ? 13 : 8, b.big ? 0.6 : 0.4);
+      combat.glow.ring(g, 0xffe2a0, 0.5, b.big ? 9 : 5, 0.5);
+      combat.glow.light(b.at, 0xffc070, b.big ? 420 : 200, 0.5);
+      combat.fx.burst(b.at, { count: b.big ? 140 : 60, speed: b.big ? 18 : 12, color: 0xffe08a, life: 0.9, size: 0.12, gravity: 9 });
+      combat.fx.burst(b.at, { count: b.big ? 70 : 30, speed: b.big ? 24 : 15, color: 0xffffff, life: 0.5, size: 0.08, gravity: 6 });
+      for (let k = 0; k < (b.big ? 14 : 6); k++) combat.puffs.spawn(b.at, new THREE.Vector3((Math.random() - 0.5) * 8, 2 + Math.random() * 4, (Math.random() - 0.5) * 8), { color: 0x5f5a54, s0: 0.6, s1: 2.4, life: 2, drag: 2, lift: 0.6, fadeAt: 0.3 });
+      combat.shake = Math.max(combat.shake, b.big ? 1.3 : 0.7);
+    }
   }
 
   function collect(p) {
@@ -1957,6 +1992,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   }
   function showPicker() {
     const st = run.depot;
+    // the first pick ever: spotlit, and then the Equip button's taught too
+    if (st.teach == null) {
+      st.teach = !save.tips().includes('pick');
+      if (st.teach) save.seeTip('pick');
+    }
     hud.showPicker(
       st.offers.map((id) =>
         save.owned().includes(id)
@@ -1971,6 +2011,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         st.focus = pad ? new THREE.Vector3(pad.x, 0, pad.z) : null;
         st.room.hover(id); // only its pallet lit
       },
+      st.teach,
     );
   }
   // A card picked: the part goes into storage, and the fitting screen opens
@@ -2021,6 +2062,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       loadout: run.parts,
       owned: save.owned(),
       highlight: st.found,
+      teachEquip: st.teach && !st.improved && !run.parts.includes(st.found),
       improved: st.improved, // its icon glows and the new star flies on (the first time only)
       buttons: [['Continue', () => leaveDepot(), true, true]],
       onSet(list, added) {
@@ -2408,6 +2450,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       } else if (run.hitstop > 0) {
         run.hitstop -= realDt;
         dt = 0;
+      } else if (run.bossSlow > 0) {
+        // a boss down: slow motion, easing back to full speed
+        run.bossSlow = Math.max(0, run.bossSlow - realDt);
+        const k = 1 - run.bossSlow / FINALE_SLOW;
+        dt = realDt * (0.15 + 0.85 * k * k);
       } else if (run.spot && run.spot.hold == null && run.spot.slow !== false) dt = realDt * SLOW_MO;
       else if (run.dilate > 0) {
         run.dilate -= realDt;
@@ -2671,6 +2718,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       camWant.set(pos.x + 0.6, 0.8 + pos.y, pos.z);
       const lean = run.spot?.frame?.();
       if (lean) camWant.lerp(lean.setY(camWant.y), run.spot.frameK);
+      // a boss down: over to the wreck, held there, then back
+      finaleFrame(realDt);
+      if (run.finaleCam) {
+        run.finaleCam.t -= realDt;
+        if (run.finaleCam.t <= 0) run.finaleCam = null;
+        else camWant.lerp(run.finaleCam.at.clone().setY(camWant.y), Math.min(1, run.finaleCam.t) * 0.85);
+      }
       // in the checkpoint: frame the room and its pallets (or the part
       // hovered) while there's a pick to make; for the refit, the tank
       const refit = run.depot && ['edit', 'fit', 'opening'].includes(run.depot.step) && !run.depot.focus;

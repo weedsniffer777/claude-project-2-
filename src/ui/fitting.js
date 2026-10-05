@@ -147,6 +147,11 @@ const CSS = `
 .fit .tip b { display: block; font: 400 11px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); margin-bottom: 3px; }
 .fit .msg { display: grid; gap: 8px; padding: 9px 10px 10px; font-size: 13px; background: #1d1b1e; box-shadow: 0 0 0 2px #000; }
 .fit .msg .row { display: flex; gap: 8px; flex-wrap: wrap; }
+/* the first part ever found: its box lit up, a spotlight on it, Equip pulsing */
+.fit .msg.teach { position: relative; z-index: 4; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 0 0 0 200vmax rgba(4, 3, 6, 0.55); }
+.fit .msg.teach .teachline { color: #b6ffc4; }
+.fit .msg.teach .equip { animation: fitTeach 0.8s steps(2) infinite; }
+@keyframes fitTeach { 50% { filter: brightness(1.3); box-shadow: 0 0 0 2px #000, 0 0 14px 3px #6be08a; } }
 .fit .btn { padding: 8px 14px 9px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .btn.go { color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000; }
 .fit .btn:hover { filter: brightness(1.15); }
@@ -530,7 +535,10 @@ export function createFitting({ renderer, cursor }) {
     msg.hidden = true;
     if (!replacing && o.highlight && sp.includes(o.highlight)) {
       msg.hidden = false;
-      msg.innerHTML = `<span>Found: <b></b>. It's in storage.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`;
+      msg.innerHTML = o.teachEquip
+        ? `<span class="teachline">▶ Put <b></b> on your tank! You can change your tank's loadout at any checkpoint.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`
+        : `<span>Found: <b></b>. It's in storage.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`;
+      msg.classList.toggle('teach', !!o.teachEquip);
       msg.querySelector('b').textContent = PARTS[o.highlight].name;
       msg.querySelector('.equip').addEventListener('click', () => equip(o.highlight));
     }

@@ -1835,7 +1835,7 @@ function buildAvenue(scene) {
           if (atDoor(api, shackB)) {
             go(7);
             if (api.enemiesAlive) api.clearEnemies(); // left behind
-            api.depot(shackB, { offers: [], onLeave: () => startSector3(api) }); // a repair stop: these parts turn up in level 2 now
+            api.depot(shackB, { offers: ['dozer', 'autoloader', 'era'], onLeave: () => startSector3(api) }); // (the two not taken at the first; the stars make a second of one an improvement)
           }
           break;
       }

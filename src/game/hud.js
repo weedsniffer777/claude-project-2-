@@ -130,6 +130,13 @@ const CSS = `
   width: min(660px, calc(100vw - 32px)); pointer-events: auto; }
 .hud-picker .title { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--go); text-shadow: 2px 2px 0 #000; }
 .hud-picker .row { display: flex; gap: 16px; justify-content: center; align-items: stretch; flex-wrap: wrap; }
+.hud-picker.teach { z-index: 5; }
+.hud-picker.teach::before { content: ''; position: absolute; inset: -8px; box-shadow: 0 0 0 200vmax rgba(4, 3, 6, 0.62); pointer-events: none; z-index: -1; }
+.hud-picker.teach .title { font-size: 16px; animation: hudTeach 0.9s steps(2) infinite; }
+.hud-picker.teach .title .ptr { font-style: normal; display: inline-block; animation: hudPtr 0.7s steps(2) infinite; }
+.hud-picker.teach .hud-card { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go), 0 0 18px 2px #6be08a88; }
+@keyframes hudTeach { 50% { color: #b6ffc4; } }
+@keyframes hudPtr { 50% { transform: translateY(4px); } }
 .hud-card { width: 184px; min-height: 150px; padding: 14px 12px 14px; display: flex; flex-direction: column; gap: 8px; align-items: center; text-align: center; border: 0; color: var(--ink); font: inherit;
   transition: transform 0.12s steps(3); }
 .hud-card .name { font: 400 13px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
@@ -892,8 +899,12 @@ export function createHud() {
     },
     // depot parts: [{ id, name, text, icon }], or null to hide
     // onHover(id | null): the card under the pointer
-    showPicker(list, onPick, skip, onHover) {
+    // teach: the first pick ever: everything else darkened round the cards,
+    // a green pointer and the words for what this is
+    showPicker(list, onPick, skip, onHover, teach = false) {
       picker.hidden = !list;
+      picker.classList.toggle('teach', !!teach && !!list);
+      picker.querySelector('.title').innerHTML = teach ? '<i class="ptr">▼</i> Pick a reward to keep permanently! <i class="ptr">▼</i>' : 'Pick one part';
       onSkip = skip;
       picker.querySelector('.skip').hidden = !skip;
       const row = picker.querySelector('.row');
