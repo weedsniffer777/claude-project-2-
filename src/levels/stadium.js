@@ -855,7 +855,7 @@ function buildStadium(scene) {
           S.boss = api.spawnSpider(CX + 14, CZ, { yaw: Math.PI, arena: (x, z) => inPill(x, z, 3.2) && !(Math.abs(x - CX) > HL + R - 9 && Math.abs(z - CZ) < GATE_HALF + 3) });
           api.boss(S.boss, 'Mech');
           api.objective('Destroy the mech');
-          api.prompt('Mech', 'A <b>mech</b>! Its <b>main gun</b> lines up like a beam (red funnel), then fires a slow explosive shell: get out of the line. Its <b>rocket artillery</b> lands on the <b>red rings</b>. Keep moving and use cover!', { danger: true, seconds: 8 });
+          api.prompt('Mech', 'Defeat the mech! Avoid its devastating <b>main gun</b> fire and <b>rocket artillery</b>.', { danger: true, seconds: 6 });
           api.spotlight({ targets: [() => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 4, S.boss.pos.z) : null)], r: 190 }, () => S.t > 2.4, { maxTime: 3, frame: () => (S.boss.alive ? S.boss.pos.clone() : null), frameK: 1 });
           S.waveT = 18;
           go(2);
