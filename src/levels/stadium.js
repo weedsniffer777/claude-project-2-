@@ -874,7 +874,8 @@ function buildStadium(scene) {
         if (!S.boss.alive) {
           api.clearEnemies();
           setGate(gates[1], true);
-          api.prompt('Mech destroyed', 'The east gate is opening. <b>Drive out!</b>', { go: true, seconds: 5 });
+          api.prompt('Mech destroyed', 'The east gate is open!', { go: true, seconds: 5 });
+          api.cameraTo(new THREE.Vector3(E_IN + 2, 0, CZ), 2.2); // (over to the way out, then back)
           setBounds(api, { maxX: END_X + 4 });
           api.arrow(new THREE.Vector3(E_IN + 6, 1.4, CZ), 'Exit');
           go(3);

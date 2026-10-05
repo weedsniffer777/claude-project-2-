@@ -1228,6 +1228,7 @@ export class Enemies {
         // into the wall: a crash, then it's stunned
         e.warn.visible = false;
         e.stage2 = 'fight';
+        e.mctx = { open: true }; // (engine off: no flame till the next dash)
         e.hold = false;
         e.dazed = S.daze;
         e.stun = S.daze;

@@ -2775,7 +2775,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const scanning = !!run.sal || missiles.some((ms) => ms.top);
       salvoK += ((scanning ? 1 : 0) - salvoK) * (1 - Math.exp(-realDt * (scanning ? 5 : 2)));
       rangeK += ((run.rangeT > 0 ? 1 : 0) - rangeK) * (1 - Math.exp(-realDt * (run.rangeT > 0 ? 4 : 1.5)));
-      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch) / (1 + ((stats.salvoZoom || 1) - 1) * salvoK) / (1 + 0.5 * rangeK); // and leaning in on the wreck
+      const zoom = (1 + 0.3 * deathK) / (1 + 0.06 * speedK + 0.05 * run.punch) / (1 + ((stats.salvoZoom || 1) - 1) * salvoK) / (1 + 0.5 * rangeK) * (run.depot ? stats.view : 1); // and leaning in on the wreck; (in a checkpoint the view parts don't count: the room's framed as it is)
       if (Math.abs(camera.zoom - zoom) > 1e-4) {
         camera.zoom = zoom;
         camera.updateProjectionMatrix();
