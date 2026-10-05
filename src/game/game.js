@@ -19,7 +19,7 @@ import { pushOut } from './collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
 import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
-import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml, levelOf } from './parts.js';
+import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml, levelOf, gmgLauncher } from './parts.js';
 import { save } from './save.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
@@ -500,6 +500,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     boss(e, name = 'Large drone') {
       run.boss = e ? { e, name } : null;
+      // Hard: every boss tougher, and hitting harder while it's up
+      if (e && run.hard && !e.hardened) {
+        e.hardened = true;
+        e.maxHp = Math.round(e.maxHp * 1.35);
+        e.hp = e.maxHp;
+      }
       if (!e) hud.setBoss(null, null);
     },
     // Into a checkpoint: the tank rolls on through the shack door as the
@@ -980,6 +986,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.damage(at.clone().setY(2.4), 0, 'heal', 'Blocked');
       return;
     }
+    if (run.hard && run.boss?.e?.alive) damage *= 1.15; // (Hard: a boss fight hits harder)
     run.hp -= damage * stats.armor * (run.shield > 0 ? 1 - stats.breakShield : 1);
     hud.setHull(run.hp, stats.maxHp);
     hud.hurt();
@@ -1202,7 +1209,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       targets.push({ point: p });
     }
     run.abilityCd = stats.salvoCooldown;
-    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 2.09, blast: stats.splash * 1.15 }; // (the salvo keeps its punch: the single missiles are the weaker ones)
+    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 1.81, blast: stats.splash * 1.15 }; // (the salvo keeps its punch: the single missiles are the weaker ones)
   }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
@@ -2372,6 +2379,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function twinMg(dt, t, first) {
     const g = partMeshes.find((m) => m.userData.mounts);
     if (!g || run.over || run.mode !== 'field' || dt <= 0) return;
+    // with the grenade launcher every extra gun's a launcher too
+    for (const mt of g.userData.mounts) {
+      if (stats.gmg && !mt.gmg) mt.gmg = mt.pivot.add(gmgLauncher());
+      if (mt.gmg) mt.gmg.visible = !!stats.gmg;
+    }
     // each mount takes the nearest machine nobody else is on yet (or, with
     // none left, doubles up on the first MG's)
     const taken = new Set([first]);
@@ -2398,6 +2410,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (Math.abs(wrapAngle(want - pivot.rotation.y)) > 0.3) continue;
       mt.timer -= dt;
       if (mt.timer > 0 || Math.sin(t * 2.4 + 1.5 + mt.pivot.id) < -0.3) continue;
+      if (stats.gmg) {
+        mt.timer = stats.gmgRate;
+        lobGrenade(pivot.localToWorld(mt.muzzle.clone()), target);
+        continue;
+      }
       mt.timer = 0.08;
       const muzzle = pivot.localToWorld(mt.muzzle.clone());
       const hit = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.35, (Math.random() - 0.3) * 0.2, (Math.random() - 0.5) * 0.35));
@@ -2409,6 +2426,60 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const p = hit.clone().add(new THREE.Vector3(0, 0.5, 0));
       hud.damage(p, stats.mgDamage, 'mg');
       if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
+    }
+  }
+
+  // The grenade launcher's grenades: lobbed at the target with a fair bit
+  // of scatter, some falling short; each a little blast where it lands:
+  // full damage on what it lands on (about an MG's, over time), half out to
+  // the blast's edge
+  const grenades = [];
+  const grenadeGeo = new THREE.SphereGeometry(0.07, 6, 4);
+  const grenadeMat = new THREE.MeshBasicMaterial({ color: 0x2a2b2d });
+  function lobGrenade(from, target) {
+    const aim = enemies.aimPoint(target).clone();
+    const d = Math.hypot(aim.x - from.x, aim.z - from.z);
+    // scatter grows with the range; one in four drops short
+    const sc = 0.4 + d * 0.06;
+    aim.x += (Math.random() - 0.5) * 2 * sc;
+    aim.z += (Math.random() - 0.5) * 2 * sc;
+    if (Math.random() < 0.25) aim.lerp(from, 0.15 + Math.random() * 0.2);
+    aim.y = Math.min(aim.y, groundAt(aim.x, aim.z) + (target.stats.flying ? aim.y : 0.3));
+    const m = new THREE.Mesh(grenadeGeo, grenadeMat);
+    m.position.copy(from);
+    scene.add(m);
+    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.35 + d * 0.035, apex: 0.6 + d * 0.08, last: from.clone() });
+    combat.glow.flash(from, 0xffc860, 0.08, 0.5, 0.06);
+    combat.puffs.spawn(from.clone(), new THREE.Vector3(0, 0.6, 0), { color: 0x8f8a80, s0: 0.1, s1: 0.35, life: 0.4, drag: 3, lift: 0.4, fadeAt: 0.3 });
+  }
+  function grenadeFrame(dt) {
+    for (let i = grenades.length - 1; i >= 0; i--) {
+      const gr = grenades[i];
+      gr.t += dt;
+      const u = Math.min(1, gr.t / gr.T);
+      const p = gr.from.clone().lerp(gr.to, u);
+      p.y += 4 * gr.apex * u * (1 - u);
+      gr.m.position.copy(p);
+      combat.glow.tracer(gr.last, p, 0xffb070, 0.04, 0.06);
+      gr.last.copy(p);
+      if (u < 1) continue;
+      gr.m.removeFromParent();
+      grenades.splice(i, 1);
+      const at = gr.to;
+      combat.glow.flash(at, 0xffd080, 0.12, 1.3, 0.08);
+      combat.glow.light(at, 0xff9a40, 14, 0.12);
+      combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
+      for (let k = 0; k < 3; k++) combat.puffs.spawn(at.clone(), new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
+      const dmg = stats.gmgDamage * (stats.mgDamage / 3);
+      for (const e of enemies.alive) {
+        const ap = enemies.aimPoint(e);
+        const r = Math.hypot(ap.x - at.x, ap.z - at.z) - (e.stats.box?.hx || 0.5) * 0.5;
+        if (r > stats.gmgSplash || Math.abs(ap.y - at.y) > 2.2) continue;
+        const amount = Math.round(r < 0.6 ? dmg : dmg * 0.5);
+        const killed = enemies.damage(e, amount);
+        hud.damage(ap.clone().setY(ap.y + 0.5), amount, 'mg');
+        if (killed) hud.damage(ap.clone().setY(ap.y + 1.1), 0, 'kill');
+      }
     }
   }
 
@@ -2697,7 +2768,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // rocket ram and dozer blade: machines in the way take a beating
       if (run.mode === 'field' && !run.over) {
         enemies.nudge(tankBox(), vel); // and anything it drives into is shoved aside
-        const ramDmg = boosting ? RAM_DAMAGE : Math.abs(speed) > 3 ? stats.ramDamage : 0;
+        const ramDmg = (boosting ? RAM_DAMAGE : Math.abs(speed) > 3 ? stats.ramDamage : 0) * (run.brk > 0 ? 0.8 : 1); // (Breakthrough's charge a little softer)
         if (ramDmg > 0) {
           // Breakthrough ploughs them on ahead of the tank, knocked senseless;
           // a boost or the blade throws them aside
@@ -2869,7 +2940,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
       run.levelT = Math.max(0, (run.levelT || 0) - realDt); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
+      run.gmgT = Math.max(0, (run.gmgT || 0) - dt);
       for (const e of tank.events) {
+        if (e.type === 'mg' && stats.gmg) {
+          // the grenade launcher: a grenade every so often instead of the bullets
+          if (mgTarget?.alive && run.gmgT <= 0) {
+            run.gmgT = stats.gmgRate;
+            lobGrenade(e.muzzle, mgTarget);
+          }
+          continue;
+        }
         if (e.type !== 'mg' || !mgTarget?.alive || Math.random() > MG_ACCURACY) continue;
         const killed = enemies.damage(mgTarget, stats.mgDamage);
         const p = e.target.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.4 + Math.random() * 0.3, (Math.random() - 0.5) * 0.4));
@@ -2878,6 +2958,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if (killed) hud.damage(p.clone().setY(p.y + 0.6), 0, 'kill');
       }
       if (stats.twinMg) twinMg(dt, t, mgTarget);
+      grenadeFrame(dt);
       spotter(dt);
       run.reactT = Math.max(0, (run.reactT || 0) - dt);
       tryFire(dt);

@@ -839,7 +839,7 @@ function buildStadium(scene) {
         if (x > STREET_END + 4) {
           for (const [dx, z, d] of [[0, -10, 0], [2, 10, 0.4], [4, 0, 0.8], [6, -4, 1.2]]) api.spawnDog(x + 26 + dx, z, { delay: d });
           api.spawnWalker(x + 34, 8, { delay: 1.4 });
-          contact(api, 'Enemies on the plaza!');
+          contact(api, 'Get to the stadium entrance!');
           api.cameraTo(new THREE.Vector3(W_IN - 4, 0, CZ), 2.2); // (a look at the way in)
           go(1);
         }

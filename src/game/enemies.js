@@ -8,6 +8,7 @@ import { createBridgeGun } from '../models/bridgeGun.js';
 import { createDrone } from '../models/drone.js';
 import { createSpider } from '../models/spider.js';
 import { pushOut } from './collide.js';
+import { createGunship } from '../models/gunship.js';
 import { shieldCross } from './shield.js';
 import { ENEMY_LAYER } from '../render/pixel.js';
 
@@ -177,7 +178,7 @@ const SPIDER = {
   heavy: true, // (rams, shoves and shockwaves hurt it but never move it)
   kinetic: true,
   shatterOnDeath: true,
-  hp: 3600,
+  hp: 3960,
   runSpeed: 2.0,
   walkSpeed: 1.3,
   turnRate: 1.2,
@@ -286,11 +287,15 @@ const GUNSHIP = {
   reload: 2.6,
   damage: 9,
   rocketSpeed: 11,
-  box: { hx: 1.2, hz: 1.2 },
-  scale: 2.3,
-  modelScale: 2.3,
+  model: createGunship,
+  box: { hx: 1.6, hz: 1.6 },
+  scale: 2.6,
+  modelScale: 2.6,
   aimY: 6.2,
+  hit: [2.2, 0.6, 1.9, 0],
   scrap: 60,
+  // its chin gun: short bursts between the rocket salvos
+  mg: { every: 2.2, burst: 7, gap: 0.08, damage: 2, speed: 26, spread: 1.4 },
 };
 
 
@@ -377,6 +382,7 @@ export class Enemies {
   spawnBridgeGun(x, z, opts = {}) {
     const e = this.spawn(BRIDGE_GUN, 'gun', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
+    if (opts.hpScale) e.hp = e.maxHp = Math.round(e.maxHp * opts.hpScale); // (not a boss: lighter)
     return e;
   }
 
@@ -1010,6 +1016,30 @@ export class Enemies {
       else if (e.windup <= 0) {
         e.burstLeft = S.salvo;
         e.fireTimer = 0;
+      }
+    }
+    // the gunship's chin gun: a burst now and then while it isn't on a salvo
+    if (S.mg && !ctx.over) {
+      if (e.windup <= 0 && e.burstLeft <= 0 && dist < S.range && e.los && !(e.stun > 0) && !(e.mgLeft > 0)) {
+        e.mgT = (e.mgT ?? 1.5) - dt;
+        if (e.mgT <= 0) {
+          e.mgT = S.mg.every * (0.8 + Math.random() * 0.4);
+          e.mgLeft = S.mg.burst;
+          e.mgGap = 0;
+        }
+      }
+      if (e.mgLeft > 0) {
+        e.mgGap -= dt;
+        if (e.mgGap <= 0) {
+          e.mgLeft--;
+          e.mgGap = S.mg.gap;
+          const from = e.model.gunMuzzle ? e.model.gunMuzzle() : e.model.muzzle();
+          const aim = new THREE.Vector3(tankPos.x + (Math.random() - 0.5) * S.mg.spread * 2, tankPos.y + 0.7, tankPos.z + (Math.random() - 0.5) * S.mg.spread * 2);
+          const to = aim.sub(from);
+          const time = to.length() / S.mg.speed;
+          this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.3, damage: S.mg.damage });
+          this.combat.glow.flash(from, 0xffd27a, 0.05, 0.5, 0.05);
+        }
       }
     }
     if (e.burstLeft > 0 && e.fireTimer <= 0) {

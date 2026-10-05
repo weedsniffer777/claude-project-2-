@@ -92,7 +92,7 @@ const CSS = `
 .hud-spot { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; opacity: 0; transition: opacity 0.25s; }
 .hud-spot.on { opacity: 1; }
 .hud > * { transition: opacity 0.5s; }
-.hud.gone > :not(.hud-end):not(.hud-fade) { opacity: 0 !important; }
+.hud.gone > :not(.hud-end):not(.hud-fade):not(.hud-pause) { opacity: 0 !important; }
 .hud-speed { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .hud-fade { position: absolute; inset: 0; background: #070609; opacity: 0; transition: opacity 0.35s steps(5); }
 .hud-fade.on { opacity: 1; }
@@ -457,7 +457,8 @@ function inject() {
   document.head.append(link);
   fixPixelifyH(link);
   const style = document.createElement('style');
-  style.textContent = CSS + EFFECT_CSS;
+  // (no ligatures: Pixelify Sans joins an F and an i into something like an A)
+  style.textContent = `* { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0; }\n` + CSS + EFFECT_CSS;
   document.head.append(style);
 }
 

@@ -16,7 +16,7 @@
 //    the wall. Bring it down; the gate swings open onto the open country
 //    beyond, the last light on the snow; out.
 import * as THREE from 'three';
-import { addDusk, DUSK_SUN } from '../render/setup.js';
+import { addDusk } from '../render/setup.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly } from '../models/kit.js';
 import { LevelBuilder, canvas, tex, blob, speckle } from './builder.js';
 import * as P from './props.js';
@@ -42,7 +42,6 @@ const WALL_X = 262; // the wall's inner face
 const WALL_T = 6; // its thickness
 const WALL_H = 12;
 const GATE = { z: -0.5, half: 5 }; // the gateway through it
-const TOWER = 9; // the gate towers' size
 const SUN = 0xffc98a;
 
 const inCross = (x) => x > CROSS.x0 && x < CROSS.x1;
@@ -51,34 +50,6 @@ function heightAt(x, z) {
   if (inPlaza(x) || inCross(x)) return 0;
   return z <= CURB.n || z >= CURB.s ? SW : 0;
 }
-// where a sun ray through p lands at height h
-const SUN_DIR = DUSK_SUN.clone().negate().normalize();
-const toGround = (p, h = 0) => {
-  const t = (p.y - h) / -SUN_DIR.y;
-  return new THREE.Vector3(p.x + SUN_DIR.x * t, h, p.z + SUN_DIR.z * t);
-};
-// an additive light volume between a polygon in the air and its sun
-// projection on the ground: bright where it enters, fading down
-function sunVolume(B, top, opacity) {
-  const bottom = top.map((p) => toGround(p, 0.03));
-  const pos = [];
-  const col = [];
-  for (let i = 0; i < top.length; i++) {
-    const a = top[i];
-    const b = top[(i + 1) % top.length];
-    const c = bottom[(i + 1) % top.length];
-    const d = bottom[i];
-    for (const [p, k] of [[a, 1], [b, 1], [c, 0.15], [a, 1], [c, 0.15], [d, 0.15]]) {
-      pos.push(p.x, p.y, p.z);
-      col.push(k, k, k);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  B.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: SUN, vertexColors: true, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })));
-}
-
 // The ground: snowy sidewalks, wet asphalt, the cross street; the square's
 // old stone setts in fans, frozen puddles; outside the wall the open
 // country, snow over fields, the road on out.
@@ -226,12 +197,6 @@ function buildGates(scene) {
   K.works({ x0: ALLEYS[1][1], x1: ALLEYS[2][0], zf: WALK.n, roof: 'saw', wall: 0x8a9a8e, doors: 2 });
   K.building({ x0: ALLEYS[2][1], x1: SHACK_A.x0, floors: 8, holes: 2 });
   for (const [a, b] of ALLEYS) {
-    const top = WALL_H + 12;
-    sunVolume(B, [new THREE.Vector3(a, top, WALK.n - 13), new THREE.Vector3(b, top, WALK.n - 13), new THREE.Vector3(b, 0.2, WALK.n - 1), new THREE.Vector3(a, 0.2, WALK.n - 1)].map((p) => p), 0.06);
-    // its patch on the road: the light lands in a long slanting strip
-    const pts = [new THREE.Vector3(a, 22, WALK.n - 6), new THREE.Vector3(b, 22, WALK.n - 6)].map((p) => toGround(p, 0.03));
-    const strip = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(a, 0.04, WALK.n), new THREE.Vector3(b, 0.04, WALK.n), pts[1].setY(0.04), new THREE.Vector3(a, 0.04, WALK.n), pts[1], pts[0].setY(0.04)]);
-    B.add(new THREE.Mesh(strip, new THREE.MeshBasicMaterial({ color: SUN, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })));
     // the alley itself: bins and a fence across its back
     junk(() => P.bin(B, (a + b) / 2, SW, WALK.n - 2, { tipped: rand() < 0.5 }), 1);
     P.fence(B, a, b, SW, WALK.n - 11);
@@ -379,87 +344,173 @@ function buildGates(scene) {
       B.piece(s * (1 + rand()), s * 0.6, s, CONCRETE[(rand() * 5) | 0], x, s * 0.25, z, rand(), rand() * 3, rand());
     }
   }
-  // The wall: old stone, battered (sloping) at its foot, a walkway with
-  // crenellations along its top, buttresses; the two gate towers either
-  // side of the gateway, an arch over it, the gate's two great leaves.
-  const STONE = [0x8d8577, 0x857d70, 0x958d80];
+  // The wall: modern, brutal. Tall precast concrete slabs stood side by
+  // side on a footing, stained and patched, rebar sticking out of the
+  // broken tops, coils of razor wire along them, warnings sprayed on in
+  // red. Concrete guard towers either side of the gateway, steel cabins on
+  // top with searchlights sweeping; squat pillboxes at its foot; and the
+  // gate itself: two great sliding leaves of rusted steel plate between
+  // hazard-striped jambs, a gantry over them.
+  const CONC = [0x8f8d87, 0x85837d, 0x99968f, 0x7c7a75];
+  const wire = new THREE.LineBasicMaterial({ color: 0x2a2b2d });
+  const wireLine = (pts) => B.line(pts, wire);
+  // razor wire: a coil drawn as a spring along a run
+  const razor = (x, y, z0, z1, r = 0.35) => {
+    const pts = [];
+    const n = Math.round((z1 - z0) * 6);
+    for (let i = 0; i <= n; i++) {
+      const a = i * 1.1;
+      pts.push(new THREE.Vector3(x + Math.cos(a) * r, y + r + Math.sin(a) * r, z0 + ((z1 - z0) * i) / n));
+    }
+    wireLine(pts);
+  };
+  const tz = GATE.half + 4; // the towers' middles
+  const ZN = GATE.z - tz - 2.7; // where the slabs stop north and south of the towers
+  const ZS = GATE.z + tz + 2.7;
   {
-    const wallSeg = (z0, z1) => {
-      const len = z1 - z0;
-      const zc = (z0 + z1) / 2;
-      const w = put(B.root, box(WALL_T, WALL_H, len, STONE[0], { r: 0.03 }), WALL_X + WALL_T / 2, WALL_H / 2, zc);
-      w.castShadow = w.receiveShadow = true;
-      B.solid(w);
-      B.block(WALL_X + WALL_T / 2, zc, WALL_T / 2, len / 2);
-      // the battered foot
-      const foot = put(B.root, box(1.4, 3, len, STONE[1], { r: 0.03 }), WALL_X - 0.2, 1.2, zc);
-      foot.rotation.z = -0.3;
-      B.block(WALL_X - 0.4, zc, 0.6, len / 2);
-      // courses of stone, darker lines; moss and soot streaks; the crenels
-      for (let y = 1.6; y < WALL_H; y += 0.9) B.piece(0.04, 0.06, len, 0x6f685c, WALL_X - 0.01, y, zc);
-      for (let z = z0 + 1; z < z1; z += 2 + rand() * 3) B.piece(0.04, 2 + rand() * 4, 0.3 + rand() * 0.8, rand() < 0.5 ? 0x4f5a3a : 0x3a3633, WALL_X - 0.02, WALL_H - 2 - rand() * 3, z);
-      for (let z = z0 + 0.6; z < z1 - 0.4; z += 1.8) put(B.root, box(1.0, 1.1, 1.0, STONE[2], { r: 0.02 }), WALL_X + 0.5, WALL_H + 0.55, z);
-      put(B.root, box(WALL_T, 0.3, len, 0x6f685c, { r: 0.02 }), WALL_X + WALL_T / 2, WALL_H + 0.15, zc);
-      B.lump(WALL_X + WALL_T / 2, WALL_H + 0.32, zc, WALL_T / 2.2, 0.1, len / 2.2, 0xd6d9dd);
-      for (let z = z0 + 8; z < z1 - 4; z += 16) {
-        const bt = put(B.root, box(2.4, WALL_H - 1, 2.6, STONE[1], { r: 0.03 }), WALL_X - 0.9, (WALL_H - 1) / 2, z);
-        bt.castShadow = true;
-        B.block(WALL_X - 0.9, z, 1.2, 1.3);
+    // the core (what blocks, and casts the shadow): a solid band behind the slabs
+    for (const [z0, z1] of [[MAP.z0, ZN], [ZS, MAP.z1]]) {
+      const core = put(B.root, box(WALL_T - 0.6, WALL_H - 0.5, z1 - z0, 0x7c7a75, { r: 0.02 }), WALL_X + 0.6 + (WALL_T - 0.6) / 2, (WALL_H - 0.5) / 2, (z0 + z1) / 2);
+      core.castShadow = core.receiveShadow = true;
+      B.solid(core);
+      B.block(WALL_X + WALL_T / 2, (z0 + z1) / 2, WALL_T / 2, (z1 - z0) / 2);
+      // the slabs on its face: 2.4 wide, heights varying, a few cracked
+      for (let z = z0; z < z1 - 0.2; z += 2.45) {
+        const w = Math.min(2.4, z1 - z);
+        const h = WALL_H - rand() * 1.4;
+        const c = CONC[(rand() * 4) | 0];
+        const sl = put(B.root, box(0.6, h, w - 0.05, c, { r: 0.015 }), WALL_X + 0.3, h / 2, z + w / 2);
+        sl.castShadow = sl.receiveShadow = true;
+        // its footing flange, a darker rain-streak band, a lifting eye
+        B.piece(1.2, 0.5, w - 0.05, 0x75736e, WALL_X - 0.1, 0.25, z + w / 2);
+        if (rand() < 0.6) B.piece(0.02, 1.5 + rand() * 4, 0.3 + rand() * 0.8, rand() < 0.5 ? 0x5e5c56 : 0x4f5a3a, WALL_X - 0.01, h - 1 - rand() * 3, z + 0.3 + rand() * (w - 0.6));
+        // broken tops: rebar sticking up
+        if (rand() < 0.35) {
+          B.piece(0.62, 0.5, w * 0.5, c, WALL_X + 0.3, h + 0.2, z + w * (0.25 + rand() * 0.5), (rand() - 0.5) * 0.3, 0, 0);
+          B.rebar(WALL_X + 0.3, h, z + w / 2, 3 + ((rand() * 3) | 0));
+        }
       }
-    };
-    const tz = GATE.half + TOWER / 2;
-    wallSeg(MAP.z0, GATE.z - tz - TOWER / 2);
-    wallSeg(GATE.z + tz + TOWER / 2, MAP.z1);
-    // the towers
+      // the top: steel posts with razor wire strung between, coils along
+      for (let z = z0 + 1; z < z1; z += 3) put(B.root, box(0.08, 1.4, 0.08, 0x3a3c3f), WALL_X + 0.6, WALL_H + 0.7, z);
+      razor(WALL_X + 0.6, WALL_H, z0, z1, 0.4);
+      for (const y of [WALL_H + 0.6, WALL_H + 1.2]) wireLine([new THREE.Vector3(WALL_X + 0.6, y, z0), new THREE.Vector3(WALL_X + 0.6, y, z1)]);
+      // warnings sprayed on: red stencilled blocks of glyphs, a ring
+      for (let z = z0 + 6; z < z1 - 4; z += 14 + rand() * 10) {
+        const w = 3 + rand() * 2;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.8), mapMat(glyphSign(w, 1.8, { rand, board: 'rgba(0,0,0,0)', ink: '#a8241c' })));
+        m.material.transparent = true;
+        m.rotation.y = -Math.PI / 2;
+        m.position.set(WALL_X - 0.02, 3 + rand() * 4, z);
+        B.add(m);
+        if (rand() < 0.5) {
+          const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.9, 16), new THREE.MeshBasicMaterial({ color: 0xa8241c }));
+          ring.rotation.y = -Math.PI / 2;
+          ring.position.set(WALL_X - 0.02, 4 + rand() * 3, z + w / 2 + 2);
+          B.add(ring);
+        }
+      }
+      // concrete blocks and red-white barriers along its foot
+      for (let z = z0 + 3; z < z1 - 2; z += 7 + rand() * 6) {
+        if (Math.abs(z - GATE.z) < 18) continue;
+        for (let k = 0; k < 4; k++) put(B.root, box(0.5, 0.5, 0.42, k % 2 ? 0xc42a20 : 0xd8d2c0), WALL_X - 2.5, 0.3, z + k * 0.42);
+        put(B.root, box(0.6, 0.12, 1.8, 0x3a3c3f), WALL_X - 2.5, 0.05, z + 0.6);
+      }
+    }
+    // the guard towers: a concrete shaft, a steel cabin on top (dark
+    // windows, a lit one), a roof, a walkway rail, searchlights sweeping
+    const TH = WALL_H + 6;
     for (const s of [-1, 1]) {
       const z = GATE.z + s * tz;
-      const TH = WALL_H + 5;
-      const t = put(B.root, box(TOWER + 1, TH, TOWER, STONE[2], { r: 0.04 }), WALL_X + WALL_T / 2 - 0.5, TH / 2, z);
-      t.castShadow = t.receiveShadow = true;
-      B.solid(t);
-      B.block(WALL_X + WALL_T / 2 - 0.5, z, (TOWER + 1) / 2, TOWER / 2);
-      for (let y = 1.6; y < TH; y += 0.9) B.piece(0.04, 0.06, TOWER, 0x6f685c, WALL_X - 1.01, y, z);
-      for (let k = -1; k <= 1; k++) put(B.root, box(1.2, 1.2, 1.2, STONE[0], { r: 0.02 }), WALL_X - 0.5, TH + 0.6, z + k * 3);
-      for (const k of [-1, 1]) put(B.root, box(1.2, 1.2, 1.2, STONE[0], { r: 0.02 }), WALL_X + 3, TH + 0.6, z + k * 3.5);
-      put(B.root, box(TOWER + 1.2, 0.3, TOWER + 0.2, 0x6f685c, { r: 0.02 }), WALL_X + WALL_T / 2 - 0.5, TH + 0.15, z);
-      // arrow slits, dark; a lit window high up
-      for (const y of [5, 9, 13]) put(B.root, box(0.06, 1.4, 0.4, 0x141416), WALL_X - 1.02, y, z + (y === 9 ? 1.5 : -1.5));
-      put(B.root, box(0.06, 1.0, 0.8, 0xffc070, { glow: true }), WALL_X - 1.03, 11, z + 2.2);
-      // a floodlight on top, glaring down onto the square
-      put(B.root, box(0.6, 0.5, 0.6, 0x2a2b2e, { r: 0.04 }), WALL_X - 0.6, TH + 1.6, z - s * 2);
-      put(B.root, box(0.08, 0.4, 0.5, 0xe8f4ff, { glow: true }), WALL_X - 0.95, TH + 1.6, z - s * 2);
-      B.emit(new THREE.Vector3(WALL_X - 5, TH - 3, z - s * 2), 0xcfe8ff, 22, 18);
-      B.pool(WALL_X - 12, z - s * 2, 5, 0xcfe8ff, 0.14, { sx: 1.6 });
-      // banners, torn
-      const ban = put(B.root, box(0.06, 5, 2.2, 0x5a1f1c), WALL_X - 1.05, TH - 4, z);
-      ban.rotation.x = 0.03;
+      const shaft = put(B.root, box(5, TH - 3, 5.5, CONC[2], { r: 0.03 }), WALL_X + 2.5, (TH - 3) / 2, z);
+      shaft.castShadow = shaft.receiveShadow = true;
+      B.solid(shaft);
+      B.block(WALL_X + 2.5, z, 2.6, 2.8);
+      for (let y = 2.4; y < TH - 3; y += 2.4) B.piece(0.04, 0.08, 5.5, 0x6f6d68, WALL_X - 0.02, y, z); // its panel joints
+      put(B.root, box(0.06, 2.4, 0.5, 0x141416), WALL_X - 0.03, 6, z); // a slit
+      // the cabin
+      const cab = put(B.root, box(6.2, 3, 6.6, 0x4a4f55, { r: 0.03 }), WALL_X + 2.5, TH - 1.5, z);
+      cab.castShadow = true;
+      for (const dz of [-2, 0, 2]) put(B.root, box(0.05, 1.1, 1.5, dz === 0 && s < 0 ? 0xffc070 : 0x16181b, dz === 0 && s < 0 ? { glow: true } : {}), WALL_X - 0.62, TH - 1.2, z + dz);
+      put(B.root, box(7, 0.3, 7.4, 0x2e3033, { r: 0.02 }), WALL_X + 2.5, TH + 0.15, z);
+      for (let k = 0; k < 5; k++) put(B.root, box(0.06, 1, 0.06, 0x3a3c3f), WALL_X - 1, TH - 2.5, z - 3 + k * 1.5); // the walkway rail posts
+      put(B.root, box(0.06, 0.06, 6.2, 0x3a3c3f), WALL_X - 1, TH - 2.0, z);
+      put(B.root, box(1.2, 0.12, 6.6, 0x3a3c3f), WALL_X - 0.5, TH - 3, z);
+      // an aerial mast
+      put(B.root, cyl(0.04, 3, 0x3a3c3f, { seg: 4 }), WALL_X + 4, TH + 1.6, z + s * 2.5);
+      // searchlights: a lamp on the rail, its cone of light down onto the square
+      const lamp = B.keep(put(B.root, box(0.6, 0.5, 0.6, 0x2a2b2e, { r: 0.04 }), WALL_X - 0.8, TH - 1.4, z - s * 2.6));
+      put(B.root, box(0.06, 0.4, 0.4, 0xe8f4ff, { glow: true }), WALL_X - 1.12, TH - 1.4, z - s * 2.6);
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1, 14, 1, true).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: 0xdff0ff, transparent: true, opacity: 0.045, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      const beam = new THREE.Group();
+      beam.position.set(WALL_X - 1, TH - 1.4, z - s * 2.6);
+      beam.add(cone);
+      B.add(beam);
+      B.keep(beam);
+      const spot = B.pool(WALL_X - 14, z, 3.2, 0xdff0ff, 0.2);
+      B.keep(spot);
+      const e = B.emit(new THREE.Vector3(WALL_X - 10, 4, z), 0xcfe8ff, 18, 14);
+      const phase = s * 1.7;
+      B.animate((dt, t) => {
+        // the beam sweeps over the square; its spot follows
+        const a = Math.sin(t * 0.45 + phase) * 0.9;
+        const tx = WALL_X - 14 - Math.cos(a) * 4;
+        const tzz = z - s * 6 + Math.sin(a) * 12;
+        const dir = new THREE.Vector3(tx - beam.position.x, -beam.position.y, tzz - beam.position.z);
+        const len = dir.length();
+        cone.scale.set(1, len, 1);
+        beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.normalize());
+        spot.position.set(tx, 0.05, tzz);
+        e.pos.set(tx, 3.5, tzz);
+        lamp.rotation.y = a;
+      });
     }
-    // the arch over the gateway
-    const arch = put(B.root, box(WALL_T + 1, WALL_H - 7, GATE.half * 2 + 0.4, STONE[1], { r: 0.03 }), WALL_X + WALL_T / 2, 7 + (WALL_H - 7) / 2, GATE.z);
-    arch.castShadow = true;
-    put(B.root, box(0.3, 0.6, GATE.half * 2 + 0.8, STONE[2], { r: 0.02 }), WALL_X - 0.1, 7.1, GATE.z); // the keystone course
-    // the dark of the passage, and its far mouth's light (once open)
-    put(B.root, box(0.1, 7, GATE.half * 2, 0x0e0f11), WALL_X + WALL_T + 0.6, 3.5, GATE.z);
+    // between each tower and the gateway: a concrete pier
+    for (const s of [-1, 1]) {
+      const z0 = GATE.z + s * GATE.half;
+      const z1 = GATE.z + s * (tz - 2.7);
+      const pier = put(B.root, box(WALL_T, WALL_H + 1, Math.abs(z1 - z0), CONC[0], { r: 0.02 }), WALL_X + WALL_T / 2, (WALL_H + 1) / 2, (z0 + z1) / 2);
+      pier.castShadow = true;
+      B.solid(pier);
+      B.block(WALL_X + WALL_T / 2, (z0 + z1) / 2, WALL_T / 2, Math.abs(z1 - z0) / 2);
+    }
+    // over the gateway: a steel gantry beam between the towers, hazard
+    // striped, lamps under it; the jambs striped yellow and black
+    put(B.root, box(1.4, 1.6, tz * 2 - 5, 0x3c3f44, { r: 0.02 }), WALL_X + 0.5, 9.6, GATE.z).castShadow = true;
+    for (let k = 0; k < 10; k++) put(B.root, box(0.06, 1.62, 0.8, k % 2 ? 0xd9b23a : 0x1d1e20), WALL_X - 0.23, 9.6, GATE.z - GATE.half + 0.5 + k * ((GATE.half * 2 - 1) / 9));
+    for (const s of [-1, 1]) {
+      for (let y = 0; y < 8.6; y += 0.8) put(B.root, box(0.4, 0.8, 0.6, (y / 0.8) % 2 ? 0xd9b23a : 0x1d1e20), WALL_X - 0.1, y + 0.4, GATE.z + s * (GATE.half + 0.35));
+      put(B.root, box(0.3, 0.3, 0.3, 0xffd9a0, { glow: true }), WALL_X - 0.4, 8.6, GATE.z + s * (GATE.half - 1));
+      B.emit(new THREE.Vector3(WALL_X - 2, 7, GATE.z + s * (GATE.half - 1)), 0xffc070, 12, 9);
+    }
+    // the pillboxes at its foot: low concrete bunkers, a dark slit, sandbags
+    for (const s of [-1, 1]) {
+      const z = GATE.z + s * (tz + 9);
+      const pb = put(B.root, box(4, 2.2, 5, CONC[1], { r: 0.1 }), WALL_X - 2.2, 1.1, z);
+      pb.castShadow = true;
+      B.solid(pb);
+      put(B.root, box(4.4, 0.4, 5.4, CONC[3], { r: 0.08 }), WALL_X - 2.2, 2.4, z);
+      put(B.root, box(0.06, 0.4, 3, 0x0e0f11), WALL_X - 4.22, 1.5, z);
+      B.lump(WALL_X - 2.2, 2.62, z, 2, 0.12, 2.4, 0xd6d9dd);
+      B.block(WALL_X - 2.2, z, 2.1, 2.6);
+    }
   }
-  // the gate's two leaves: heavy timber, iron straps and studs; they swing
-  // out (away from the square) to open
+  // the gate's two leaves: rusted steel plate on a frame, stiffening ribs,
+  // stencilled hazard bands at the foot; they slide apart into the towers
   const leaves = [];
   for (const s of [-1, 1]) {
-    const pivot = new THREE.Group();
-    pivot.position.set(WALL_X + 0.4, 0, GATE.z + s * GATE.half);
     const leaf = new THREE.Group();
-    leaf.position.z = -s * GATE.half / 2;
-    pivot.add(leaf);
-    put(leaf, box(0.5, 6.8, GATE.half, 0x5a4636, { r: 0.02 }), 0, 3.4, 0);
-    for (const y of [0.8, 2.6, 4.4, 6.2]) put(leaf, box(0.56, 0.22, GATE.half + 0.02, 0x2a2b2d), 0, y, 0);
-    for (let k = 0; k < 5; k++) put(leaf, box(0.06, 6.6, 0.06, 0x3f342a), -0.27, 3.4, -GATE.half / 2 + 0.5 + k * ((GATE.half - 1) / 4));
-    for (let y = 0.8; y < 6.5; y += 1.8) for (let k = 0; k < 4; k++) put(leaf, box(0.08, 0.1, 0.1, 0x8a8a86), -0.3, y, -GATE.half / 2 + 0.6 + k * 1.2);
-    pivot.traverse((m) => m.isMesh && (m.castShadow = true));
-    B.add(pivot);
-    B.keep(pivot);
-    leaves.push({ pivot, s });
+    leaf.position.set(WALL_X + 0.8, 0, GATE.z + (s * GATE.half) / 2);
+    put(leaf, box(0.5, 8.4, GATE.half, 0x6a4a36, { r: 0.01 }), 0, 4.2, 0);
+    for (let y = 0.8; y < 8.2; y += 1.4) put(leaf, box(0.56, 0.18, GATE.half + 0.02, 0x4a3a2e), 0, y, 0);
+    for (let k = 0; k < 3; k++) put(leaf, box(0.58, 8.4, 0.16, 0x4a3a2e), 0, 4.2, -GATE.half / 2 + 0.4 + k * ((GATE.half - 0.8) / 2));
+    for (let i = 0; i < 6; i++) put(leaf, box(0.52, 0.5 + Math.random() * 1.5, 0.6 + Math.random(), 0x8a5a36), -0.01, 1 + Math.random() * 6, (Math.random() - 0.5) * (GATE.half - 1)); // rust blooms
+    for (let k = 0; k < 6; k++) put(leaf, box(0.54, 0.6, GATE.half / 6, k % 2 ? 0xd9b23a : 0x1d1e20), 0, 0.3, -GATE.half / 2 + (k + 0.5) * (GATE.half / 6));
+    leaf.traverse((m) => m.isMesh && (m.castShadow = true));
+    B.add(leaf);
+    B.keep(leaf);
+    leaves.push({ leaf, s, z0: leaf.position.z });
   }
-  const gateBlock = B.block(WALL_X + 0.4, GATE.z, 0.4, GATE.half);
+  const gateBlock = B.block(WALL_X + 0.8, GATE.z, 0.4, GATE.half);
   // beyond the wall: the open country in the last light. A glow down the
   // passage, the road on out, telegraph poles, bare trees, a far treeline.
   {
@@ -478,7 +529,7 @@ function buildGates(scene) {
       if (Math.abs(z - GATE.z) < 7) continue;
       ST.birch(x, z, 3 + rand() * 3);
     }
-    for (let z = MAP.z0; z < MAP.z1; z += 3) B.lump(MAP.x1 - 6 + (rand() - 0.5) * 3, 1.2, z, 2 + rand(), 1.6 + rand(), 1.6, [0x3a3f33, 0x434a3a, 0x353a30][(rand() * 3) | 0]);
+    for (let z = MAP.z0; z < MAP.z1; z += 3) if (Math.abs(z - GATE.z) > 6) B.lump(MAP.x1 - 6 + (rand() - 0.5) * 3, 1.2, z, 2 + rand(), 1.6 + rand(), 1.6, [0x3a3f33, 0x434a3a, 0x353a30][(rand() * 3) | 0]);
   }
 
   // the checkpoints
@@ -521,7 +572,7 @@ function buildGates(scene) {
     api.objective('Enter the checkpoint');
     api.arrow(shack.door, 'Checkpoint');
   }
-  const PARTS6 = ['era', 'afterburner', 'rangefinder']; // (its own parts only: campaign.js rewards)
+  const PARTS6 = ['gmg', 'era', 'afterburner']; // (its own parts only: campaign.js rewards)
   function zoneBounds(api) {
     if (inCross(api.tankPos.x)) setBounds(api, { minZ: -CROSS_Z + 1.2, maxZ: CROSS_Z - 1.2 });
     else if (Math.abs(api.tankPos.z) < WALK.s - 0.6) setBounds(api, { minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 });
@@ -616,7 +667,7 @@ function buildGates(scene) {
       case 0:
         if (x > SHACK_A.x1 + 4 || S.t > 3) {
           // the heavy gun dug in behind the second row of traps
-          api.spawnBridgeGun(150, -6.4, { yaw: Math.PI });
+          api.spawnBridgeGun(150, -6.4, { yaw: Math.PI, hpScale: 0.5 });
           for (const [dx, z, d] of [[0, -3, 0.2], [2, 3, 0.6]]) api.spawnDog(ahead(api, 124, 130) + dx, z, { delay: d });
           go(1);
         }
@@ -705,7 +756,8 @@ function buildGates(scene) {
         if (gate.open > 0.7 && x > WALL_X + WALL_T - 1 && Math.abs(api.tankPos.z - GATE.z) < GATE.half) {
           api.arrow(null);
           api.sectors(SECTORS, 3, 'Level 6');
-          api.win('Level clear', { path: [[WALL_X + WALL_T + 10, GATE.z], [WALL_X + WALL_T + 60, GATE.z]] });
+          setBounds(api, { maxX: MAP.x1 + 200 });
+          api.win('Level clear', { path: [[WALL_X + WALL_T + 10, GATE.z], [WALL_X + WALL_T + 120, GATE.z]] });
           go(3);
         }
         break;
@@ -747,7 +799,7 @@ function buildGates(scene) {
     // the gate's leaves: swing slowly out
     gate.open += THREE.MathUtils.clamp(gate.want - gate.open, -dt * 2, dt * 0.35);
     const e = gate.open * gate.open * (3 - 2 * gate.open);
-    for (const l of leaves) l.pivot.rotation.y = -l.s * e * 1.45; // (out, away from the square)
+    for (const l of leaves) l.leaf.position.z = l.z0 + l.s * e * (GATE.half + 0.2); // (sliding apart into the towers)
     if (ctx.api) script(ctx.api, dt);
   }
 

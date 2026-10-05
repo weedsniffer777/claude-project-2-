@@ -1119,7 +1119,8 @@ function buildDepot(scene) {
         if (exit.open > 0.7 && x > HALL.x1 - 4 && Math.abs(api.tankPos.z - DOOR.z) < DOOR.half) {
           api.arrow(null);
           api.sectors(SECTORS, 3, 'Level 4');
-          api.win('Level clear', { path: [[HALL.x1 + 6, DOOR.z], [HALL.x1 + 40, DOOR.z]] });
+          setBounds(api, { maxX: MAP.x1 + 200 });
+          api.win('Level clear', { path: [[HALL.x1 + 6, DOOR.z], [HALL.x1 + 80, DOOR.z]] });
           go(6);
         }
         break;

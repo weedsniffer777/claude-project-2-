@@ -17,7 +17,7 @@ export const TANKS = {
     ability: 'pierce',
     abilityName: 'Piercing shot',
     blurb: 'Heavy and slow, with a big gun. Rams, and punches through lines.',
-    stats: { boostTime: 0.65 }, // a short, heavy shove
+    stats: { boostTime: 0.65, reload: 1.26 }, // a short, heavy shove; its gun reloads quicker than the base
     // footprint for collisions (hull, covers, the rear drums), tank-local
     box: { cx: -0.25, hx: 2.25, hz: 1.15 },
     // its picture (carousel, rewards): framed on the hull, antennas aside
@@ -48,7 +48,7 @@ export const TANKS = {
     unlockText: 'Beat level 2 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
     // Shift: a quick, hard dash that recharges fast (boostCooldown)
-    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 22, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },
+    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 27.5, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },
     box: { cx: 0.2, hx: 1.55, hz: 0.88 },
     pic: { target: [0.15, 0.8, 0], half: 1.0 },
     anchors: {
@@ -78,7 +78,7 @@ export const TANKS = {
     // the view back further still (salvoZoom, growing with the tank's level)
     // a missile every reload (about the autocannon's pace), eight in the
     // pack, then a long reload
-    stats: { maxHp: 85, speed: 1.08, view: 1.25, reload: 0.32, mag: 8, magReload: 8.8, cannonDamage: 26, splash: 1.8, boostCooldown: 6, salvoZoom: 1.25 },
+    stats: { maxHp: 85, speed: 1.08, view: 1.25, reload: 0.256, mag: 8, magReload: 8.8, cannonDamage: 30, splash: 1.8, boostCooldown: 6, salvoZoom: 1.25 },
     box: { cx: 0.05, hx: 2.15, hz: 1.02 },
     pic: { target: [-0.1, 1.0, 0], half: 1.38 },
     anchors: {
