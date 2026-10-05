@@ -2214,20 +2214,22 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const g = c.getContext('2d');
     g.drawImage(base, 0, 0);
     const k = c.width / 32;
+    // a big white arrow pointing back, outlined in black so it stands out
+    // against the white of the blast
     const arrow = (dx, dy, col) => {
       g.fillStyle = col;
       g.beginPath();
-      g.moveTo((19 + dx) * k, (16 + dy) * k);
-      g.lineTo((24 + dx) * k, (11 + dy) * k);
-      g.lineTo((24 + dx) * k, (14 + dy) * k);
-      g.lineTo((30 + dx) * k, (14 + dy) * k);
-      g.lineTo((30 + dx) * k, (18 + dy) * k);
-      g.lineTo((24 + dx) * k, (18 + dy) * k);
-      g.lineTo((24 + dx) * k, (21 + dy) * k);
+      g.moveTo((14 + dx) * k, (16 + dy) * k);
+      g.lineTo((22 + dx) * k, (8 + dy) * k);
+      g.lineTo((22 + dx) * k, (13 + dy) * k);
+      g.lineTo((30 + dx) * k, (13 + dy) * k);
+      g.lineTo((30 + dx) * k, (19 + dy) * k);
+      g.lineTo((22 + dx) * k, (19 + dy) * k);
+      g.lineTo((22 + dx) * k, (24 + dy) * k);
       g.closePath();
       g.fill();
     };
-    arrow(1, 1, '#000');
+    for (const [ox, oy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1], [1, 2], [2, 2]]) arrow(ox, oy, '#000');
     arrow(0, 0, '#ffffff');
     retreatPics.set(firing, c);
     return c;
