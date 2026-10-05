@@ -41,6 +41,40 @@ const BASE_CENTER = new THREE.Vector3(7.5, 0, -3.2);
 
 export { CAMPAIGN } from '../game/campaign.js';
 
+// The settings cog, 16 px of pixel art: a rim with eight square teeth, a
+// hole through the middle, a shade on its lower edge.
+function cogIcon() {
+  const MAP = [
+    '......####......',
+    '......####......',
+    '..##..####..##..',
+    '..############..',
+    '...##########...',
+    '...###....###...',
+    '#####......#####',
+    '#####......#####',
+    '#####......#####',
+    '#####......#####',
+    '...###....###...',
+    '...##########...',
+    '..############..',
+    '..##..####..##..',
+    '......####......',
+    '......####......',
+  ];
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const g = c.getContext('2d');
+  MAP.forEach((row, y) => {
+    for (let x = 0; x < 16; x++) {
+      if (row[x] !== '#') continue;
+      g.fillStyle = y >= 11 ? '#b9b0a0' : '#f1e9d8'; // (shaded underneath)
+      g.fillRect(x, y, 1, 1);
+    }
+  });
+  return c.toDataURL();
+}
+
 const CSS = `
 .base { position: fixed; inset: 0; pointer-events: none; z-index: 10; color: #f1e9d8; font: 400 15px/1.3 'Pixelify Sans', 'Silkscreen', ui-monospace, monospace; --amber: #ffb347; --holo: #5fe0f0; }
 .base .panel { background: rgba(12, 11, 13, 0.88); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8, 4px 4px 0 4px #000; }
@@ -172,7 +206,7 @@ const CSS = `
 .base-news .hint { font-size: 12px; color: #8f877a; }
 .base-news .row { display: flex; gap: 10px; }
 .base-gear { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; align-items: center; padding: 7px 12px 8px; border: 0; pointer-events: auto; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
-.base-gear i { width: 14px; height: 14px; background: #f1e9d8; clip-path: polygon(40% 0, 60% 0, 62% 16%, 78% 8%, 92% 22%, 84% 38%, 100% 40%, 100% 60%, 84% 62%, 92% 78%, 78% 92%, 62% 84%, 60% 100%, 40% 100%, 38% 84%, 22% 92%, 8% 78%, 16% 62%, 0 60%, 0 40%, 16% 38%, 8% 22%, 22% 8%, 38% 16%); }
+.base-gear i { width: 20px; height: 20px; background: var(--cog) center / contain no-repeat; image-rendering: pixelated; }
 .base-gear:hover { filter: brightness(1.2); }
 @media (max-width: 600px) { .base-gear span { display: none; } .base-promo img { width: 80px; height: 47px; } .base-promo b { max-width: 110px; font-size: 9px; } }
 .base-hint { position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px; font-size: 13px; color: #b9b0a0; width: max-content; max-width: calc(100vw - 24px); box-sizing: border-box; text-align: center; }
@@ -992,6 +1026,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const menu = root.querySelector('.base-menu');
   const brief = root.querySelector('.base-brief');
   const hint = root.querySelector('.base-hint');
+  root.querySelector('.base-gear').style.setProperty('--cog', `url(${cogIcon()})`);
   root.querySelector('.base-gear').addEventListener('click', () => openSettings());
   root.querySelector('.base-gear').addEventListener('pointerdown', (e) => e.stopPropagation());
   const fade = root.querySelector('.base-fade');
