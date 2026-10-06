@@ -125,10 +125,10 @@ export const sfx = {
     src.start();
   },
   // a one-shot out in the world: quieter the further it is from the tank
-  // (full up to 8 units, gone past about 60)
+  // (full up to 8 units, gone past about 60, or opts.reach for a big one)
   at(name, pos, opts = {}) {
     const d = Math.hypot(pos.x - ear.x, pos.z - ear.z);
-    const k = Math.max(0, Math.min(1, 1 - (d - 8) / 52));
+    const k = Math.max(0, Math.min(1, 1 - (d - 8) / ((opts.reach || 60) - 8)));
     sfx.play(name, { ...opts, gain: (opts.gain ?? 1) * k * k });
   },
   listen(pos) {

@@ -1237,7 +1237,7 @@ export class Enemies {
       } else if (e.charge <= 0) {
         e.shotSinceDash = true;
         // the heavy guns: our cannon, deeper (the bosses deepest)
-        sfx.at('cannon', e.pos, e.stats.scale > 1.5 || e.stats.heavy ? { gain: 0.75, rate: 0.7 } : { gain: 0.45, rate: 0.86 });
+        sfx.at('cannon', e.pos, e.stats.scale > 1.5 || e.stats.heavy ? { gain: 1.2, rate: 0.7, reach: 90 } : { gain: 0.9, rate: 0.86, reach: 80 });
         if (S.kinetic) this.fireShell(e, ctx);
         else this.fireBeam(e, ctx);
       }
