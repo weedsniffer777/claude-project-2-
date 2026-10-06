@@ -27,7 +27,7 @@ const CSS = `
 .cel-line b { font: 400 13px/1 'Silkscreen', monospace; color: #6be08a; }
 .cel-line.perk { box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 14px #ffc24a99; color: #f1e9d8; }
 .cel-line.perk b { color: #ffc24a; }
-.cel-tap { font: 400 11px/1 'Silkscreen', monospace; color: #b9b0a0; text-transform: uppercase; opacity: 0; }
+.cel-tap { font: 400 11px/1 'Silkscreen', monospace; color: #b9b0a0; text-transform: uppercase; opacity: 0.6; }
 `;
 let styled = false;
 function style() {
@@ -89,8 +89,11 @@ export function ascend({ pic, square = false, name, from, to, title, badge = nul
   style();
   const ov = document.createElement('div');
   ov.className = 'cel-ov';
-  ov.innerHTML = `<div class="cel-dark"></div><div class="cel-stage"><div class="cel-title"></div><div class="cel-card"><div class="cel-aura"></div><img alt=""${square ? ' class="sq"' : ''}><div class="cel-nm"></div><div class="cel-tier"><span></span></div></div><div class="cel-lines"></div><div class="cel-tap">Tap to continue</div></div><div class="cel-flash"></div>`;
+  ov.innerHTML = `<div class="cel-dark"></div><div class="cel-stage"><div class="cel-title"></div><div class="cel-card"><div class="cel-aura"></div><img alt=""${square ? ' class="sq"' : ''}><div class="cel-nm"></div><div class="cel-tier"><span></span></div></div><div class="cel-lines"></div><div class="cel-tap"></div></div><div class="cel-flash"></div>`;
   const $ = (s) => ov.querySelector(s);
+  // (a tap skips the rest of the show; once it's done, a tap closes it)
+  const verb = matchMedia('(pointer: coarse)').matches ? 'Tap' : 'Click';
+  $('.cel-tap').textContent = `${verb} to skip`;
   const card = $('.cel-card');
   card.style.setProperty('--c', from.color);
   $('.cel-title').style.setProperty('--c', to.color);
@@ -107,7 +110,10 @@ export function ascend({ pic, square = false, name, from, to, title, badge = nul
     if (done) {
       done = false;
       ov.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 220 }).finished.then(() => (ov.remove(), close()));
-    } else skip = true;
+    } else if (!skip) {
+      skip = true;
+      for (const a of ov.getAnimations({ subtree: true })) if (a.effect?.getTiming().iterations !== Infinity) a.finish();
+    }
   });
   const wait = (ms) => (skip ? Promise.resolve() : sleep(ms));
   (async () => {
@@ -157,7 +163,8 @@ export function ascend({ pic, square = false, name, from, to, title, badge = nul
       await wait(it.perk ? 420 : 300);
     }
     await wait(250);
-    $('.cel-tap').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
+    $('.cel-tap').textContent = `${verb} to continue`;
+    $('.cel-tap').animate([{ opacity: 0.3 }, { opacity: 1 }], { duration: 300, fill: 'forwards' });
     done = true;
   })();
   return closed;
