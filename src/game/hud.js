@@ -195,6 +195,8 @@ const CSS = `
 .hud-arrow .lbl { padding: 4px 8px 5px; background: var(--panel); color: var(--go); font: 400 13px/1.2 'Silkscreen', monospace; text-transform: uppercase; white-space: nowrap;
   box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go); animation: hudbreathe 1.2s steps(3) infinite; }
 .hud-arrow .lbl kbd { font-size: 11px; }
+.hud-arrow.big .lbl { padding: 7px 12px 8px; font-size: 18px; box-shadow: 0 0 0 3px #000, 0 0 0 6px var(--go), 0 0 22px 4px #6be08a99; }
+.hud-arrow.big i { border-left-width: 22px; border-right-width: 22px; border-top-width: 28px; }
 .hud-arrow i { width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent; border-top: 18px solid var(--go);
   filter: drop-shadow(2px 2px 0 #000); animation: hudbob 0.8s steps(4) infinite; }
 @keyframes hudbob { 50% { transform: translateY(6px); } }
@@ -385,18 +387,14 @@ function drawFireButton(c) {
   px(4, 3, 18, 19, '#ffc24a');
   px(5, 2, 16, 2, '#ffe29a'); // lit top edge
   px(2, 5, 2, 8, '#ffe29a');
-  // the shell: brass case, dark head with a bright band, a sharp nose
-  px(8, 11, 7, 5, '#111');
-  px(9, 12, 5, 3, '#b07a2a');
-  px(15, 11, 4, 5, '#111');
-  px(15, 12, 3, 3, '#3a3634');
-  px(14, 12, 1, 3, '#f1e9d8');
-  px(19, 12, 2, 3, '#111');
-  px(21, 13, 1, 1, '#111');
-  // speed streaks behind it
-  px(3, 11, 4, 1, '#7a4a10');
-  px(4, 13, 4, 1, '#7a4a10');
-  px(3, 15, 4, 1, '#7a4a10');
+  // a reticle: a dark ring, four ticks with a gap at the middle, a dot
+  const ring = [[10, 5, 6, 1], [8, 6, 2, 1], [16, 6, 2, 1], [7, 7, 1, 2], [18, 7, 1, 2], [6, 9, 1, 8], [19, 9, 1, 8], [7, 17, 1, 2], [18, 17, 1, 2], [8, 19, 2, 1], [16, 19, 2, 1], [10, 20, 6, 1]];
+  for (const [x, y, w, h] of ring) px(x, y, w, h, '#111');
+  px(12, 3, 2, 6, '#111'); // ticks, in past the ring
+  px(12, 17, 2, 6, '#111');
+  px(3, 12, 6, 2, '#111');
+  px(17, 12, 6, 2, '#111');
+  px(12, 12, 2, 2, '#b3261e'); // the dot
 }
 function drawAbility(c, k, lit, art, active = null) {
   const g = c.getContext('2d');
@@ -839,8 +837,11 @@ export function createHud() {
     },
     // A bobbing green arrow over a spot in the world, with a pulsing label.
     // target: a Vector3, or a function returning one (to follow something).
-    setArrow(target, html = '') {
+    // target: a world point (or a function giving one), or { screen: [x, y] };
+    // big: a bigger, brighter one (a tutorial's must-do)
+    setArrow(target, html = '', big = false) {
       arrowAt = target;
+      arrow.classList.toggle('big', !!big);
       arrow.hidden = !target;
       arrow.querySelector('.lbl').innerHTML = html;
     },
@@ -1301,7 +1302,7 @@ export function createHud() {
         if (!p) arrow.hidden = true;
         else {
           arrow.hidden = false;
-          let [x, y] = toScreen(p, camera, rect);
+          let [x, y] = p.screen ? p.screen : toScreen(p, camera, rect);
           x = Math.min(rect.right - 90, Math.max(rect.left + 90, x));
           y = Math.min(rect.bottom - 40, Math.max(rect.top + 90, y));
           arrow.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;

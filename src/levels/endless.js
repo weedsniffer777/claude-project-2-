@@ -258,7 +258,7 @@ function buildEndless(scene) {
     api.giveRockets();
     if (api.tank.ability) api.giveAbility();
     api.objective('Get ready');
-    api.prompt('Endless', 'Hold out as long as you can! Between waves the <b>base</b> opens: drive in to repair and change your loadout.', { go: true, seconds: 6 });
+    api.prompt('Endless', 'Hold out! Between waves, drive into the <b>base</b> to repair and swap parts.', { go: true, seconds: 6 });
   }
 
   function script(api, dt) {

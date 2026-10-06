@@ -1677,9 +1677,17 @@ function buildAvenue(scene) {
             const how = api.touch ? `${hold ? 'Hold' : 'Tap'} <b>FIRE</b>: it aims for you (or drag on the screen to aim yourself).` : `Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`;
             api.enableGun();
             if (api.lesson('fire')) {
-              api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
-              api.arrow(onEnemy(api), api.touch ? 'Fire!' : `${CLICK} to fire!`);
-              api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
+              if (api.touch) {
+                // on a phone, two steps: tap on them to aim, then FIRE
+                api.prompt('Enemies!', 'Tap where you want to aim the turret.', { danger: true });
+                api.arrow(onEnemy(api), 'Tap to aim!', true);
+                api.spotlight({ targets: [onEnemy(api)], r: 110 }, () => api.aimLocked || run.shots > S.shots, { maxTime: 20 });
+                S.touchFire = 1;
+              } else {
+                api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
+                api.arrow(onEnemy(api), `${CLICK} to fire!`);
+                api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
+              }
             } else if (!api.cleared) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
             go(3);
           } else if (!e && S.t > 3) {
@@ -1689,6 +1697,23 @@ function buildAvenue(scene) {
           break;
         }
         case 3:
+          // (phone) the turret's on them: now FIRE
+          if (S.touchFire === 1 && (api.aimLocked || run.shots > S.shots)) {
+            S.touchFire = 2;
+            if (run.shots <= S.shots) {
+              api.clearSpot();
+              api.prompt('Fire', `Press <b>FIRE</b> to shoot!`, { go: true });
+              api.arrow(() => {
+                const f = api.fireScreen();
+                return { screen: [f.screen[0], f.screen[1] - 50] };
+              }, 'Tap to fire!', true);
+              api.spotlight({ targets: [api.fireScreen(), onEnemy(api)], r: 90 }, () => run.shots > S.shots, { maxTime: 20 });
+            }
+          }
+          if (S.touchFire === 2 && run.shots > S.shots) {
+            S.touchFire = 3;
+            api.arrow(null);
+          }
           // after the first shot, while the cannon reloads, the MG takes over
           if (run.shots > S.shots && (api.mgActive || S.t > 4)) {
             if (api.lesson('mg')) {

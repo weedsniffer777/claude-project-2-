@@ -572,7 +572,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     clearPrompt: () => hud.clearPrompt(),
     objective: (text) => hud.setObjective(text),
     marker: (p, label) => hud.setMarker(p, label),
-    arrow: (target, html) => hud.setArrow(target, html),
+    arrow: (target, html, big) => hud.setArrow(target, html, big),
+    // the touch FIRE button on screen (for a spotlight / an arrow)
+    fireScreen: () => {
+      const c = hud.fireCenter();
+      return { screen: [c.x, c.y], r: 72 };
+    },
+    // the gun's on what was tapped (locked on, or aimed by hand) and lined up
+    get aimLocked() {
+      return hasAim && (!!autoTarget?.alive || manualAim) && tank.aimError() < 0.15;
+    },
     nearestEnemy: () => enemies.nearest(pos, 60),
     removeBlock(b) {
       const i = blocks.indexOf(b);
