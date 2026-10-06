@@ -249,3 +249,35 @@ export function addAfternoon(scene, { shadowSize = 22, shadowMap = 2048 } = {}) 
   sun.position.copy(offset);
   return { sun, hemi, follow: shadowFollower(sun, offset, shadowSize) };
 }
+
+// Hazy, smoky late morning (level 7): a pale sun up in the south-west,
+// half lost in the smoke; a brown-grey sky, a dusty haze closing in.
+export const HAZE_SUN = new THREE.Vector3(-14, 16, 18);
+export function addHaze(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#6c6a66');
+  grad.addColorStop(0.55, '#a39886');
+  grad.addColorStop(1, '#d2bf9c');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 128);
+  const sky = new THREE.CanvasTexture(c);
+  sky.colorSpace = THREE.SRGBColorSpace;
+  scene.background = sky;
+  scene.fog = new THREE.Fog(0xa89a84, 60, 115);
+  const hemi = new THREE.HemisphereLight(0xc8c0b0, 0x5a4e44, 2.0);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffe2b8, 3.0);
+  const offset = HAZE_SUN.clone().setLength(SUN_BACK);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: SUN_BACK + 60 });
+  sun.shadow.bias = -0.0003;
+  sun.shadow.normalBias = 0.02;
+  scene.add(sun, sun.target);
+  sun.position.copy(offset);
+  return { sun, hemi, follow: shadowFollower(sun, offset, shadowSize) };
+}

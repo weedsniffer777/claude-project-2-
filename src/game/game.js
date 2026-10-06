@@ -1845,11 +1845,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const c = hud.stickCenter();
       const f = hud.fireCenter();
       const bs = { small: 0.82, normal: 1, large: 1.18 }[settings().buttons] || 1;
-      const sw = hud.swapCenter();
-      if (settings().aimAssist && run.gun && Math.abs(e.clientX - sw.x) < 36 * bs && Math.abs(e.clientY - sw.y) < 24 * bs) {
-        swapTarget();
-        return;
-      }
       if (run.gun && fireTouch === null && Math.hypot(e.clientX - f.x, e.clientY - f.y) < 50 * bs) {
         fireTouch = e.pointerId;
         if (run.arty > 0) return; // (calling in a strike: the spot's tapped on the ground)
@@ -1880,8 +1875,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         aimAt(e.clientX, e.clientY);
         if (run.arty > 0) strikeOnAim = true; // the spot tapped, once the aim ray's found it
         else if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
-        else {
-          aimTouch = e.pointerId; // just aiming (FIRE fires)
+        else if (!latch(e.clientX, e.clientY)) {
+          aimTouch = e.pointerId; // just aiming at the spot (FIRE fires); drag to adjust
           manualAim = true;
         }
       }
@@ -1922,51 +1917,56 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType !== 'touch') client = null;
   };
 
-  // touch aim assist: the turret locks onto a machine (the nearest in view)
-  // and stays on it till it's gone, then takes the next; after each reload
-  // it picks again (the nearest then). Aiming by hand holds till the next
-  // reload. Manual aim (Settings): only the finger aims.
-  function touchAim() {
-    if (!settings().aimAssist || pierceTouch !== null || run.arty > 0 || run.mode !== 'field') return;
-    if (run.relock) {
-      run.relock = false;
-      autoTarget = null;
-      if (aimTouch === null) manualAim = false;
-    }
-    if (aimTouch !== null || manualAim) return;
-    const reach = ((camera.top - camera.bottom) / camera.zoom) * 0.62;
-    const ok = (e) => e?.alive && !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach;
-    if (!ok(autoTarget)) {
-      autoTarget = null;
-      let best = Infinity;
-      for (const e of enemies.alive) {
-        if (!ok(e)) continue;
-        const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
-        if (d < best) {
-          best = d;
-          autoTarget = e;
-        }
+  // Touch aiming: a tap near an enemy latches onto it (the one nearest the
+  // tap, within about 35 degrees either side of the line from the tank to
+  // the tap, and not too far from the tap on screen); the turret then
+  // tracks it till it's gone or you tap somewhere else. A tap with nothing
+  // near it aims at that spot. Manual aim (Settings): no latching.
+  const LATCH_ARC = 0.61; // radians either side
+  const toScreen = (v) => {
+    const p = v.clone().project(camera);
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height };
+  };
+  function latch(cx, cy) {
+    if (!settings().aimAssist || run.mode !== 'field') return false;
+    const tankS = toScreen(pos.clone().setY(pos.y + 1));
+    const tapA = Math.atan2(cy - tankS.y, cx - tankS.x);
+    const maxPx = Math.max(window.innerWidth, window.innerHeight) * 0.16;
+    let best = null;
+    let bestD = Infinity;
+    for (const e of enemies.alive) {
+      if (e.delay > 0) continue;
+      const es = toScreen(enemies.aimPoint(e));
+      const d = Math.hypot(es.x - cx, es.y - cy);
+      let da = Math.atan2(es.y - tankS.y, es.x - tankS.x) - tapA;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      if (Math.abs(da) > LATCH_ARC || d > maxPx) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = e;
       }
     }
-    if (!autoTarget) {
-      client = null;
-      hasAim = false;
+    autoTarget = best;
+    if (!best) return false;
+    manualAim = false;
+    aimTouch = null;
+    hud.swapPulse?.();
+    return true;
+  }
+  function touchAim() {
+    if (pierceTouch !== null || run.arty > 0 || run.mode !== 'field') return;
+    if (aimTouch !== null || manualAim) return;
+    if (!autoTarget?.alive) {
+      // the latched one's gone: hold the aim where it was till the next tap
+      if (autoTarget) {
+        autoTarget = null;
+        manualAim = true;
+      }
       return;
     }
-    const p = new THREE.Vector3(autoTarget.pos.x, (autoTarget.pos.y || 0) + 0.8 * (autoTarget.stats.scale || 1), autoTarget.pos.z).project(camera);
-    const r = canvas.getBoundingClientRect();
-    aimAt(r.left + ((p.x + 1) / 2) * r.width, r.top + ((1 - p.y) / 2) * r.height);
-  }
-  // the swap button: lock onto another machine (the next nearest after the
-  // one it's on, round again after the farthest); nothing locked: the nearest
-  function swapTarget() {
-    const reach = ((camera.top - camera.bottom) / camera.zoom) * 0.62;
-    const list = enemies.alive.filter((e) => !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach).sort((a, b) => Math.hypot(a.pos.x - pos.x, a.pos.z - pos.z) - Math.hypot(b.pos.x - pos.x, b.pos.z - pos.z));
-    manualAim = false;
-    if (!list.length) return void (autoTarget = null);
-    const i = list.indexOf(autoTarget);
-    autoTarget = list[(i + 1) % list.length];
-    hud.swapPulse();
+    const s2 = toScreen(enemies.aimPoint(autoTarget));
+    aimAt(s2.x, s2.y);
   }
   function tankBox() {
     const yaw = tank.group.rotation.y;
@@ -3023,7 +3023,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setChain(run.chain, run.chainT / (run.chainT > MULT_STEP ? MULT_HOLD : MULT_STEP));
       const live = !run.over && run.mode === 'field';
       hud.setFire(live && !!run.gun, fireTouch !== null, reload < 1 && !stats.mag);
-      hud.setSwap(live && !!run.gun && settings().aimAssist);
+      hud.setSwap(false); // (tap-to-latch: no swap button)
       if (!run.gun || !live) hud.setAmmo(null);
       else if (def.gun === 'missile') hud.setAmmo({ n: run.mag, max: stats.mag, load: run.mReload && run.mag < stats.mag ? (run.mag + (run.trickleT || 0) / (stats.magReload / stats.mag)) / stats.mag : null, kind: 'missile' }); // (the next one filling as it reloads)
       else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });

@@ -372,6 +372,7 @@ export class Enemies {
   spawnArty(x, z, opts = {}) {
     const e = this.spawn(ARTY, 'arty', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
+    if (opts.hpScale) e.hp = e.maxHp = Math.round(e.maxHp * opts.hpScale); // (not a boss: lighter)
     e.mctx = {};
     return e;
   }

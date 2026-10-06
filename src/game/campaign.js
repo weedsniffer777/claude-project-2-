@@ -11,10 +11,10 @@ export const CAMPAIGN = [
   { n: 5, id: 'stadium', name: 'Destroyed stadium', page: 0, at: [0.46, 0.18], steps: ['1', 'Boss'], rewards: ['rangefinder', 'twinmg', 'optics'], first: { easy: { tank: 'missile' }, hard: { scraps: 3000, tokens: 8 } } },
   // beyond the city wall: the second page of the map
   { n: 6, id: 'gates', name: 'City gates', page: 1, at: [0.66, 0.84], steps: ['1', '2', 'Boss'], rewards: ['gmg', 'era', 'afterburner'], first: { easy: { scraps: 1500, tokens: 4 }, hard: { scraps: 3500, tokens: 9 } } },
-  { n: 7, name: 'Suburbs', page: 1, at: [0.36, 0.72], steps: [], rewards: [] },
-  { n: 8, name: 'Industrial district', page: 1, at: [0.7, 0.55], steps: [], rewards: [] },
-  { n: 9, name: 'Slums', page: 1, at: [0.3, 0.34], steps: [], rewards: [] },
-  { n: 10, name: '???', page: 1, at: [0.6, 0.13], steps: [], rewards: [] },
+  { n: 7, id: 'slums', name: 'Slums', page: 1, at: [0.36, 0.7], steps: ['1', '2', '3'], rewards: ['gmg', 'twinmg', 'he'], first: { easy: { scraps: 1800, tokens: 5 }, hard: { scraps: 4000, tokens: 10 } } },
+  { n: 8, name: 'Industrial district', page: 1, at: [0.72, 0.52], steps: [], rewards: [] },
+  { n: 9, name: 'Factory', page: 1, at: [0.4, 0.32], steps: [], rewards: [] },
+  { n: 10, name: 'Quarry', page: 1, at: [0.64, 0.13], steps: [], rewards: [] },
 ];
 export const PAGES = 2;
 // open: the first level, and any level whose one before it is cleared

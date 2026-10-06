@@ -5,6 +5,7 @@ import { highway } from './highway.js';
 import { depotLevel } from './depotLevel.js';
 import { stadium } from './stadium.js';
 import { gates } from './gates.js';
+import { slums } from './slums.js';
 import { provingGround } from './provingGround.js';
 
-export const LEVELS = [avenue, river, highway, depotLevel, stadium, gates, provingGround];
+export const LEVELS = [avenue, river, highway, depotLevel, stadium, gates, slums, provingGround];
