@@ -151,7 +151,7 @@ export function createCrew({ layer = null } = {}) {
   group.add(holder);
 
   let rig = null;
-  load().then((gltf) => {
+  const ready = load().then((gltf) => {
     const root = cloneSkinned(gltf.scene);
     let skinned = null;
     root.traverse((o) => {
@@ -275,5 +275,5 @@ export function createCrew({ layer = null } = {}) {
       pose(arm.hand, [Y, -arm.side * 0.15]);
     }
   }
-  return { group, update };
+  return { group, update, ready };
 }

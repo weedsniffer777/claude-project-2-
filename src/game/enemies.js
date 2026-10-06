@@ -222,7 +222,7 @@ const SPIDER = {
 const ARTY = {
   ...SPIDER,
   model: () => createSpider({ arty: true }),
-  heavy: false,
+  heavy: 'sub', // (boss or not: not shoved about by driving into it; only Breakthrough moves it)
   noGun: true,
   noStage2: true,
   hp: 1600,
@@ -278,7 +278,7 @@ const GUNSHIP = {
   hp: 900,
   runSpeed: 5.5,
   walkSpeed: 2.5,
-  fly: 5.8,
+  fly: 4.2,
   range: 22,
   orbit: [11, 16],
   windup: 1.0,
@@ -480,7 +480,13 @@ export class Enemies {
     if (e.dazed > 0) amount *= e.stats.dazeTaken || 1;
     // the mech doesn't just go: blasts all over it, pieces torn off, then
     // it comes apart
-    if (e.stats.spider && e.hp - amount <= 0 && !e.dying) {
+    // (one that's not the boss here just blows up on the spot)
+    if (e.stats.spider && !e.isBoss && e.hp - amount <= 0 && !e.dying) {
+      const k = e.stats.modelScale || 1;
+      for (let i = 0; i < 3; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 2 * k, (1.2 + Math.random()) * k, e.pos.z + (Math.random() - 0.5) * 2 * k));
+      this.combat.shake = Math.max(this.combat.shake, 0.5);
+    }
+    if (e.stats.spider && e.isBoss && e.hp - amount <= 0 && !e.dying) {
       e.hp = 1;
       e.dying = 1.8;
       e.invuln = true;
@@ -534,7 +540,7 @@ export class Enemies {
   // push: how hard they're shoved along the tank's way (Breakthrough
   // ploughs them ahead of it); stun: seconds they're knocked senseless.
   // Returns [{ e, amount, killed }].
-  ram(tankBox, amount, tankVel, { push = 0.5, side = 5, stun = 0 } = {}) {
+  ram(tankBox, amount, tankVel, { push = 0.5, side = 5, stun = 0, brk = false } = {}) {
     const hits = [];
     const now = performance.now();
     for (const e of this.list) {
@@ -550,7 +556,7 @@ export class Enemies {
       if (Math.abs(lx) > tankBox.hx + r || Math.abs(lz) > tankBox.hz + r) continue;
       e.rammedAt = now;
       const killed = this.damage(e, amount, e.stats.scale < 1.5 ? new THREE.Vector3(tankBox.x, 0, tankBox.z) : null);
-      if (!killed && e.stats.scale < 1.5 && !e.stats.heavy) {
+      if (!killed && e.stats.scale < 1.5 && (!e.stats.heavy || (brk && e.stats.heavy === 'sub'))) {
         // knocked back: thrown along the way the tank's going and off to its side
         e.kb ??= new THREE.Vector3();
         e.kb.x += tankVel.x * push + Math.sign(lz || 1) * -sn * side;

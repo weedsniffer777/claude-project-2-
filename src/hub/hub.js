@@ -11,6 +11,9 @@
 import * as THREE from 'three';
 import { LevelBuilder, canvas, tex, blob, speckle } from '../levels/builder.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly, approachAngle } from '../models/kit.js';
+import { CREW, CREW_IDS, CREW_MAX, RANKS, rankOf, crewBonuses, crewCost, promotesAt, trainCrew } from '../game/crew.js';
+import { rankIcon } from '../ui/crewArt.js';
+import { snapshotCanvas } from '../render/snapshot.js';
 import { createCrew } from '../models/crew.js';
 import { pushOut } from '../game/collide.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
@@ -97,6 +100,22 @@ const CSS = `
 @keyframes baseAlert { 50% { background: #b6ffc4; } }
 .base-menu { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: min(340px, calc(100vw - 48px)); padding: 16px 18px 18px;
   display: grid; gap: 12px; pointer-events: auto; }
+.base-crew { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box;
+  padding: 16px 18px 18px; display: grid; gap: 14px; pointer-events: auto; }
+.base-crew .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.base-crew .card { display: grid; gap: 8px; align-content: start; justify-items: center; padding: 12px 10px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.base-crew .frame { position: relative; width: 100%; max-width: 128px; aspect-ratio: 1; background: radial-gradient(circle at 50% 40%, #3a4236, #1f2420 75%); box-shadow: 0 0 0 2px #000; }
+.base-crew .frame .pic { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.base-crew .frame canvas { position: absolute; left: 4px; top: 4px; width: 28px; height: 32px; inset: 4px auto auto 4px; }
+.base-crew .card b { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); font-weight: 400; }
+.base-crew .lvl { font: 400 11px/1 'Silkscreen', monospace; color: #b9b0a0; }
+.base-crew .fx { display: grid; gap: 4px; width: 100%; }
+.base-crew .fx div { display: flex; justify-content: space-between; font-size: 13px; color: #d8d0c0; }
+.base-crew .fx i { font-style: normal; color: #6be08a; font-variant-numeric: tabular-nums; }
+.base-crew button.train { width: 100%; padding: 8px 6px 9px; border: 0; cursor: var(--cursor); font: 400 11px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #6be08a; box-shadow: 0 3px 0 #2f6b40; }
+.base-crew button.train.promote { background: #f2d23a; box-shadow: 0 3px 0 #8a7420; }
+.base-crew button.train:disabled { background: #3a3638; color: #8a8278; box-shadow: none; cursor: default; }
+@media (max-width: 520px) { .base-crew .cards { gap: 8px; } .base-crew .card { padding: 8px 6px; } .base-crew .fx div { font-size: 11px; } }
 .base h2 { margin: 0; font: 400 20px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
 .base .sub { margin: -6px 0 0; color: #b9b0a0; font-size: 13px; }
 .base .zone { display: grid; gap: 6px; padding: 10px 12px 12px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
@@ -1129,6 +1148,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     <button type="button" class="base-gear panel px" aria-label="Settings"><i></i><span>Settings</span></button>
     ${ROOMS.map((r) => `<div class="base-tag" data-id="${r.id}">${r.name}</div>`).join('')}
     <div class="base-menu panel" hidden></div>
+    <div class="base-crew panel" hidden></div>
     <div class="base-brief" hidden></div>
     <div class="base-news panel" hidden></div>
     <div class="base-promo panel" hidden><span class="t">New tank</span><img alt=""><b>Beat level 2 for a new tank!</b><i></i></div>
@@ -1137,6 +1157,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   `;
   const tags = new Map(ROOMS.map((r) => [r.id, root.querySelector(`.base-tag[data-id="${r.id}"]`)]));
   const menu = root.querySelector('.base-menu');
+  const crewPanel = root.querySelector('.base-crew');
   const brief = root.querySelector('.base-brief');
   const hint = root.querySelector('.base-hint');
   root.querySelector('.base-gear').style.setProperty('--cog', `url(${cogIcon()})`);
@@ -1185,16 +1206,52 @@ export function createHub({ renderer, pixel, onDeploy }) {
     if (r.id === 'hangar') {
       menu.hidden = true;
       return openFitting();
-    } else {
-      menu.innerHTML = `
-        <h2>Crew</h2><p class="sub">Bunks, lockers, a stove going. Your crew off duty.</p>
-        <div class="zone"><b>Commander</b><span>You. Picks the route and calls the shots.</span></div>
-        <div class="zone"><b>Driver</b><span>Keeps the tank moving.</span></div>
-        <div class="zone"><b>Gunner</b><span>Lays the main gun.</span></div>
-        <div class="zone locked"><b>Crew skills</b><span>Coming soon.</span></div>
-        <button type="button" class="back">Back</button>`;
     }
-    menu.querySelector('.back').addEventListener('click', closeRoom);
+    menu.hidden = true;
+    return openCrew();
+  }
+  // the crew: three cards, a portrait each, rank and level, what they add;
+  // train them up with scraps (a promotion every tenth level takes tokens)
+  // their pictures: the crewman himself, as he walks round the base, shot
+  // from the front (head and shoulders), once he's loaded
+  const portraits = {};
+  const portrait = (id) =>
+    (portraits[id] ??= (() => {
+      const c = createCrew();
+      return c.ready.then(() => {
+        c.update(0.016, 0, 0);
+        c.group.updateWorldMatrix(true, true);
+        const view = { target: new THREE.Vector3(0, 1.0, 0), dir: new THREE.Vector3(1, 0.06, 0.3), half: 0.46 };
+        return snapshotCanvas(renderer, c.group, 96, 96, null, view).toDataURL();
+      });
+    })());
+  function openCrew() {
+    crewPanel.hidden = false;
+    const pct = (b) => `${b.minus ? '−' : '+'}${Math.round(b.value * 100)}%`;
+    crewPanel.innerHTML = `<h2>Crew</h2><div class="cards">${CREW_IDS.map((id) => {
+      const lvl = save.crewLevel(id);
+      const max = lvl >= CREW_MAX;
+      const c = crewCost(lvl);
+      const can = !max && save.bank() >= c.scraps && save.tokens() >= c.tokens;
+      const label = max ? 'Max' : `${promotesAt(lvl) ? 'Promote' : 'Train'} · ${c.scraps}${c.tokens ? ` + ${c.tokens} tokens` : ''}`;
+      return `<div class="card" data-id="${id}"><div class="frame"><img class="pic" alt=""><span class="ri"></span></div><b>${CREW[id].name}</b>
+        <div class="lvl">Level ${lvl} / ${CREW_MAX}</div>
+        <div class="fx">${crewBonuses(id).map((b) => `<div><span>${b.label}</span><i>${pct(b)}</i></div>`).join('')}</div>
+        <button type="button" class="train${promotesAt(lvl) && !max ? ' promote' : ''}" ${can ? '' : 'disabled'}>${label}</button></div>`;
+    }).join('')}</div><button type="button" class="back">Back</button>`;
+    for (const card of crewPanel.querySelectorAll('.card')) {
+      const id = card.dataset.id;
+      const ri = rankIcon(rankOf(save.crewLevel(id)));
+      ri.title = RANKS[rankOf(save.crewLevel(id))];
+      card.querySelector('.ri').replaceWith(ri);
+      portrait(id).then((url) => (card.querySelector('.pic').src = url));
+      card.querySelector('.train').addEventListener('click', () => {
+        if (!trainCrew(id)) return;
+        bankEl.textContent = bankTotal();
+        openCrew();
+      });
+    }
+    crewPanel.querySelector('.back').addEventListener('click', closeRoom);
   }
   // the briefing: the campaign map in the middle, the zone's details beside it
   // two pages: the city, and out past its wall. The map opens on the page
@@ -1494,6 +1551,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     workshop.hide();
     tags.get('hangar').classList.toggle('alert', upgradeHint());
     menu.hidden = true;
+    crewPanel.hidden = true;
     brief.hidden = true;
     hint.hidden = false;
     walkTo = null;

@@ -366,7 +366,7 @@ export function createMissileTank() {
 
   // ------------------------------------------------------------- launcher
   // the turntable, a low housing, two side arms up to the cradle
-  put(turret, cyl(0.62, 0.06, C.dark, { seg: 22 }), 0, 0.03, 0);
+  put(turret, cyl(0.62, 0.06, C.dark, { seg: 22 }), 0, 0.02, 0); // (a touch below the hull's floor: no flicker under it)
   turret.add(prism([[-0.6, 0], [0.55, 0], [0.62, 0.12], [0.5, 0.26], [-0.6, 0.26]], 0.58, 0.5, camo(0.5, 3)));
   for (const s of [-1, 1]) {
     const arm = put(turret, camoBox(0.32, 0.36, 0.08, 60 + s), PIVOT.x - 0.05, 0.36, s * 0.66);

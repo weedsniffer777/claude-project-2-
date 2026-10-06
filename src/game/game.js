@@ -500,6 +500,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     },
     boss(e, name = 'Large drone') {
       run.boss = e ? { e, name } : null;
+      if (e) e.isBoss = true; // (a boss goes out slowly, in a string of blasts)
       // Hard: every boss tougher, and hitting harder while it's up
       if (e && run.hard && !e.hardened) {
         e.hardened = true;
@@ -1135,7 +1136,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function raiseShield() {
     const E = EQUIPMENT.shield;
     run.barrier = E.time;
-    run.equipCd = E.cooldown;
+    run.equipCd = E.cooldown * stats.cooldownMul;
     const at = pos.clone().setY(pos.y + 1.2);
     combat.glow.flash(at, 0x9ff4ff, 0.25, 3.2, 0.15);
     combat.glow.light(at, 0x5fe6ff, 30, 0.3);
@@ -1176,7 +1177,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       .slice(0, count);
     if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'MSL no targets!');
     if (o.ability) run.abilityCd = stats.salvoCooldown;
-    else run.equipCd = E.cooldown;
+    else run.equipCd = E.cooldown * stats.cooldownMul;
     const targets = [];
     for (let i = 0; i < count; i++) targets.push(inView[i % inView.length]);
     run.msl = { targets, t: E.lockTime, fired: 0, gap: 0, damage: o.damage, blast: o.blast };
@@ -1372,7 +1373,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function callStrike(at) {
     const E = EQUIPMENT.artillery;
     run.arty = 0;
-    run.equipCd = E.cooldown;
+    run.equipCd = E.cooldown * stats.cooldownMul;
     for (let i = 0; i < E.shells; i++) {
       // the first dead centre, the rest scattered round it
       const a = Math.random() * Math.PI * 2;
@@ -2472,8 +2473,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // full damage on what it lands on (about an MG's, over time), half out to
   // the blast's edge
   const grenades = [];
-  const grenadeGeo = new THREE.SphereGeometry(0.07, 6, 4);
-  const grenadeMat = new THREE.MeshBasicMaterial({ color: 0x2a2b2d });
+  // a 40 mm round: a black warhead on a pale brass base, big enough to
+  // follow by eye; it trails white smoke
+  const grenadeGeo = new THREE.CapsuleGeometry(0.1, 0.14, 3, 8).rotateX(Math.PI / 2);
+  const grenadeMat = new THREE.MeshBasicMaterial({ color: 0x141416 });
+  const grenadeBaseGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.1, 8).rotateX(Math.PI / 2).translate(0, 0, -0.12);
+  const grenadeBaseMat = new THREE.MeshBasicMaterial({ color: 0xc9a85a });
   function lobGrenade(from, target) {
     const aim = enemies.aimPoint(target).clone();
     const d = Math.hypot(aim.x - from.x, aim.z - from.z);
@@ -2484,9 +2489,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (Math.random() < 0.25) aim.lerp(from, 0.15 + Math.random() * 0.2);
     aim.y = Math.min(aim.y, groundAt(aim.x, aim.z) + (target.stats.flying ? aim.y : 0.3));
     const m = new THREE.Mesh(grenadeGeo, grenadeMat);
+    m.add(new THREE.Mesh(grenadeBaseGeo, grenadeBaseMat));
     m.position.copy(from);
     scene.add(m);
-    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.35 + d * 0.035, apex: 0.6 + d * 0.08, last: from.clone() });
+    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.75 + d * 0.075, apex: 0.9 + d * 0.11, last: from.clone(), smoke: 0 }); // (slow: you watch it arc over)
     combat.glow.flash(from, 0xffc860, 0.08, 0.5, 0.06);
     combat.puffs.spawn(from.clone(), new THREE.Vector3(0, 0.6, 0), { color: 0x8f8a80, s0: 0.1, s1: 0.35, life: 0.4, drag: 3, lift: 0.4, fadeAt: 0.3 });
   }
@@ -2498,16 +2504,26 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const p = gr.from.clone().lerp(gr.to, u);
       p.y += 4 * gr.apex * u * (1 - u);
       gr.m.position.copy(p);
-      combat.glow.tracer(gr.last, p, 0xffb070, 0.04, 0.06);
+      if (p.distanceToSquared(gr.last) > 1e-6) gr.m.lookAt(p.clone().multiplyScalar(2).sub(gr.last)); // (nose along its flight)
+      combat.glow.tracer(gr.last, p, 0xffffff, 0.05, 0.25);
+      gr.smoke += dt * 40;
+      while (gr.smoke > 1) {
+        gr.smoke -= 1;
+        combat.puffs.spawn(p.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.15, (Math.random() - 0.5) * 0.2), { color: 0xeeece6, s0: 0.07, s1: 0.22, life: 0.6, drag: 2, lift: 0.1, fadeAt: 0.2 });
+      }
       gr.last.copy(p);
       if (u < 1) continue;
       gr.m.removeFromParent();
       grenades.splice(i, 1);
       const at = gr.to;
-      combat.glow.flash(at, 0xffd080, 0.12, 1.3, 0.08);
-      combat.glow.light(at, 0xff9a40, 14, 0.12);
-      combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
-      for (let k = 0; k < 3; k++) combat.puffs.spawn(at.clone(), new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.8 + Math.random(), (Math.random() - 0.5) * 1.5), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
+      // a small blast wherever it lands (ground, wall, machine): a flash, a
+      // ball of fire, dirt and sparks thrown up, smoke
+      combat.glow.flash(at, 0xffe0a0, 0.16, 1.8, 0.1);
+      combat.glow.light(at, 0xff9a40, 18, 0.16);
+      combat.fx.burst(at, { count: 14, speed: 6, color: 0xffb347, life: 0.35, size: 0.08, gravity: 10 });
+      combat.fx.burst(at, { count: 8, speed: 4, color: 0x5a4c3c, life: 0.6, size: 0.09, gravity: 14 });
+      combat.puffs.spawn(at.clone().setY(at.y + 0.2), new THREE.Vector3(0, 0.6, 0), { color: 0xff9a40, s0: 0.3, s1: 0.7, life: 0.18, drag: 3, lift: 0, fadeAt: 0.1 });
+      for (let k = 0; k < 4; k++) combat.puffs.spawn(at.clone(), new THREE.Vector3((Math.random() - 0.5) * 1.6, 0.8 + Math.random(), (Math.random() - 0.5) * 1.6), { color: k % 2 ? 0x5e5952 : 0x6f6a62, s0: 0.25, s1: 0.8, life: 0.9, drag: 3, lift: 0.5, fadeAt: 0.3 });
       const dmg = stats.gmgDamage * (stats.mgDamage / 3);
       for (const e of enemies.alive) {
         const ap = enemies.aimPoint(e);
@@ -2709,7 +2725,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (input.lengthSq() > 0.02 && !(run.retreat > 0)) {
         input.normalize();
         const heading = Math.atan2(-input.z, input.x);
-        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * (boosting ? (run.dash > 0 ? 0.15 : run.brk > 0 ? 0.6 : 0.45) : 1) * dt);
+        tank.group.rotation.y = approachAngle(tank.group.rotation.y, heading, TURN_RATE * stats.turn * (boosting ? (run.dash > 0 ? 0.15 : run.brk > 0 ? 0.6 : 0.45) : 1) * dt);
         const off = Math.abs(wrapAngle(heading - tank.group.rotation.y));
         want = MAX_SPEED * stats.speed * throttle * Math.max(0, Math.cos(off));
       }
@@ -2811,7 +2827,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           // Breakthrough ploughs them on ahead of the tank, knocked senseless;
           // a boost or the blade throws them aside
           const brk = run.brk > 0;
-          const opts = brk ? { push: 1.3, side: 2, stun: 1.2 } : stats.dozerStun && !boosting ? { push: 0.8, side: 4, stun: stats.dozerStun } : { push: 0.5, side: 5 };
+          const opts = brk ? { push: 1.3, side: 2, stun: 1.2, brk: true } : stats.dozerStun && !boosting ? { push: 0.8, side: 4, stun: stats.dozerStun } : { push: 0.5, side: 5 };
           for (const h of enemies.ram({ ...tankBox(), hx: TANK_BOX.hx + (brk ? 1.2 : 0.3) }, ramDmg, vel, opts)) {
             const p = new THREE.Vector3(h.e.pos.x, 1.3, h.e.pos.z);
             if (opts.stun && !brk) pulse('dozer');

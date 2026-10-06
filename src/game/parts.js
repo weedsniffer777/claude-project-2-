@@ -4,6 +4,7 @@
 // screen (hangar and checkpoints) puts it in one of the tank's slots.
 // The boost (the fuel drums rigged as boosters) is the zone's fixed one-time
 // find: an ability, not a pick.
+import { applyCrew } from './crew.js';
 import * as THREE from 'three';
 import { box, cyl, put, toon } from '../models/kit.js';
 import { PLAYER_LAYER } from '../render/pixel.js';
@@ -55,6 +56,8 @@ export const BASE_STATS = {
   // small grenades instead of firing bullets
   gmg: false,
   gmgDamage: 0, // each grenade, on the machine it lands on (x mgDamage / 3: grows with it)
+  turn: 1, // x the turning rate (the driver)
+  cooldownMul: 1, // x every ability's recharge (the commander)
   gmgRate: 0.36, // seconds between grenades (from each gun)
   gmgSplash: 1.4, // its little blast: half damage out to here
 };
@@ -914,10 +917,11 @@ function applyPart(s, id, lvl) {
 
 // levels: { partId: level } to use instead of the saved ones; tankLevel
 // likewise (null: the saved one)
-export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null) {
+export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null, noCrew = false) {
   const s = { ...BASE_STATS, ...tankDef(tank).stats };
   applyTankLevel(s, tankLevel ?? save.tankLevel(tank));
   for (const id of parts) applyPart(s, id, levels?.[id] ?? levelOf(id));
+  if (!noCrew) applyCrew(s);
   // the light tank's affinity for spotting: one more mark
   return s;
 }
@@ -950,8 +954,8 @@ const STAT_ROWS = [
   ['boostCooldown', 'Boost recharge', secs, -1],
 ];
 export function partEffects(id, tank = 'battle', lvl = levelOf(id), from = null) {
-  const a = from == null ? statsFor([], tank, null, 1) : statsFor([id], tank, { [id]: from }, 1);
-  const b = statsFor([id], tank, { [id]: lvl }, 1);
+  const a = from == null ? statsFor([], tank, null, 1, true) : statsFor([id], tank, { [id]: from }, 1, true);
+  const b = statsFor([id], tank, { [id]: lvl }, 1, true);
   const rows = [];
   for (const [key, label, fmt, dir] of STAT_ROWS) {
     const x = +a[key];

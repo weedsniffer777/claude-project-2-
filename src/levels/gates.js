@@ -287,7 +287,6 @@ function buildGates(scene) {
   B.crushable(() => P.bus(B, 162, -3.6, 0.3), { kind: 'prop', heavy: true, armored: true });
   // the wall above the roofs ahead: its line all along (built below)
 
-  const barriers = []; // (the guard posts' booms, lifted with the gate)
   // ========================================================= 3: the gate
   // The square: open, paved, ringed by the backs of low buildings and the
   // wall itself; tank traps scattered, lamp standards, a statue's plinth
@@ -330,16 +329,39 @@ function buildGates(scene) {
       const z = GATE.z + s * (GATE.half + 4.5);
       const plinth = put(B.root, box(3.2, 0.4, 3.2, 0x8d8b86, { r: 0.03 }), bx, 0.2, z);
       B.solid(plinth);
-      const hut = put(B.root, box(2.6, 2.4, 2.6, 0x5f6f66, { r: 0.04 }), bx, 1.6, z);
-      hut.castShadow = true;
-      B.solid(hut);
-      // windows on all four sides, lit warm, frames dark
-      for (const [dx, dz] of [[-1.31, 0], [1.31, 0], [0, -1.31], [0, 1.31]]) {
-        put(B.root, box(dz ? 1.8 : 0.04, 1.0, dz ? 0.04 : 1.8, 0xffd9a0, { glow: true }), bx + dx, 2.0, z + dz);
-        put(B.root, box(dz ? 1.9 : 0.06, 0.08, dz ? 0.06 : 1.9, 0x2a2b2e), bx + dx * 1.01, 2.52, z + dz * 1.01);
-        put(B.root, box(dz ? 0.06 : 0.06, 1.0, dz ? 0.06 : 0.06, 0x2a2b2e), bx + dx * 1.01, 2.0, z + dz * 1.01);
+      // the hut: walls round a dark inside, open window holes on all four
+      // sides (the door's half of the front wall solid, the door in it)
+      const HC = 0x5f6f66;
+      const wallBit = (x, y, zz, w, h, d) => {
+        const m = put(B.root, box(w, h, d, HC, { r: 0.02 }), x, y, zz);
+        m.castShadow = true;
+        B.solid(m);
+      };
+      put(B.root, box(2.5, 0.06, 2.5, 0x2a2826), bx, 0.43, z); // floor
+      for (const [cx, cz] of [[-1.18, -1.18], [1.18, -1.18], [-1.18, 1.18], [1.18, 1.18]]) wallBit(bx + cx, 1.6, z + cz, 0.24, 2.4, 0.24);
+      for (const [dx, dz] of [[-1.2, 0], [1.2, 0], [0, -1.2], [0, 1.2]]) {
+        const along = dz ? 'x' : 'z';
+        const W = 2.16;
+        const sz = (w, h) => (along === 'x' ? [w, h, 0.16] : [0.16, h, w]);
+        if (dx < 0) {
+          // the front: solid on the door's half, a window on the other
+          const dOff = s * 0.54; // the door's half (z offset)
+          wallBit(bx + dx, 1.6, z + dOff, ...sz(W / 2, 2.4));
+          put(B.root, box(0.04, 1.75, 0.76, 0x3a3c3f), bx + dx - 0.09, 1.3, z + dOff); // the door
+          put(B.root, box(0.06, 0.06, 0.12, 0xb0a890), bx + dx - 0.12, 1.3, z + dOff - s * 0.25); // its handle
+          wallBit(bx + dx, 0.95, z - dOff, ...sz(W / 2, 1.1));
+          wallBit(bx + dx, 2.65, z - dOff, ...sz(W / 2, 0.3));
+          continue;
+        }
+        wallBit(bx + dx, 0.95, z + dz, ...sz(W, 1.1));
+        wallBit(bx + dx, 2.65, z + dz, ...sz(W, 0.3));
+        put(B.root, box(...(along === 'x' ? [W, 0.05, 0.3] : [0.3, 0.05, W]), 0x3a3c3f), bx + dx * 1.04, 1.52, z + dz * 1.04); // sill
       }
-      put(B.root, box(0.06, 1.8, 0.8, 0x3a3c3f), bx - 1.32, 1.3, z + s * 0.6); // the door (it faces the square)
+      // inside: a desk, a stool, a cabinet, a radio
+      put(B.root, box(0.5, 0.75, 1.3, 0x4a3e34), bx + 0.8, 0.82, z);
+      put(B.root, box(0.3, 0.2, 0.4, 0x2a2b2e), bx + 0.8, 1.3, z - 0.3);
+      put(B.root, box(0.35, 0.5, 0.35, 0x2a2b2e), bx + 0.2, 0.7, z);
+      put(B.root, box(0.5, 1.3, 0.5, 0x6a6e72), bx + 0.7, 1.1, z + s * 0.75);
       // the roof: deep, overhanging, a fascia, a lamp under the front eave
       put(B.root, box(3.4, 0.22, 3.4, 0x3e4043, { r: 0.02 }), bx, 2.92, z).castShadow = true;
       put(B.root, box(3.42, 0.12, 3.42, 0xd9b23a), bx, 2.76, z);
@@ -364,15 +386,27 @@ function buildGates(scene) {
       pivot.position.set(px, 1.05, pz);
       const L = GATE.half + 4.5 - 1.2 - 0.3; // to just short of the lane's middle
       put(pivot, box(0.5, 0.4, 0.4, 0x45484c, { r: 0.03 }), 0, 0, s * 0.45); // the counterweight, behind the pivot
-      put(pivot, box(0.14, 0.14, L, 0xeeeae0, { r: 0.02 }), 0, 0, -s * (L / 2));
-      for (let k = 0; k < Math.floor(L / 0.9); k += 2) put(pivot, box(0.16, 0.16, 0.9, 0xc42a20), 0, 0, -s * (0.45 + k * 0.9 + 0.45));
-      put(pivot, box(0.08, 0.08, 0.08, 0xff3b2f, { glow: true }), 0, 0.12, -s * (L - 0.2)); // its tip lamp
+      const broken = s > 0;
+      const LB = broken ? 1.3 : L; // (the other's snapped off short)
+      put(pivot, box(0.14, 0.14, LB, 0xeeeae0, { r: 0.02 }), 0, 0, -s * (LB / 2));
+      for (let k = 0; k < Math.floor(LB / 0.9); k += 2) put(pivot, box(0.16, 0.16, 0.9, 0xc42a20), 0, 0, -s * (0.45 + k * 0.9 + 0.45));
+      if (!broken) put(pivot, box(0.08, 0.08, 0.08, 0xff3b2f, { glow: true }), 0, 0.12, -s * (L - 0.2)); // its tip lamp
+      pivot.rotation.x = broken ? s * 0.15 : s * 1.35; // up, out of the way (or the stub drooping)
       B.add(pivot);
-      B.keep(pivot);
-      // the fork post its tip rests on
-      put(B.root, box(0.1, 1.0, 0.1, 0xd8d2c0), px, 0.5, pz - s * (L - 0.3));
-      put(B.root, box(0.1, 0.1, 0.3, 0xd8d2c0), px, 1.0, pz - s * (L - 0.3));
-      barriers.push({ pivot, s });
+      if (broken) {
+        // the rest of it lying in the road, kicked aside; the fork post bent over
+        const rest = new THREE.Group();
+        rest.position.set(px + 1.6, 0.08, pz - s * (L * 0.55));
+        rest.rotation.y = 0.5;
+        put(rest, box(0.14, 0.14, L - 1.5, 0xeeeae0, { r: 0.02 }), 0, 0, 0);
+        for (let k = 0; k < Math.floor((L - 1.5) / 0.9); k += 2) put(rest, box(0.16, 0.16, 0.9, 0xc42a20), 0, 0, -(L - 1.5) / 2 + 0.45 + k * 0.9);
+        B.add(rest);
+        const fp = put(B.root, box(0.1, 1.0, 0.1, 0xd8d2c0), px, 0.3, pz - s * (L - 0.3));
+        fp.rotation.x = s * 1.1;
+      } else {
+        put(B.root, box(0.1, 1.0, 0.1, 0xd8d2c0), px, 0.5, pz - s * (L - 0.3));
+        put(B.root, box(0.1, 0.1, 0.3, 0xd8d2c0), px, 1.0, pz - s * (L - 0.3));
+      }
     }
     K.container(B, 222, 0, 20, 0.3, CONTAINERS[1]);
     K.container(B, 248, 0, -22, -0.2, CONTAINERS[3]);
@@ -619,7 +653,7 @@ function buildGates(scene) {
   }
   const overBarricade = (api, kind, s, delay = 0) => {
     const x = CROSS.x0 + 2 + rand() * (CROSS.x1 - CROSS.x0 - 4);
-    (kind === 'walker' ? api.spawnWalker : api.spawnDog)(x, s * (CROSS_Z + 4), { delay, via: [[x, s * (CROSS_Z - 3)]], noclip: true });
+    (kind === 'walker' ? api.spawnWalker : api.spawnDog)(x, s * (CROSS_Z - 3), { delay }); // (in the crossroads itself: never inside the buildings round it)
   };
   const ahead = (api, x, lim) => Math.min(Math.max(x, api.tankPos.x + 16), lim);
 
@@ -754,7 +788,7 @@ function buildGates(scene) {
         if (x > PLAZA.x0 + 8) {
           // in over the wall: the gunship
           api.arrow(null);
-          S.boss = api.spawnGunship(WALL_X + 14, GATE.z - 6, { via: [[WALL_X - 14, GATE.z - 4]] });
+          S.boss = api.spawnGunship(WALL_X - 6, GATE.z - 20, { via: [[WALL_X - 16, GATE.z - 10]] }); // (in clear of the towers, where it's seen)
           api.boss(S.boss, 'Gunship');
           api.objective('Bring down the gunship');
           api.spotlight({ targets: [() => (S.boss.alive ? S.boss.pos.clone() : null)], r: 170 }, () => S.t > 2.6, { maxTime: 3, frame: () => (S.boss.alive ? S.boss.pos.clone().setY(0) : null), frameK: 1 });
@@ -829,7 +863,6 @@ function buildGates(scene) {
     // the gate's leaves: swing slowly out
     gate.open += THREE.MathUtils.clamp(gate.want - gate.open, -dt * 2, dt * 0.35);
     const e = gate.open * gate.open * (3 - 2 * gate.open);
-    for (const br of barriers) br.pivot.rotation.x = br.s * e * 1.35; // (the booms lift, tips up)
     for (const l of leaves) l.leaf.position.z = l.z0 + l.s * e * (GATE.half + 0.2); // (sliding apart into the towers)
     if (ctx.api) script(ctx.api, dt);
   }

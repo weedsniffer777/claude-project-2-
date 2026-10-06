@@ -21,6 +21,7 @@ const K = {
   equipment: 'scavenger.equipment.',
   ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
+  crew: 'scavenger.crew',
 };
 // A run's part progress (parts found, their levels and stars, what each
 // level has given, the loadouts) is held in memory while the level's being
@@ -139,6 +140,11 @@ export const save = {
   tankLevel: (id) => read(K.tankLevels, {})[id] || 1,
   setTankLevel(id, n) {
     write(K.tankLevels, { ...read(K.tankLevels, {}), [id]: n });
+  },
+  // the crew's levels: { commander, driver, gunner }
+  crewLevel: (id) => read(K.crew, {})[id] || 1,
+  setCrewLevel(id, n) {
+    write(K.crew, { ...read(K.crew, {}), [id]: n });
   },
   // upgrade tokens: rare drops, spent to evolve a part to its next tier
   tokens: () => read(K.tokens, 0) | 0,
