@@ -6,6 +6,7 @@ import { rebindHints, settings, keyLabel } from '../ui/settings.js';
 import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
 import { EFFECT_CSS } from './parts.js';
+import { TRACK, TRACK_AT, TRACK_CSS, trackHtml, rewardText } from './endless.js';
 import { fixPixelifyH } from '../ui/fontFix.js';
 import { tokenIconURL } from '../ui/icons.js';
 
@@ -160,6 +161,25 @@ const CSS = `
 .hud-continue { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); padding: 14px 20px 15px; border: 0; cursor: pointer; pointer-events: auto;
   font: 400 16px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000, 0 5px 0 2px #2f6b40; animation: hudready 1s steps(2) infinite; }
 .hud-end .bank { color: var(--amber); font-size: 14px; }
+/* Endless's end screen: wider, the run's numbers and records side by side,
+   the reward track under them with its bar filling, then the buttons */
+.hud-endless { width: min(780px, calc(100vw - 32px)); box-sizing: border-box; justify-items: stretch; gap: 14px; }
+.hud-endless h2 { color: var(--amber); text-align: center; }
+.hud-endless.lose h2 { color: var(--danger); }
+.hud-endless .sub { text-align: center; font-size: 13px; color: var(--dim); margin-top: -6px; }
+.hud-endless .ecols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.hud-endless .ecol { display: grid; grid-template-columns: 1fr auto; gap: 5px 14px; align-content: start; padding: 10px 12px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 3px #3a3540; text-align: left; font-size: 13px; }
+.hud-endless .ecol h3 { grid-column: 1 / -1; margin: 0 0 4px; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--dim); }
+.hud-endless .ecol b { font: 400 13px/1.2 'Silkscreen', monospace; color: var(--ink); }
+.hud-endless .ecol b.new { color: #6be08a; }
+.hud-endless .xpline { display: flex; justify-content: space-between; align-items: baseline; font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--dim); }
+.hud-endless .xpline b { font-weight: 400; color: #6be08a; font-size: 14px; }
+.hud-endless .paid { min-height: 18px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.hud-endless .paid span { padding: 3px 7px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.hud-endless .btns { display: flex; gap: 12px; justify-content: center; }
+.hud-endless .etrack .tier.pop { animation: tierPop 0.45s ease-out; }
+@keyframes tierPop { 0% { transform: scale(1.35); filter: brightness(2); } 100% { transform: none; } }
+@media (max-width: 600px) { .hud-endless .ecols { grid-template-columns: 1fr; } .hud-endless .etrack { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .hud-end .parts { display: grid; gap: 8px; justify-items: center; }
 .hud-end .parts > span { font-size: 12px; color: var(--dim); }
 .hud-end .icons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -211,6 +231,8 @@ const CSS = `
 .hud-pointers i { position: absolute; left: 50%; top: 50%; width: 0; height: 0; margin: -9px 0 0 -7px; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 14px solid var(--danger);
   filter: drop-shadow(1px 1px 0 #000) drop-shadow(-1px -1px 0 #000); }
 .hud-pointers i.boss { border-left-color: #ff7a1a; }
+.hud-pointers i.base { border-left-color: #6be08a; filter: drop-shadow(0 0 3px #6be08a); }
+.hud-pointers .basetag { position: absolute; left: 50%; top: 50%; padding: 2px 5px 3px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; white-space: nowrap; }
 .hud-healfx { position: absolute; inset: 0; box-shadow: inset 0 0 140px 10px rgba(80, 240, 120, 0.35); opacity: 0; pointer-events: none; }
 .hud-heal { position: absolute; left: 50%; top: 34%; transform: translate(-50%, 0); font: 400 34px/1 'Silkscreen', monospace; color: #6bf08a; text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 0 18px rgba(80, 240, 120, 0.6); pointer-events: none; white-space: nowrap; opacity: 0; }
 .hud-hurt { position: absolute; inset: 0; box-shadow: inset 0 0 0 10px var(--danger), inset 0 0 160px 20px rgba(255, 40, 30, 0.6); background: rgba(255, 40, 30, 0.12); opacity: 0; }
@@ -461,7 +483,7 @@ function inject() {
   fixPixelifyH(link);
   const style = document.createElement('style');
   // (no ligatures: Pixelify Sans joins an F and an i into something like an A)
-  style.textContent = `* { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0; }\n` + CSS + EFFECT_CSS;
+  style.textContent = `* { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0; }\n` + CSS + EFFECT_CSS + TRACK_CSS;
   document.head.append(style);
 }
 
@@ -742,14 +764,28 @@ export function createHud() {
     // right, clockwise), near (0..1), boss }]
     setPointers(list) {
       const box = $('.hud-pointers');
-      while (box.children.length < list.length) box.append(document.createElement('i'));
+      // (Endless: the base's arrow is green, with a Base tag inside the ring)
+      let tag = box.querySelector('.basetag');
+      if (!tag) {
+        tag = document.createElement('span');
+        tag.className = 'basetag';
+        tag.textContent = 'Base';
+        box.append(tag);
+      }
+      const b = list.find((p) => p?.base);
+      tag.hidden = !b;
+      if (b) {
+        const R2 = Math.min(window.innerWidth, window.innerHeight) * 0.34 - 34;
+        tag.style.transform = `translate(calc(-50% + ${Math.cos(b.a) * R2}px), calc(-50% + ${Math.sin(b.a) * R2}px))`;
+      }
+      while (box.querySelectorAll('i').length < list.length) box.append(document.createElement('i'));
       const R = Math.min(window.innerWidth, window.innerHeight) * 0.34;
-      [...box.children].forEach((el, i) => {
+      [...box.querySelectorAll('i')].forEach((el, i) => {
         const p = list[i];
         el.style.display = p ? '' : 'none';
         if (!p) return;
-        const s = 0.75 + p.near * 0.6;
-        el.className = p.boss ? 'boss' : '';
+        const s = p.base ? 1.3 : 0.75 + p.near * 0.6;
+        el.className = p.base ? 'base' : p.boss ? 'boss' : '';
         el.style.opacity = String(0.55 + p.near * 0.45);
         el.style.transform = `translate(${Math.cos(p.a) * R}px, ${Math.sin(p.a) * R}px) rotate(${p.a}rad) scale(${s})`;
       });
@@ -1013,6 +1049,9 @@ export function createHud() {
         el.querySelector('[data-act="resume"]').focus();
       };
       el.querySelector('[data-act="exit"]').hidden = !acts.exit;
+      // (Endless: leaving ends the run, and keeps what it earned)
+      el.querySelector('.ask h2').textContent = acts.endless ? 'End the run?' : 'Exit level?';
+      el.querySelector('.ask > p').textContent = acts.endless ? "You keep this run's scraps and XP." : "This run's scraps will be lost!";
       for (const b of menu.querySelectorAll('button')) b.onclick = () => acts[b.dataset.act]?.();
       // Exit asks first: the run's progress is lost
       el.querySelector('[data-act="exit"]').onclick = () => {
@@ -1125,6 +1164,80 @@ export function createHud() {
     },
     hideEnd() {
       end.hidden = true;
+    },
+    // Endless over: r = { title, time, waves, kills, scraps, tokens, xp,
+    // total, before, after, best, newBest, paid }; acts = { retry, exit }
+    showEndless(r, acts) {
+      let el = root.querySelector('.hud-endless');
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'hud-end panel hud-endless';
+        root.append(el);
+      }
+      reticle.hidden = true;
+      const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+      el.classList.toggle('lose', r.title === 'Destroyed');
+      el.hidden = false;
+      el.innerHTML = `<h2></h2><div class="sub">Endless · Outskirts</div>
+        <div class="ecols">
+          <div class="ecol"><h3>This run</h3><span>Time survived</span><b>${fmt(r.time)}</b><span>Waves cleared</span><b>${r.waves}</b><span>Enemies destroyed</span><b>${r.kills}</b><span>Scraps kept</span><b>+${r.scraps}</b>${r.tokens ? `<span>Tokens picked up</span><b>${r.tokens}</b>` : ''}</div>
+          <div class="ecol"><h3>Records</h3><span>Best time</span><b class="${r.newBest ? 'new' : ''}">${fmt(r.best.t)}${r.newBest ? ' New!' : ''}</b><span>Most waves</span><b>${r.best.wave}</b><span>Scraps in the bank</span><b>${r.total ?? ''}</b></div>
+        </div>
+        <div class="xpline"><span>Reward track</span><b>+${r.xp} XP</b></div>
+        ${trackHtml(r.before)}
+        <div class="ebar"><i></i><span></span></div>
+        <div class="paid"></div>
+        <div class="btns" hidden><button type="button" class="main">Retry</button>${acts.exit ? '<button type="button" class="alt">Exit</button>' : ''}</div>`;
+      el.querySelector('h2').textContent = r.title;
+      el.querySelector('.main').addEventListener('click', () => acts.retry());
+      el.querySelector('.alt')?.addEventListener('click', () => acts.exit());
+      // the bar: across the tier the XP's in, filling from before to after;
+      // each tier it passes lights up and pays out
+      const bar = el.querySelector('.ebar i');
+      const label = el.querySelector('.ebar span');
+      const paid = el.querySelector('.paid');
+      const tierAt = (xp) => {
+        let n = 0;
+        while (n < TRACK.length && xp >= TRACK_AT[n]) n++;
+        return n;
+      };
+      const show = (xp) => {
+        const n = tierAt(xp);
+        const lo = n ? TRACK_AT[n - 1] : 0;
+        const hi = TRACK_AT[Math.min(n, TRACK.length - 1)];
+        bar.style.width = `${n >= TRACK.length ? 100 : ((xp - lo) / (hi - lo)) * 100}%`;
+        label.textContent = n >= TRACK.length ? 'Track complete' : `Tier ${n + 1}: ${Math.floor(xp - lo)} / ${hi - lo} XP`;
+      };
+      let shown = r.before;
+      let lastTier = tierAt(r.before);
+      show(shown);
+      const t0 = performance.now();
+      const DUR = Math.min(2600, 900 + r.xp * 6);
+      const step = () => {
+        if (el.hidden) return;
+        const k = Math.min(1, (performance.now() - t0 - 500) / DUR);
+        shown = r.before + (r.after - r.before) * Math.max(0, 1 - (1 - Math.max(0, k)) ** 2);
+        show(shown);
+        const n = tierAt(shown);
+        while (lastTier < n) {
+          const t = TRACK[lastTier];
+          lastTier++;
+          const box = el.querySelector(`.etrack .tier[data-n="${t.n}"]`);
+          if (box) {
+            box.classList.add('got', 'pop');
+          }
+          const tag = document.createElement('span');
+          tag.textContent = `Tier ${t.n}: ${rewardText(t)}`;
+          paid.append(tag);
+        }
+        if (k < 1) requestAnimationFrame(step);
+        else el.querySelector('.btns').hidden = false;
+      };
+      requestAnimationFrame(step);
+    },
+    hideEndless() {
+      const el = root.querySelector('.hud-endless');
+      if (el) el.hidden = true;
     },
     update(dt, camera, canvas) {
       const rect = canvas.getBoundingClientRect();

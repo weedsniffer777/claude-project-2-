@@ -183,17 +183,17 @@ const CSS = `
   font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
 .base-brief .rewards > span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
-.base-brief .info .loadout { display: flex; gap: 10px; align-items: center; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
-.base-brief .info .loadout .tk { width: 84px; height: 49px; image-rendering: pixelated; flex: none; }
-.base-brief .info .loadout .lo { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.base-brief .info .loadout .lo b { font: 400 11px/1.1 'Silkscreen', monospace; font-weight: 400; text-transform: uppercase; color: var(--amber); }
-.base-brief .info .loadout .lo small { font-size: 11px; color: #b9b0a0; }
-.base-brief .info .loadout .cells { display: flex; gap: 4px; flex-wrap: wrap; }
-.base-brief .info .loadout .cell { width: 30px; height: 22px; background: #121014; box-shadow: 0 0 0 1px #000, 0 0 0 2px #4a4540; }
+.base-brief .info .loadout { display: flex; gap: 8px; align-items: center; padding: 4px 6px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 3px #4a4540; }
+.base-brief .info .loadout .tk { width: 52px; height: 30px; image-rendering: pixelated; flex: none; }
+.base-brief .info .loadout .lo { display: flex; gap: 6px; align-items: center; min-width: 0; flex: 1; flex-wrap: wrap; }
+.base-brief .info .loadout .lo b { font: 400 10px/1.1 'Silkscreen', monospace; font-weight: 400; text-transform: uppercase; color: var(--amber); }
+.base-brief .info .loadout .lo small { display: none; }
+.base-brief .info .loadout .cells { display: flex; gap: 3px; }
+.base-brief .info .loadout .cell { width: 22px; height: 16px; background: #121014; box-shadow: 0 0 0 1px #000, 0 0 0 2px #4a4540; }
 .base-brief .info .loadout .cell img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
-.base-brief .info .loadout .cell.eq { box-shadow: 0 0 0 1px #000, 0 0 0 2px #5fe6ff; margin-left: 4px; }
+.base-brief .info .loadout .cell.eq { box-shadow: 0 0 0 1px #000, 0 0 0 2px #5fe6ff; margin-left: 3px; }
 .base-brief .info .loadout .cell.empty { box-shadow: 0 0 0 1px #000, 0 0 0 2px #c42a20; }
-.base-brief .info .loadout .tohangar { flex: none; padding: 8px 10px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; border: 0; cursor: var(--cursor); }
+.base-brief .info .loadout .tohangar { flex: none; padding: 6px 8px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #ffc24a; box-shadow: 0 2px 0 #8a5a1c; border: 0; cursor: var(--cursor); }
 /* portrait: the map on top, the details under it, all on one screen (the
    details shrink to fit what's left: fitBrief) */
 @media (orientation: portrait) and (max-width: 760px) {
@@ -1452,7 +1452,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
         }).join('')}</div>
         <span class="label">Possible resources</span>
         <div class="rewards res"><span class="res scr"><i></i>Scraps<div class="tip"><div class="fx-head">Scraps</div><div class="fx-how">Currency used for upgrades and purchases.</div></div></span><span class="res tok"><i></i>Tokens<div class="tip"><div class="fx-head">Tokens</div><div class="fx-how">Needed for promoting parts, tanks and drones.</div></div></span></div>
-        <span class="label">Your tank</span>
         ${loadoutCard()}
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
       info.querySelector('.tohangar').addEventListener('click', toHangarNow);

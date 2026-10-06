@@ -29,7 +29,9 @@ const START_X = -20;
 const CURB = { n: -7.5, s: 6.5 };
 const WALK = { n: -10, s: 9 };
 const SW = 0.16;
-const SHACK_A = { x0: 100, x1: 107.6 };
+const SHACK_A = { x0: 100, x1: 107.6 }; // the shed the tank comes out of, at the street's end
+const SPAWN_X = SHACK_A.x1 + 5; // (just before the ramp: the street behind is scenery)
+const SHACK_A2 = { x0: 171, x1: 178.6 }; // the first checkpoint: at the top of the ramp, on the deck
 const RAMP = { x0: 126, x1: 168 }; // the ramp, rising onto the deck
 const DECK = 4.5; // the highway deck's height
 const DECK_Z = 8.6; // its half-width (round z = DZ)
@@ -477,8 +479,8 @@ function buildHighway(scene) {
 
   // 1: the street. Behind the start: the checkpoint the tank's just come
   // out of, its doors down again behind it.
-  const shackStart = buildShack(B, { x0: START_X - 9.6, x1: START_X - 2, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt });
-  B.block(START_X - 2, -0.5, 0.4, 12);
+  const shackStart = buildShack(B, { x0: SHACK_A.x0, x1: SHACK_A.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt });
+  B.block(SHACK_A.x1, -0.5, 0.4, 12);
   // the far (north) side: blocks and works, right up to the checkpoint
   building({ x0: -52, x1: START_X - 10, floors: 7, shop: true });
   building({ x0: START_X - 8, x1: -6, floors: 6, shop: true, sign: '#ffcf8a' });
@@ -638,7 +640,7 @@ function buildHighway(scene) {
     }
     // the median: a low concrete wall in stretches, open round the
     // checkpoint and the last barricade
-    for (const [x0, x1] of [[RAMP.x1 + 4, SHACK_B.x0 - 12], [SHACK_B.x1 + 12, BAR_X - 26]]) {
+    for (const [x0, x1] of [[SHACK_A2.x1 + 6, SHACK_B.x0 - 12], [SHACK_B.x1 + 12, BAR_X - 26]]) {
       for (let x = x0; x + 3 < x1; x += 12) {
         const l = Math.min(9, x1 - x);
         const m = put(D.root, box(l, 0.8, 0.5, 0x9a978f, { r: 0.04 }), x + l / 2, 0.4, DZ);
@@ -652,7 +654,7 @@ function buildHighway(scene) {
     for (const z of TRACKS) R.track(R.straight(RAMP.x1 + 0.5, z, DECK_X1 - 1, z));
     // highway lamps on the guard rails, leaning out over the lanes
     for (let x = RAMP.x1 + 8; x < DECK_X1; x += 24) {
-      if (x > SHACK_B.x0 - 3 && x < SHACK_B.x1 + 3) continue;
+      if ((x > SHACK_B.x0 - 3 && x < SHACK_B.x1 + 3) || (x > SHACK_A2.x0 - 3 && x < SHACK_A2.x1 + 3)) continue;
       for (const s of [-1, 1]) {
         const z = DZ + s * (DECK_Z - 0.1);
         put(D.root, cyl(0.1, 7, 0x8b8984, { seg: 8, radiusEnd: 0.14 }), x, 3.5, z);
@@ -708,6 +710,7 @@ function buildHighway(scene) {
       const x = RAMP.x1 + 2 + rand() * (DECK_X1 - RAMP.x1 - 4);
       const z = DZ + (rand() - 0.5) * (DECK_Z * 2 - 1.6);
       if (x > SHACK_B.x0 - 2 && x < SHACK_B.x1 + 2) continue;
+      if (x > SHACK_A2.x0 - 2 && x < SHACK_A2.x1 + 2) continue;
       const s = 0.08 + rand() * 0.25;
       D.piece(s * (1 + rand()), s * 0.6, s, rand() < 0.2 ? 0x2a2b2e : CONCRETE[(rand() * 5) | 0], x, s * 0.25, z, rand(), rand() * 3, rand());
     }
@@ -758,7 +761,7 @@ function buildHighway(scene) {
   }
 
   // the checkpoints: one across the street, one up on the deck
-  const shackA = buildShack(B, { x0: SHACK_A.x0, x1: SHACK_A.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt });
+  const shackA = buildShack(D, { x0: SHACK_A2.x0, x1: SHACK_A2.x1, z0: DZ - DECK_Z + 0.6, z1: DZ + DECK_Z - 0.6, fill: { n: DZ - DECK_Z + 0.6, s: DZ + DECK_Z - 0.6 }, heightAt: () => 0 });
   const shackB = buildShack(D, { x0: SHACK_B.x0, x1: SHACK_B.x1, z0: DZ - DECK_Z + 0.6, z1: DZ + DECK_Z - 0.6, fill: { n: DZ - DECK_Z + 0.6, s: DZ + DECK_Z - 0.6 }, heightAt: () => 0 });
 
   B.finish();
@@ -777,7 +780,7 @@ function buildHighway(scene) {
 
   // ---------------------------------------------------- the level script
   const SECTORS = ['The street', 'The ramp', 'The highway'];
-  const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
+  const B1 = { minX: SPAWN_X - 3, maxX: shackA.x0 - 0.8, minZ: DZ - DECK_Z + 0.5, maxZ: DZ + DECK_Z - 0.5 };
   const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: DZ - DECK_Z + 0.5, maxZ: DZ + DECK_Z - 0.5 };
   const B3 = { minX: shackB.x1 + 1.2, maxX: END_X + 4, minZ: DZ - DECK_Z + 0.5, maxZ: DZ + DECK_Z - 0.5 };
   const S = { sector: 0, step: 0, t: 0, wave: 0 };
@@ -794,13 +797,13 @@ function buildHighway(scene) {
     shack.openIn();
     api.objective('Enter the checkpoint');
     if (text) api.prompt('Zone clear', text, { go: true });
-    api.arrow(shack.door.clone().setY(shack.door.y + (shack === shackB ? DECK : 0)), 'Checkpoint');
+    api.arrow(shack.door.clone().setY(shack.door.y + DECK), 'Checkpoint'); // (both up on the deck)
   }
   const droneTip = (api) => {
     if (api.lesson('drone')) api.prompt('Attack drones', 'When a drone <b>stops and its pods glow</b>, rockets are coming: <b>keep moving</b>, or shoot it while it hangs there!', { danger: true, seconds: 8 });
   };
   // the parts this level can turn up
-  const PARTS3 = ['he', 'era', 'afterburner']; // (its own parts only: campaign.js rewards)
+  const PARTS3 = ['he', 'magnet', 'afterburner']; // (its own parts only: campaign.js rewards)
   // machines coming in: on the deck ahead; drones over the roofs either side
   // (always ahead of the tank, however far it's got: never behind it)
   const ahead = (api, x) => Math.min(Math.max(x, api.tankPos.x + 14), Math.max(x, Math.min(bounds.maxX, BAR_X) - 2)); // (but not past the end of the area)
@@ -821,55 +824,47 @@ function buildHighway(scene) {
     api.objective('Get onto the highway');
   }
 
-  // 1: the street
+  // 1: up the ramp onto the deck, to the first checkpoint at its top
   function sector1(api) {
     const x = api.tankPos.x;
-    if (S.step < 5 && x > shackA.x0 - 9) {
+    if (S.step < 4 && x > shackA.x0 - 9) {
       openShack(api, shackA);
-      go(5);
+      go(4);
     }
     switch (S.step) {
       case 0:
-        if (x > START_X + 12 || S.t > 4) {
-          for (const [dx, z, d] of [[0, -4, 0], [2, 3, 0.4], [4, -1, 0.8]]) api.spawnDog(Math.max(x + 18, 10) + dx, z, { delay: d });
+        if (x > SPAWN_X + 6 || S.t > 3) {
+          for (const [dx, z, d] of [[0, -3, 0], [2, 3, 0.4], [4, -0.5, 0.8]]) deckDog(api, 146 + dx, DZ + z, d);
           contact(api, 'Enemies ahead!');
           go(1);
         }
         break;
       case 1:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
-          api.spawnWalker(58, -4);
-          api.spawnDog(52, 4, { delay: 0.6 });
-          api.spawnDog(54, -6, { delay: 1 });
+          api.spawnWalker(ahead(api, 160), DZ - 3);
+          deckDog(api, 156, DZ + 3, 0.6);
+          deckDog(api, 158, DZ - 5, 1);
           go(2);
         }
         break;
       case 2:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
           // the first drones, in over the roofs
-          sideDrone(api, Math.max(x + 14, 60), -1);
+          sideDrone(api, Math.max(x + 14, 156), -1);
+          deckDog(api, 164, DZ + 2, 0.8);
           droneTip(api);
           go(3);
         }
         break;
       case 3:
         if (api.enemiesAlive === 0 && S.t > 1.5) {
-          api.spawnDog(92, -4);
-          api.spawnDog(94, 3, { delay: 0.4 });
-          api.spawnWalker(97, 0, { delay: 0.8 });
-          sideDrone(api, 90, 1, 1.5);
+          openShack(api, shackA, 'Area cleared.');
           go(4);
         }
         break;
       case 4:
-        if (api.enemiesAlive === 0 && S.t > 1.5) {
-          openShack(api, shackA, 'Area cleared.');
-          go(5);
-        }
-        break;
-      case 5:
         if (atDoor(api, shackA)) {
-          go(6);
+          go(5);
           if (api.enemiesAlive) api.clearEnemies();
           api.depot(shackA, { offers: PARTS3, count: 3, onLeave: () => startSector2(api) });
         }
@@ -893,9 +888,8 @@ function buildHighway(scene) {
     }
     switch (S.step) {
       case 0:
-        if (x > RAMP.x0 - 6 || S.t > 3) {
-          for (const [dz, d] of [[-3, 0], [2, 0.5], [0, 1]]) deckDog(api, RAMP.x1 + 4, DZ + dz, d);
-          contact(api, 'Coming down the ramp!');
+        if (S.t > 2) {
+          for (const [dz, d] of [[-3, 0], [2, 0.5], [0, 1]]) deckDog(api, 200, DZ + dz, d);
           go(1);
         }
         break;
@@ -1017,7 +1011,7 @@ function buildHighway(scene) {
       const shack = S.sector === 0 ? shackA : shackB;
       api.teleport(shack.door.x - 7, shack.door.z, 0);
       openShack(api, shack);
-      go(S.sector === 0 ? 5 : 4);
+      go(4);
       return true;
     }
     if (S.step < 3) {
@@ -1052,7 +1046,7 @@ function buildHighway(scene) {
     crushables,
     depotRoom: room,
     heightAt: (x, z) => (z > 150 ? 0 : heightAt(x, z)),
-    spawn: { x: START_X + 5, z: -0.5, yaw: 0 },
+    spawn: { x: SPAWN_X, z: -0.5, yaw: 0 },
     bounds,
     script: S, // for tests
     shacks: [shackA, shackB], // for tests

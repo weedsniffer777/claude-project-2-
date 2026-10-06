@@ -64,10 +64,11 @@ function hazard(w) {
   return new THREE.MeshToonMaterial({ map: t, gradientMap });
 }
 
-// CHECKPOINT, drawn letter by letter and snapped to hard pixels.
-let signTex = null;
-function signTexture() {
-  if (signTex) return signTex;
+// CHECKPOINT (or another word), drawn letter by letter and snapped to hard
+// pixels.
+const signTexs = {};
+function signTexture(label = 'CHECKPOINT') {
+  if (signTexs[label]) return signTexs[label];
   const [c, g] = canvas(120, 24);
   g.fillStyle = '#1b1f24';
   g.fillRect(0, 0, 120, 24);
@@ -75,7 +76,7 @@ function signTexture() {
   g.font = 'bold 15px monospace';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText('CHECKPOINT', 60, 13);
+  g.fillText(label, 60, 13);
   // threshold to hard pixels, with a dim glow fringe round the letters
   const img = g.getImageData(0, 0, 120, 24);
   const d = img.data;
@@ -91,8 +92,8 @@ function signTexture() {
     }
   }
   g.putImageData(img, 0, 0);
-  signTex = tex(c);
-  return signTex;
+  signTexs[label] = tex(c);
+  return signTexs[label];
 }
 
 // A roller door hanging in an opening of width w, facing along x.
@@ -115,7 +116,7 @@ function rollerDoor(B, x, z, w) {
 
 // x0..x1 along the street, z0..z1 across it (the roadway). fill: how far
 // the side walls run out to seal the sidewalks ({ n, s } world z).
-export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
+export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPOINT' }) {
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
   const L = x1 - x0;
@@ -182,7 +183,7 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   // what makes it read from down the street: a lit sign, a beacon, work lights
   {
     // a lit sign over the door: CHECKPOINT in cold tube letters
-    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture(), color: 0xffffff }));
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture(label), color: 0xffffff }));
     sign.rotation.y = -Math.PI / 2;
     sign.position.set(x0 - 0.42, H + 0.7, cz); // clear of the backing board's face
     B.add(sign);
@@ -267,7 +268,7 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     beacon.rotation.y = t * 5;
     beaconE.level = 0.45 + 0.55 * Math.max(0, Math.cos(t * 5));
     state.inDoor = THREE.MathUtils.clamp(state.inDoor + (state.openIn && !state.locked ? dt : -dt) * 0.9, 0, 1);
-    if (state.openOut) state.outDoor = Math.min(1, state.outDoor + dt * 0.9);
+    state.outDoor = THREE.MathUtils.clamp(state.outDoor + (state.openOut ? dt : -dt) * 0.9, 0, 1);
     doorIn.position.y = state.inDoor * (H - 0.6);
     doorIn.scale.y = 1 - state.inDoor * 0.8;
     doorOut.position.y = state.outDoor * (H - 0.6);
@@ -275,6 +276,7 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     if (state.inDoor > 0.6) drop(blockIn);
     else if (state.inDoor < 0.3) keepBlock(blockIn);
     if (state.outDoor > 0.6) drop(blockOut);
+    else if (state.outDoor < 0.3) keepBlock(blockOut);
     state.lockK = THREE.MathUtils.clamp(state.lockK + (state.locked ? dt * 4 : -dt * 2.5), 0, 1);
     holo.visible = state.lockK > 0.01;
     if (holo.visible) holo.material.opacity = state.lockK * (0.75 + Math.sin(t * 9) * 0.12 + (Math.random() < 0.04 ? -0.4 : 0)); // a hologram's flicker
@@ -312,6 +314,10 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
     openOut() {
       state.openOut = true;
       state.outDoor = 1;
+    },
+    // (the endless base: shut behind you again)
+    closeOut() {
+      state.openOut = false;
     },
     get inDoor() {
       return state.inDoor;

@@ -22,6 +22,7 @@ import { Pickups } from './pickups.js';
 import { Crushing } from './crushing.js';
 import { PARTS, attachPart, statsFor, BASE_STATS, effectsHtml, improveTo, improvementHtml, levelOf, gmgLauncher } from './parts.js';
 import { save } from './save.js';
+import { runXp, bankRun } from './endless.js';
 import { snapshotCanvas as sharedSnapshot } from '../render/snapshot.js';
 import { partPicture } from '../render/partPictures.js';
 import { buildLauncher } from '../models/launchers.js';
@@ -291,6 +292,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       partMeshes.push(g, ...(g.userData.extra || []));
     }
     stats = statsFor(list, tankId);
+    if (levelDef.endless) stats.view *= 1.5; // (Endless: a wide arena, every tank sees further)
     tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
     // the Vulcan: thin tracers, barely a kick per round
     const vulcan = list.includes('vulcan') && tank.kind === 'light';
@@ -552,7 +554,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       run.spot = null;
       run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds, focus: null };
       level.bounds = { ...level.bounds, maxX: shack.x0 + 4 };
-      run.auto = new THREE.Vector3(shack.x0 + 3, 0, pos.z * 0.5);
+      run.auto = new THREE.Vector3(shack.x0 + 3, 0, shack.door.z + (pos.z - shack.door.z) * 0.5); // (in through the door, wherever it is across the street)
       setCursor();
       api.transition(() => {
         enemies.retire(); // whatever was left behind stays behind
@@ -699,13 +701,15 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // scraps: a blue crystal per five, amber shards for the rest; the odd
     // medkit; rarely an upgrade token (bigger machines more often, the boss
     // always a couple)
-    const big = Math.floor(e.stats.scrap / 5);
+    // (Endless: under half the scraps a kill, or it'd drown you in them)
+    const sc = levelDef.endless ? Math.max(1, Math.round(e.stats.scrap * 0.4)) : e.stats.scrap;
+    const big = Math.floor(sc / 5);
     if (big) pickups.spawn(at, big, 'bigscrap', 5 * mult);
-    if (e.stats.scrap % 5) pickups.spawn(at, e.stats.scrap % 5, 'scrap', mult);
+    if (sc % 5) pickups.spawn(at, sc % 5, 'scrap', mult);
     run.drops++;
     if (e.stats.scale > 1.5) pickups.spawn(at, 3, 'repair', 15);
     else if (Math.random() < 0.12) pickups.spawn(at, 1, 'repair', 12);
-    const tokenChance = (e.stats.scale > 1.5 ? 1 : e.kind === 'walker' ? 0.06 : 0.015) * (run.hard ? 1.5 : 1);
+    const tokenChance = (e.stats.scale > 1.5 ? 1 : e.kind === 'walker' ? 0.06 : 0.015) * (run.hard ? 1.5 : 1) * (levelDef.endless ? 0.5 : 1);
     if (Math.random() < tokenChance) pickups.spawn(at, e.stats.scale > 1.5 ? 2 : 1, 'token', 1);
     if (blasted) run.hitstop = Math.max(run.hitstop, e.stats.scale > 1.5 ? 0.25 : 0.075);
     if (run.chain >= 2) hud.damage(at.clone().setY(at.y + 1.2), 0, 'chain', `x${mult}`);
@@ -847,9 +851,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (Math.random() < realDt * 10) combat.glow.light(pos.clone().setY(1.2), 0xff8a35, 30, 0.12);
     if (d.t > 2.4 && !d.shown) {
       d.shown = true;
+      if (levelDef.endless) return void endlessEnd('Destroyed');
       // Easy, past a checkpoint, the first death: back to that checkpoint
       // (the revive takes Retry's place: just Revive or Exit)
-      if (!run.hard && run.checkpoint && !run.revived) {
+      if (!run.hard && run.checkpoint && !run.revived && !levelDef.endless) {
         // (no results yet: the run's not over)
         hud.showEnd(
           'lose',
@@ -880,6 +885,28 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       );
       setCursor();
     }
+  }
+  // Endless over (destroyed, or left from the pause menu): everything picked
+  // up is kept, the run's XP goes onto the reward track (paying out every
+  // tier it reaches), and the end screen fills the track's bar.
+  function endlessEnd(title) {
+    if (run.endlessDone) return;
+    run.endlessDone = true;
+    run.over = true;
+    enemies.clearBolts();
+    const time = run.endlessT || 0;
+    const waves = run.endlessWaves || 0;
+    const kills = enemies.killed;
+    const scraps = run.scrap;
+    const total = bank(scraps);
+    save.commitRun();
+    const xp = runXp({ kills, waves, time });
+    const res = bankRun({ xp, time, wave: waves });
+    hud.showEndless(
+      { title, time, waves, kills, scraps, tokens: run.tokens || 0, xp, total, ...res },
+      { retry: () => (hud.hideEndless(), loadLevel(levelDef.id)), exit: onExit ? () => (hud.hideEndless(), onExit()) : null },
+    );
+    setCursor();
   }
   // The last one or two machines, stuck somewhere far off (behind a heap,
   // up a side street): after 10 s they're moved to just out of view
@@ -935,6 +962,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (Math.abs(ndcTmp.x) <= 1 && Math.abs(ndcTmp.y) <= 1) continue;
       const d = Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
       out.push({ a: Math.atan2(-ndcTmp.y * (canvas.clientHeight || 1), ndcTmp.x * (canvas.clientWidth || 1)), near: THREE.MathUtils.clamp(1 - (d - 10) / 40, 0, 1), boss: e.stats.scale > 1.5 });
+    }
+    // Endless: the base, always, when it's off screen
+    const base = levelDef.endless && level.shacks?.[0];
+    if (base) {
+      ndcTmp.set(base.door.x + 3, 1, base.door.z).project(camera);
+      if (Math.abs(ndcTmp.x) > 1 || Math.abs(ndcTmp.y) > 1) out.push({ a: Math.atan2(-ndcTmp.y * (canvas.clientHeight || 1), ndcTmp.x * (canvas.clientWidth || 1)), near: 1, base: true });
     }
     hud.setPointers(out);
   }
@@ -1000,6 +1033,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return;
     }
     if (run.grace > 0) return; // (just revived)
+    damage *= run.dmgMul || 1; // (Endless: they hit harder as the run goes on)
     if (run.hard && run.boss?.e?.alive) damage *= 1.15; // (Hard: a boss fight hits harder)
     run.hp -= damage * stats.armor * (run.shield > 0 ? 1 - stats.breakShield : 1);
     hud.setHull(run.hp, stats.maxHp);
@@ -1830,10 +1864,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
               setPaused(false);
               loadLevel(levelDef.id);
             },
-            lost: partCards().map((c) => ({ name: c.name, image: c.image })),
+            lost: levelDef.endless ? [] : partCards().map((c) => ({ name: c.name, image: c.image })),
+            endless: !!levelDef.endless,
             exit: onExit
               ? () => {
                   setPaused(false);
+                  // Endless: leaving ends the run, and it pays out
+                  if (levelDef.endless) return void endlessEnd('Run ended');
                   save.discardRun(); // quitting mid-level: its finds go too
                   onExit();
                 }

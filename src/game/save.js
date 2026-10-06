@@ -22,6 +22,7 @@ const K = {
   ownedEquipment: 'scavenger.ownedEquipment',
   difficulty: 'scavenger.difficulty',
   crew: 'scavenger.crew',
+  endless: 'scavenger.endless',
 };
 // A run's part progress (parts found, their levels and stars, what each
 // level has given, the loadouts) is held in memory while the level's being
@@ -150,6 +151,12 @@ export const save = {
   tokens: () => read(K.tokens, 0) | 0,
   addTokens(n) {
     write(K.tokens, Math.max(0, save.tokens() + n));
+  },
+  // Endless: { xp (all-time, for the reward track), claimed (track tiers
+  // paid out), best: { t (seconds), wave } }
+  endless: () => ({ xp: 0, claimed: 0, best: { t: 0, wave: 0 }, ...read(K.endless, {}) }),
+  setEndless(v) {
+    write(K.endless, v);
   },
   tips: () => read(K.tips, []),
   seeTip(id) {
