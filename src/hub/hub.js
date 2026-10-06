@@ -1093,7 +1093,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   }
 
   // ----------------------------------------------------------- crewman
-  const crew = createCrew({ layer: PLAYER_LAYER });
+  const crew = createCrew({ layer: PLAYER_LAYER, role: 'commander' });
   scene.add(crew.group);
   // a soft light that goes with him, so he reads anywhere in the gloom
   const fillLight = new THREE.PointLight(0xffe2c0, 6, 3.6, 1.6);
@@ -1115,7 +1115,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     { role: 'Gunner', spots: [[3.0, -13.6, face(1, 0)], [0.3, -10.2, face(-1, 0)], [1.6, -14.6, face(0, -1)], [-0.4, -8.0, face(-0.4, -1)]] },
   ];
   const mates = MATES.map((m, i) => {
-    const c = createCrew();
+    const c = createCrew({ role: m.role.toLowerCase() });
     const [x, z, yaw] = m.spots[i];
     c.group.position.set(x, 0, z);
     c.group.rotation.y = yaw;
@@ -1231,7 +1231,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const portraits = {};
   const portrait = (id) =>
     (portraits[id] ??= (() => {
-      const c = createCrew();
+      const c = createCrew({ role: id });
       return c.ready.then(() => {
         c.update(0.016, 0, 0);
         c.group.updateWorldMatrix(true, true);

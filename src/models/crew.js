@@ -87,7 +87,7 @@ function paint(skinned) {
 }
 
 // the helmet, collar, belt and the rest, on the bones (model units)
-function dress(bone) {
+function dress(bone, role) {
   // padded tanker's helmet over the round head (centre ~77 above the bone)
   {
     const h = new THREE.Group();
@@ -109,17 +109,53 @@ function dress(bone) {
       const pad = at(h, mesh(new THREE.CylinderGeometry(30, 30, 16, 10), C.pad), s * 108, -20, -4);
       pad.rotation.z = Math.PI / 2;
     }
-    // goggles pushed up on the brow: the strap round, two lenses in frames
-    const strap = at(h, mesh(new THREE.TorusGeometry(108, 6, 4, 22), C.rib), 0, 34, 0);
-    strap.rotation.x = Math.PI / 2 - 0.35;
-    for (const s of [-1, 1]) {
-      const g = new THREE.Group();
-      g.position.set(s * 34, 52, 92);
-      g.rotation.x = 0.9;
-      h.add(g);
-      g.add(mesh(new THREE.CylinderGeometry(25, 27, 18, 10), C.rib));
-      at(g, new THREE.Mesh(new THREE.CylinderGeometry(19, 19, 4, 10), toonMat(C.goggles)), 0, 9, 0);
+    // goggles: pushed up on the brow (the gunner), or down over his eyes,
+    // big and bright (the commander, head out of the hatch); the driver
+    // wears none, under a fat intercom headset instead
+    if (role !== 'driver') {
+      const down = role === 'commander';
+      const strap = at(h, mesh(new THREE.TorusGeometry(down ? 106 : 108, 6, 4, 22), C.rib), 0, down ? -40 : 34, 0);
+      strap.rotation.x = down ? Math.PI / 2 : Math.PI / 2 - 0.35;
+      for (const s of [-1, 1]) {
+        const g = new THREE.Group();
+        if (down) g.position.set(s * 38, -40, 98);
+        else g.position.set(s * 34, 52, 92);
+        g.rotation.x = down ? Math.PI / 2 : 0.9;
+        h.add(g);
+        const k = down ? 1.25 : 1;
+        g.add(mesh(new THREE.CylinderGeometry(25 * k, 27 * k, 18, 10), C.rib));
+        at(g, new THREE.Mesh(new THREE.CylinderGeometry(19 * k, 19 * k, 4, 10), toonMat(down ? 0x9fd4e0 : C.goggles)), 0, 9, 0);
+      }
+      if (down) at(h, box(14, 10, 14, C.rib, { r: 3 }), 0, -40, 106); // the bridge between them
+    } else {
+      // the headset: big round cups over the ear pads, a band over the
+      // top, the mic on its boom round to his mouth
+      for (const s of [-1, 1]) {
+        const cup = at(h, mesh(new THREE.CylinderGeometry(44, 44, 36, 12), 0x1a1918), s * 122, -22, -4);
+        cup.rotation.z = Math.PI / 2;
+        const rim = at(h, mesh(new THREE.TorusGeometry(42, 6, 4, 12), 0x3a3834), s * 140, -22, -4);
+        rim.rotation.y = Math.PI / 2;
+      }
+      const band = at(h, mesh(new THREE.TorusGeometry(128, 10, 4, 16, Math.PI), 0x1a1918), 0, -18, -4);
+      band.rotation.y = 0;
+      const boom = at(h, box(10, 10, 110, 0x1a1918, { r: 3 }), -112, -62, 48);
+      boom.rotation.y = 0.55;
+      at(h, mesh(new THREE.SphereGeometry(16, 8, 6), 0x2a2826), -70, -70, 100); // the mic
     }
+  }
+  // the gunner carries a round for the gun: a long brass case, the shell
+  // on it, in his right hand
+  if (role === 'gunner') {
+    const hand = bone.arms[1].hand;
+    const r = new THREE.Group();
+    r.position.set(0, -30, 20);
+    r.rotation.x = -0.25;
+    hand.add(r);
+    at(r, mesh(new THREE.CylinderGeometry(24, 26, 170, 10), C.brass), 0, -20, 0);
+    at(r, mesh(new THREE.CylinderGeometry(28, 28, 10, 10), 0x8a6a2e), 0, -108, 0); // the rim
+    at(r, mesh(new THREE.CylinderGeometry(16, 24, 90, 10), 0x4f5a3a), 0, 110, 0); // the shell
+    at(r, mesh(new THREE.ConeGeometry(16, 40, 10), 0x6a6e74), 0, 175, 0); // its nose
+    at(r, mesh(new THREE.CylinderGeometry(25, 25, 10, 10), 0xb06a3a), 0, 68, 0); // driving band
   }
   // the belt with its buckle, a map case on its strap, two chest pockets
   const belt = at(bone.hips, mesh(new THREE.TorusGeometry(66, 11, 4, 16), C.belt), 0, 12, 0);
@@ -143,7 +179,7 @@ const Z = new THREE.Vector3(0, 0, 1);
 const qa = new THREE.Quaternion();
 const qb = new THREE.Quaternion();
 
-export function createCrew({ layer = null } = {}) {
+export function createCrew({ layer = null, role = null } = {}) {
   const group = new THREE.Group();
   const holder = new THREE.Group();
   holder.rotation.y = Math.PI / 2; // the model faces +Z; ours face +X
@@ -182,7 +218,7 @@ export function createCrew({ layer = null } = {}) {
       ],
     };
     bone.shins = bone.legs.map((l) => l.shin);
-    dress(bone);
+    dress(bone, role);
     const bind = new Map();
     root.traverse((o) => o.isBone && bind.set(o, o.quaternion.clone()));
     rig = { bone, bind, hipY: bone.hips.position.y };
