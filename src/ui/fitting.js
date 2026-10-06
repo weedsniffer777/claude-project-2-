@@ -55,6 +55,20 @@ const CSS = `
 .fit .equip .box .eqi { width: 48px; height: 36px; image-rendering: pixelated; }
 .fit .equip .box:has(.eqi) { justify-content: flex-start; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff; }
 .fit .equip .lock { font-size: 11px; color: #8f877a; }
+/* the equipment slot calling for attention: red when it's empty though you
+   own equipment, green when there's new equipment to look at; a tag on its
+   corner and an arrow out to its right pointing in */
+.fit .equip .slotbox { position: relative; }
+.fit .equip .slotbox > .box { width: 100%; box-sizing: border-box; }
+.fit .equip .box.missing { box-shadow: 0 0 0 2px #000, 0 0 0 4px #e0483a, 0 0 12px #e0483a99; }
+.fit .equip .box.fresh { box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 12px #6be08a99; }
+.fit .equip .flag { position: absolute; right: -6px; top: -9px; z-index: 2; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 2px 4px; color: #fff; background: #c42a20; box-shadow: 0 0 0 2px #000; pointer-events: none; animation: eqFlag 0.9s steps(2) infinite; }
+.fit .equip .flag.new { color: #111; background: #6be08a; }
+.fit .equip .point { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 2; font: 400 16px/1 'Silkscreen', monospace; color: #e0483a; text-shadow: 2px 2px 0 #000; pointer-events: none; animation: eqPoint 0.7s steps(2) infinite; }
+.fit .equip .point.new { color: #6be08a; }
+@keyframes eqFlag { 50% { filter: brightness(1.35); } }
+@keyframes eqPoint { 0%, 100% { transform: translate(0, -50%); } 50% { transform: translate(6px, -50%); } }
+.fit .pop .eqnew { margin-left: auto; font: 400 8px/1 'Silkscreen', monospace; padding: 2px 3px; color: #111; background: #6be08a; }
 .fit .right { position: absolute; right: calc(20px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 300px; padding: 14px 16px 16px; display: grid; gap: 10px; }
 .fit .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
 .fit .slots { display: grid; gap: 8px; }
@@ -615,10 +629,20 @@ export function createFitting({ renderer, cursor }) {
     const slot = $('.equip .slotbox');
     slot.innerHTML = '';
     slot.append(box);
+    // (in the hangar) equipment you've not looked at yet: green, New!; an
+    // empty slot while you own some (even if it's on another tank): red
+    const unseen = owned.filter((e) => !save.tips().includes(`eqseen:${e}`) && !TANK_ORDER.some((t) => save.equipment(t) === e)); // (fitted somewhere: not new)
+    if (hangar && owned.length && (unseen.length || !item)) {
+      const isNew = unseen.length > 0;
+      box.classList.add(isNew ? 'fresh' : 'missing');
+      slot.insertAdjacentHTML('beforeend', `<span class="flag${isNew ? ' new' : ''}">${isNew ? 'New!' : 'Missing equipment!'}</span><span class="point${isNew ? ' new' : ''}">◀</span>`);
+    }
     $('.equip .lock').hidden = hangar || !owned.length;
     if (!hangar || !owned.length) return;
     box.addEventListener('click', () => {
       closePop();
+      const fresh = owned.filter((e) => !save.tips().includes(`eqseen:${e}`) && !TANK_ORDER.some((t) => save.equipment(t) === e));
+      for (const e of owned) save.seeTip(`eqseen:${e}`); // (looked at now)
       pop = document.createElement('div');
       pop.className = 'pop pnl';
       for (const e of owned) {
@@ -626,7 +650,7 @@ export function createFitting({ renderer, cursor }) {
         b.type = 'button';
         // one of each: fitting it here takes it off any other tank
         const on = TANK_ORDER.find((t) => t !== o.tankId && save.equipment(t) === e);
-        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${on ? `<small class="eqon">On ${TANKS[on].name}</small>` : ''}`;
+        b.innerHTML = `<img alt="" src="${equipmentIcon(e, 48, 36)}"><span></span>${fresh.includes(e) ? '<small class="eqnew">New!</small>' : ''}${on ? `<small class="eqon">On ${TANKS[on].name}</small>` : ''}`;
         b.querySelector('span').textContent = on ? `${EQUIPMENT[e].name} · ${id ? 'swap' : 'move here'}` : EQUIPMENT[e].name;
         b.addEventListener('click', () => {
           // taken off another tank: that tank gets this one's equipment in

@@ -530,6 +530,8 @@ export function createWorkshop({ renderer, cursor }) {
       busy = false;
       const owned = save.owned().filter((id) => PARTS[id]);
       if (opts.tab) tab = opts.tab;
+      // the tanks tab opens on the tank picked in the hangar right now
+      if (opts.tankId && save.tanks().includes(opts.tankId)) selTank = opts.tankId;
       if (opts.select && owned.includes(opts.select)) {
         sel = opts.select;
         tab = 'parts';

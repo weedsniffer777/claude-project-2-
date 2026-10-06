@@ -14,6 +14,8 @@ const CSS = `
 .cancelx i { width: 60%; height: 60%; background: #ff3b2f; clip-path: polygon(20% 0, 50% 30%, 80% 0, 100% 20%, 70% 50%, 100% 80%, 80% 100%, 50% 70%, 20% 100%, 0 80%, 30% 50%, 0 20%); filter: drop-shadow(0 0 2px #000); animation: cancelPulse 0.6s steps(2) infinite; }
 .cancelx b { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%); padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #a8241c; box-shadow: 0 0 0 2px #000; white-space: nowrap; }
 @keyframes cancelPulse { 50% { opacity: 0.6; } }
+.hud-card.fresh { box-shadow: 0 0 0 2px #000, 0 0 0 4px #4fae68, 4px 4px 0 4px #000; }
+.hud-card .name .newtag { display: inline-block; margin-right: 6px; padding: 1px 4px; font-style: normal; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .hud-card.improve .name .up { display: inline-block; margin-right: 6px; padding: 1px 4px; font-style: normal; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
 .hud button, .hud .hud-card { cursor: var(--cursor); }
 .hud { cursor: inherit; --go: #6be08a; --ink: #f1e9d8; --dim: #b9b0a0; --panel: rgba(12, 11, 13, 0.84); --edge: #f1e9d8; --amber: #ffb347; --danger: #ff3b2f;
@@ -983,10 +985,11 @@ export function createHud() {
       for (const c of list || []) {
         const el = document.createElement('button');
         el.type = 'button';
-        el.className = `hud-card panel${c.improve ? ' improve' : ''}`;
+        el.className = `hud-card panel${c.improve ? ' improve' : ' fresh'}`;
         el.innerHTML = '<span class="name"></span><span class="what"></span><span class="fx"></span><span class="take">Pick</span>';
         el.querySelector('.name').textContent = c.name;
         if (c.improve) el.querySelector('.name').insertAdjacentHTML('afterbegin', '<i class="up">▲</i>');
+        else el.querySelector('.name').insertAdjacentHTML('afterbegin', '<i class="newtag">New!</i>'); // (a part you haven't got: says so, as loud as an improvement)
         el.querySelector('.what').textContent = c.text;
         el.querySelector('.fx').innerHTML = c.lines || ''; // the numbers (built from the part's own stats)
         el.addEventListener('click', () => onPick(c.id));

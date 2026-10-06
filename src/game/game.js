@@ -633,8 +633,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         }
         if (first.equipment && EQUIPMENT[first.equipment] && !save.ownedEquipment().includes(first.equipment)) {
           save.ownEquipment(first.equipment);
-          // fitted straight away to the tank you won it with (if its slot's free)
-          if (!save.equipment(tankId)) save.setEquipment(first.equipment, tankId);
+          // (not fitted for you: the hangar points you to its slot)
           save.addNews([{ kind: 'equipment', id: first.equipment }]);
           rewards.push(['First clear reward', EQUIPMENT[first.equipment].name]);
         }

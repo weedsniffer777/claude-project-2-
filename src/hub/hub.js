@@ -104,6 +104,8 @@ const CSS = `
 .base-guide { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
 .base-guide .lab { position: fixed; left: 0; top: 0; display: grid; gap: 4px; justify-items: center; padding: 7px 10px 9px; max-width: 220px; background: #17151a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 4px 4px 0 4px #000; animation: baseGuide 0.9s steps(2) infinite; }
 .base-guide .lab .t { font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 3px 7px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.base-guide .lab .skip { pointer-events: auto; cursor: var(--cursor); margin-top: 2px; padding: 3px 8px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; background: #2a262c; box-shadow: 0 0 0 2px #000; border: 0; }
+.base-guide .lab .skip:hover { color: #f1e9d8; }
 .base-guide .lab b { font: 400 13px/1.2 'Pixelify Sans', monospace; font-weight: 400; color: #f1e9d8; text-align: center; }
 .base-guide .lab i { position: absolute; left: 50%; top: 100%; margin-left: -8px; width: 16px; height: 10px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-guide .lab.below i { top: auto; bottom: 100%; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
@@ -1500,20 +1502,31 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const guide = document.createElement('div');
   guide.className = 'base-guide';
   guide.hidden = true;
-  guide.innerHTML = '<div class="lab"><span class="t">Upgrades</span><b></b><i></i></div>';
-  let guideT = 0;
-  let guideWant = false;
+  guide.innerHTML = '<div class="lab"><span class="t"></span><b></b><button type="button" class="skip">Skip</button><i></i></div>';
+  // two walkthroughs, one after the other: the upgrades (the first time
+  // one's affordable), then any new equipment (to its slot in the hangar);
+  // either can be skipped
+  let guideT = -1;
+  let guideWant = null;
+  const unseenGear = () => save.ownedEquipment().filter((e) => EQUIPMENT[e] && !save.tips().includes(`eqseen:${e}`) && !Object.keys(TANKS).some((t) => save.equipment(t) === e)); // (fitted somewhere: not new)
   const guideOn = (t) => {
-    if (t - guideT > 0.5) {
+    if (t - guideT > 0.5 || t < guideT) {
       guideT = t;
-      guideWant = !save.tips().includes('hub-upgrades') && upgradeHint();
+      guideWant = !save.tips().includes('hub-upgrades') && upgradeHint() ? 'upgrades' : unseenGear().length ? 'gear' : null;
     }
     return guideWant;
   };
+  guide.querySelector('.skip').addEventListener('click', () => {
+    if (guideWant === 'upgrades') save.seeTip('hub-upgrades');
+    else for (const e of unseenGear()) save.seeTip(`eqseen:${e}`);
+    guideT = -1;
+    if (open?.id === 'hangar') openFitting();
+  });
   function guideFrame(t) {
     let target = null;
     let text = '';
-    if (guideOn(t) && news.hidden && !workshop.isOpen) {
+    const step = news.hidden && !workshop.isOpen ? guideOn(t) : null;
+    if (step) {
       if (!open) {
         const tag = tags.get('hangar');
         if (!tag.hidden) {
@@ -1521,17 +1534,18 @@ export function createHub({ renderer, pixel, onDeploy }) {
           const [fx, fy] = toScreen(ROOMS.find((m) => m.id === 'hangar').focus);
           const tx = r.left + r.width / 2;
           target = { x: fx, y: fy, r: Math.max(150, Math.hypot(fx - tx, fy - r.top) + 20), above: r.top, labelX: tx, labelY: r.bottom };
-          text = 'You have scraps to spend! Go to the hangar.';
+          text = step === 'upgrades' ? 'You have scraps to spend! Go to the hangar.' : 'You have new equipment! Go to the hangar.';
         }
       } else if (open.id === 'hangar') {
-        const b = fitting.el.querySelector('.upbtn');
+        const b = fitting.el.querySelector(step === 'upgrades' ? '.upbtn' : '.equip .box');
         if (b && !b.hidden && b.offsetParent) {
           const r = b.getBoundingClientRect();
           target = { x: r.left + r.width / 2, y: r.top + r.height / 2, r: Math.max(r.width, r.height) * 0.75 + 10, above: r.top };
-          text = 'Spend scraps here to upgrade your parts and tanks.';
+          text = step === 'upgrades' ? 'Spend scraps here to upgrade your parts and tanks.' : 'New equipment! Tap here to fit it to your tank.';
         }
       }
     }
+    guide.querySelector('.t').textContent = step === 'gear' ? 'Equipment' : 'Upgrades';
     guide.hidden = !target;
     if (!target) return;
     const rr = target.r * (1 + Math.sin(t * 4) * 0.04);
