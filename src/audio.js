@@ -7,7 +7,6 @@ import { settings, onSettings } from './ui/settings.js';
 import { platform } from './platform.js';
 
 const FILES = {
-  click: 'click.mp3',
   rocket: 'rocket.mp3',
   explosion: 'explosion.mp3',
   treads: 'treads.mp3',
@@ -23,6 +22,8 @@ const FILES = {
   beep2: 'beep2.mp3',
   crash: 'crash.mp3',
   boom: 'boom.mp3',
+  clank: 'clank.mp3',
+  levelup: 'levelup.mp3',
 };
 const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
 // (no machine gun drowning out the rest: each sound has a shortest gap
@@ -47,7 +48,11 @@ function loopify(buf, fade = 0.25) {
   const d0 = buf.getChannelData(0);
   let start = 0;
   while (start < 4000 && Math.abs(d0[start]) < 1e-3) start++;
-  const n = buf.length - start;
+  // (and its padded tail: a quiet end would sag the seam)
+  let end = buf.length;
+  while (end > start + 4000 && Math.abs(d0[end - 1]) < 2e-2) end--;
+  end = Math.max(start + 1, end - Math.floor(0.015 * buf.sampleRate));
+  const n = end - start;
   if (n < f * 3) return buf;
   const out = ctx.createBuffer(buf.numberOfChannels, n - f, buf.sampleRate);
   for (let c = 0; c < buf.numberOfChannels; c++) {
@@ -165,14 +170,5 @@ export const sfx = {
   },
 };
 
-// a click at the new level, so you hear what you picked
-onSettings((k) => k === 'volume' && sfx.play('click', { gain: 0.6 }));
-
-// UI clicks: every button, dropdown and tab
-document.addEventListener(
-  'click',
-  (e) => {
-    if (e.target.closest?.('button, select, [role="button"], [data-act], [data-ask]')) sfx.play('click', { gain: 0.6 });
-  },
-  true,
-);
+// a beep at the new level, so you hear what you picked
+onSettings((k) => k === 'volume' && sfx.play('beep2', { gain: 0.5 }));

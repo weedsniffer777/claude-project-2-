@@ -2,6 +2,7 @@
 // level at a time, to level 40; every tenth level is a promotion (scraps
 // and tokens), a new rank: Private, Private First Class, Corporal,
 // Sergeant, Staff Sergeant. The bonuses are slight: at most 20-25%.
+import { sfx } from '../audio.js';
 import { save } from './save.js';
 
 export const CREW_MAX = 40;
@@ -61,5 +62,6 @@ export function trainCrew(id) {
   save.addBank(-c.scraps);
   if (c.tokens) save.addTokens(-c.tokens);
   save.setCrewLevel(id, lvl + 1);
+  sfx.play('levelup', { gain: 0.6 });
   return true;
 }

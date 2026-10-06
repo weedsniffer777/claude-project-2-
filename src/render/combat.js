@@ -168,7 +168,7 @@ export class CombatFx {
   // A machine blowing apart: a sharp flash, sparks, its own parts thrown,
   // a puff of dark smoke.
   machineDeath(at, color = 0x3e4247) {
-    sfx.at('boom', at, { gain: 0.5, rate: 1 + Math.random() * 0.2 });
+    sfx.at('boom', at, { gain: 0.68, rate: 1 + Math.random() * 0.2 });
     const { glow, fx, puffs, debris } = this;
     glow.flash(at, 0xfff0c8, 0.2, 1.1, 0.08);
     glow.flash(at, 0xff9a40, 0.3, 1.4, 0.14);
@@ -369,7 +369,7 @@ export class CombatFx {
   }
 
   // gain: its bang (quieter for a shell landing), fading with distance
-  explode(at, normal = null, mesh = null, gain = 0.42) {
+  explode(at, normal = null, mesh = null, gain = 0.56) {
     sfx.at('boom', at, { gain, rate: 0.9 + Math.random() * 0.2 });
     this.onImpact?.(at, mesh);
     const { fx, glow, puffs, debris, craters } = this;

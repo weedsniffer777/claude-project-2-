@@ -8,6 +8,7 @@
 //    speed every level.
 // A level up pops; an evolve flashes the screen in the new tier's colour,
 // throws sparks, slams a banner down and grows the bars.
+import { sfx } from '../audio.js';
 import { watchScreens } from './fit.js';
 import { fountain, popFrames, ascend } from './celebrate.js';
 import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
@@ -329,6 +330,7 @@ export function createWorkshop({ renderer, cursor }) {
       .map((r) => ({ label: r.label, from: r.now, to: r.next }));
     spend(n);
     save.setPartLevel(id, lvl + 1);
+    sfx.play('levelup', { gain: 0.6 });
     o?.onChange?.(id);
     const redraw = () => (renderList(), renderDetail());
     if (!n.evolve) return levelPop(redraw);
@@ -423,6 +425,7 @@ export function createWorkshop({ renderer, cursor }) {
       if (max || busy || save.bank() < cost || save.tokens() < tokens) return;
       spend({ scraps: cost, tokens });
       save.setTankLevel(id, lvl + 1);
+      sfx.play('levelup', { gain: 0.6 });
       o?.onChange?.(null);
       const redraw = () => (renderTanks(), renderTank());
       // a promotion gets the full show

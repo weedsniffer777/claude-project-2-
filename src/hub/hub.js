@@ -298,6 +298,9 @@ const CSS = `
 .base-news img.gear { width: 128px; height: 96px; }
 .base-news .hint { font-size: 12px; color: #8f877a; }
 .base-news .row { display: flex; gap: 10px; justify-content: center; }
+.base-news.wide { width: min(640px, calc(100vw - 32px)); }
+.base-news .row.one { flex-wrap: nowrap; align-items: stretch; }
+.base-news .row.one button { margin: 0; }
 .base-news button { white-space: nowrap; }
 .base-gear { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; align-items: center; padding: 7px 12px 8px; border: 0; pointer-events: auto; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
 .base-gear i { width: 20px; height: 20px; background: var(--cog) center / contain no-repeat; image-rendering: pixelated; }
@@ -1636,6 +1639,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function openEndless() {
     if (!endlessOpen()) {
       news.hidden = false;
+      news.classList.remove('wide');
       news.innerHTML = `<span class="newtag" style="background:#b9b0a0">Locked</span><h2>Endless</h2><p>Endless mode unlocks after level ${ENDLESS_AFTER.n}!</p><p class="hint">Hold out against waves that never stop, and fill the reward track.</p><div class="row"><button type="button" class="go">OK</button></div>`;
       news.querySelector('.go').addEventListener('click', () => {
         news.hidden = true;
@@ -1847,6 +1851,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const toHangar = () => clickRoom(ROOMS.find((r) => r.id === 'hangar'));
   function showEndlessNews() {
     news.hidden = false;
+    news.classList.remove('wide');
     news.innerHTML = `
       <span class="newtag">Endless unlocked!</span>
       <h2>Endless mode</h2>
@@ -1857,6 +1862,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   }
   function showTank(id) {
     news.hidden = false;
+    news.classList.remove('wide');
     news.innerHTML = `
       <span class="newtag">New tank!</span>
       <h2>${TANKS[id].name} unlocked</h2>
@@ -1868,6 +1874,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function showPart(id) {
     const p = PARTS[id];
     news.hidden = false;
+    news.classList.remove('wide');
     news.innerHTML = `
       <span class="newtag leg">New Legendary part!</span>
       <h2></h2>
@@ -1882,6 +1889,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   function showGear(id) {
     const g = EQUIPMENT[id];
     news.hidden = false;
+    news.classList.remove('wide');
     news.innerHTML = `
       <span class="newtag">New equipment!</span>
       <h2></h2>
@@ -1934,11 +1942,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
     }
     if (!lines.length) return go(id);
     news.hidden = false;
+    news.classList.remove('wide');
     news.innerHTML = `
       <h2 class="warn"></h2>
       ${lines.map(() => '<p></p>').join('')}
-      <button type="button" class="go yel tohangar">Go to hangar</button>
-      <div class="row"><button type="button" class="back cont">Continue anyway</button><button type="button" class="back nope">Back</button></div>`;
+      <div class="row one"><button type="button" class="go yel tohangar">Go to hangar</button><button type="button" class="back cont">Continue anyway</button><button type="button" class="back nope">Back</button></div>`;
+    news.classList.add('wide'); // (the one-line title and the three buttons in a row)
     news.querySelector('h2').textContent = title;
     news.querySelectorAll('p').forEach((p, i) => (p.textContent = lines[i]));
     news.querySelector('.cont').addEventListener('click', () => {

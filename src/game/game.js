@@ -1181,8 +1181,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (!best || !dt) return void (run.warnT = 0);
     run.warnT = (run.warnT || 0) - dt;
     if (run.warnT > 0) return;
-    const k = 1 - Math.min(1, left / total);
-    sfx.at('beep', best.pos, { gain: 0.3, rate: 1 + k * 0.6 });
+    // (always the top pitch: only the pace climbs)
+    sfx.at('beep', best.pos, { gain: 0.3, rate: 1.6 });
     run.warnT = Math.max(0.045, Math.min(0.4, left * 0.2));
   }
   // the tank's own sounds: the treads rattling, quiet, coming up from
@@ -1204,6 +1204,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     warnBeeps(live ? dt : 0);
     const roar = live && (run.boost > 0 || run.dash > 0 || run.retreat > 0 || run.brk > 0);
     sfx.loop('rocket', roar ? 0.5 : 0, 1, roar ? 0.04 : 0.18);
+    // a bang as the rockets light (sudden, not just a roar), a softer one as they cut
+    if (roar && !run.roared) sfx.play('boom', { gain: 0.7, rate: 1.1 });
+    else if (!roar && run.roared && live) sfx.play('boom', { gain: 0.25, rate: 1.3 });
+    run.roared = roar;
   }
   // The kick of a boost or dash starting: a beat of slowed time, the camera
   // punching out, a ring of dust blown off the ground behind the tank.
@@ -2411,7 +2415,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
         fitting.hide();
         st.step = 'fit';
         st.room.install(added, () => new THREE.Vector3(pos.x, 0, pos.z), {
-          onFit: () => applyLoadout(list, added),
+          onFit: () => (sfx.play('clank', { gain: 0.8 }), applyLoadout(list, added)), // (set down on the tank)
           onDone: () => openFit(),
         });
       },
@@ -2906,7 +2910,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       gr.m.removeFromParent();
       grenades.splice(i, 1);
       const at = gr.to;
-      sfx.at('boom', at, { gain: 0.22, rate: 1.25 + Math.random() * 0.15 }); // (a small pop)
+      sfx.at('boom', at, { gain: 0.3, rate: 1.25 + Math.random() * 0.15 }); // (a small pop)
       // a small blast wherever it lands (ground, wall, machine): a flash, a
       // ball of fire, dirt and sparks thrown up, smoke
       combat.glow.flash(at, 0xffe0a0, 0.16, 1.8, 0.1);
@@ -3192,7 +3196,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
         speed,
         onCrush(c) {
           run.crushed++;
-          sfx.play('crash', { gain: c.kind === 'car' ? 0.4 : 0.25, rate: (c.kind === 'car' ? 0.95 : 1.15) + Math.random() * 0.1 });
+          sfx.play('crash', { gain: c.kind === 'car' ? 0.62 : 0.42, rate: (c.kind === 'car' ? 0.95 : 1.15) + Math.random() * 0.1 });
           speed *= c.kind === 'car' ? 0.75 : 0.9;
           if (c.scrap) pickups.spawn(new THREE.Vector3(c.footprint.x, 0.6, c.footprint.z), c.scrap, 'scrap', 1);
         },
@@ -3424,7 +3428,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       run.reactT = Math.max(0, (run.reactT || 0) - dt);
       tryFire(dt);
       autoFire(dt);
-      if (!stats.gmg && tank.events?.some((ev) => ev.type === 'mg')) sfx.play('mg', { gain: 0.2, rate: 0.95 + Math.random() * 0.1 }); // (kept low: under the big guns)
+      if (!stats.gmg && tank.events?.some((ev) => ev.type === 'mg')) sfx.play('mg', { gain: 0.12, rate: 0.95 + Math.random() * 0.1 }); // (kept low: under the big guns)
       combat.handleTankEvents(tank);
       combat.update(dt);
       stragglers(dt);
