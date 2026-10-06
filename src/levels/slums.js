@@ -894,7 +894,7 @@ function buildSlums(scene) {
       case 2:
         if (x > 46) {
           // an artillery drone squatting on the road ahead
-          api.spawnArty(ahead(api, 80, 86), -1, { yaw: Math.PI, hpScale: 0.21 });
+          api.spawnArty(ahead(api, 80, 86), -1, { yaw: Math.PI, hpScale: 0.3 });
           for (const d of [0.3, 0.7]) fromAlley(api, 'dog', 72, 84, d);
           go(3);
         }
@@ -950,9 +950,9 @@ function buildSlums(scene) {
       case 1:
         if (x > MARKET.x0 - 2) {
           // the market: machines all over it, two artillery drones beyond the railway
-          api.spawnArty(RAIL_X + 10, -10, { yaw: Math.PI, hpScale: 0.21 });
-          api.spawnArty(RAIL_X + 12, 9, { yaw: Math.PI, hpScale: 0.21, delay: 1 });
-          if (api.run.hard) api.spawnArty(RAIL_X + 14, 0, { yaw: Math.PI, hpScale: 0.21, delay: 2 }); // (two at most; three on Hard)
+          api.spawnArty(RAIL_X + 10, -10, { yaw: Math.PI, hpScale: 0.3 });
+          api.spawnArty(RAIL_X + 12, 9, { yaw: Math.PI, hpScale: 0.3, delay: 1 });
+          if (api.run.hard) api.spawnArty(RAIL_X + 14, 0, { yaw: Math.PI, hpScale: 0.3, delay: 2 }); // (two at most; three on Hard)
           for (const [z, d] of [[-8, 0], [6, 0.4], [-2, 0.8]]) api.spawnDog(MARKET.x0 + 20, z, { delay: d });
           api.spawnWalker(MARKET.x0 + 28, 8, { delay: 0.6 });
           go(2);
@@ -1026,8 +1026,8 @@ function buildSlums(scene) {
       case 3:
         if (x > 266) {
           // the pair covering the barricade
-          S.final = [api.spawnArty(END_X - 10, -4, { yaw: Math.PI, hpScale: 0.3 }), api.spawnArty(END_X - 8, 4, { yaw: Math.PI, hpScale: 0.3, delay: 0.6 })];
-          if (api.run.hard) S.final.push(api.spawnArty(END_X - 6, 0, { yaw: Math.PI, hpScale: 0.3, delay: 1.2 })); // (a third on Hard)
+          S.final = [api.spawnArty(END_X - 10, -4, { yaw: Math.PI, hpScale: 0.43 }), api.spawnArty(END_X - 8, 4, { yaw: Math.PI, hpScale: 0.43, delay: 0.6 })];
+          if (api.run.hard) S.final.push(api.spawnArty(END_X - 6, 0, { yaw: Math.PI, hpScale: 0.43, delay: 1.2 })); // (a third on Hard)
           api.spawnWalker(END_X - 14, 3, { delay: 1 });
           drone(api, END_X - 12, END_X - 6, 1.4);
           api.objective('Destroy the artillery drones');

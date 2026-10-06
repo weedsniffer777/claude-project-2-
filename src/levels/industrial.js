@@ -457,15 +457,14 @@ function buildIndustrial(scene) {
         ghost.position.set(MIDX, 1.6 + (HALL_H - 1.6) / 2, HALL.s + 0.15);
         ghost.castShadow = true;
         H.add(ghost);
+        H.keep(ghost); // (not merged into the scenery: it'd be drawn)
       }
       put(H.root, box(LEN, 1.6, 0.34, BRICK[2], { r: 0.02 }), MIDX, 0.8, s < 0 ? HALL.n - 0.15 : HALL.s + 0.15);
     }
-    // the ends, inside: the front wall either side of the checkpoint and
-    // over it, the back wall behind the defence wall; tall, so nothing
-    // outside shows; and dark ground all round beyond them
+    // the back end, inside: tall behind the defence wall, so nothing
+    // outside shows (the front's left open: the way in, in view); and
+    // dark ground all round beyond the walls
     const endH = HALL_H + 4;
-    for (const [za, zb] of [[HALL.n - 0.3, CURB.n + 0.1], [CURB.s - 0.1, HALL.s + 0.3]]) tin(H, 0.6, endH, zb - za, HALL.x0 - 0.3, endH / 2, (za + zb) / 2, 0x5d6660);
-    tin(H, 0.6, endH - 3.6, CURB.s - CURB.n, HALL.x0 - 0.3, 3.6 + (endH - 3.6) / 2, 0, 0x5d6660);
     for (const [za, zb] of [[HALL.n - 0.3, DOOR.z - DOOR.half - 1], [DOOR.z + DOOR.half + 1, HALL.s + 0.3]]) tin(H, 0.6, endH, zb - za, HALL.x1 + 0.3, endH / 2, (za + zb) / 2, 0x4a4f55);
     tin(H, 0.6, endH - DOOR.h - 0.5, DOOR.half * 2 + 2, HALL.x1 + 0.3, DOOR.h + 0.5 + (endH - DOOR.h - 0.5) / 2, DOOR.z, 0x4a4f55);
     {
@@ -473,6 +472,7 @@ function buildIndustrial(scene) {
       dark.rotation.x = -Math.PI / 2;
       dark.position.set(MIDX, -0.05, 0);
       H.add(dark);
+      H.keep(dark);
       // the corridor out beyond the door: walls either side, dim
       for (const s of [-1, 1]) tin(H, 18, 6, 0.4, HALL.x1 + 9, 3, DOOR.z + s * (DOOR.half + 1.2), 0x3a3c3f);
     }
@@ -772,7 +772,7 @@ function buildIndustrial(scene) {
       case 1:
         if (x > 118) {
           // an artillery drone up the spur, in the works' gateway
-          api.spawnArty(SPUR_X + 4, -2, { yaw: Math.PI, hpScale: 0.21 });
+          api.spawnArty(SPUR_X + 4, -2, { yaw: Math.PI, hpScale: 0.3 });
           for (const [dz, d] of [[-1, 0.3], [1, 0.7]]) api.spawnDog(ahead(api, 140, 150), onRoad(dz), { delay: d });
           drone(api, 142, 152, 1);
           go(2);

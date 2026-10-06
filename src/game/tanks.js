@@ -4,6 +4,7 @@
 import { createTank } from '../models/tank.js';
 import { createLightTank } from '../models/lightTank.js';
 import { createMissileTank } from '../models/missileTank.js';
+import { createAssaultTank } from '../models/assaultTank.js';
 
 export const TANKS = {
   battle: {
@@ -48,7 +49,7 @@ export const TANKS = {
     unlockText: 'Beat level 2 to unlock',
     // reload: seconds between rounds; mag rounds, then magReload to refill
     // Shift: a quick, hard dash that recharges fast (boostCooldown)
-    stats: { maxHp: 70, speed: 1.3, reload: 0.45, cannonDamage: 27.5, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },
+    stats: { maxHp: 70, speed: 1.3, reload: 0.375, cannonDamage: 27.5, splash: 1.5, mag: 10, magReload: 2.0, boostCooldown: 3 },
     box: { cx: 0.2, hx: 1.55, hz: 0.88 },
     pic: { target: [0.15, 0.8, 0], half: 1.0 },
     anchors: {
@@ -101,6 +102,43 @@ export const TANKS = {
       he: [-0.3, 1.0, -0.55, 0.55, 0],
     },
   },
+  assault: {
+    id: 'assault',
+    name: 'Assault tank',
+    create: createAssaultTank,
+    slots: 4,
+    gun: 'cannon',
+    move: 'dash', // its boost: the two rear exhausts, a short hard dash
+    moveName: 'Boost',
+    ability: 'hunter',
+    abilityName: 'Hunter-killer',
+    blurb: 'Modern and fast, with a long 120. Its fire control marks up to five machines in slow motion, then kills them one after another.',
+    unlockText: 'Beat level 8 to unlock',
+    // a quicker gun than the battle tank's, a little tougher, quicker on its
+    // tracks; its dash short and snappy (about a length and a half)
+    stats: { maxHp: 110, speed: 1.12, reload: 1.05, cannonDamage: 62, boostCooldown: 4.5, dashTime: 0.32, dashSpeed: 1.3 },
+    box: { cx: 0.02, hx: 2.2, hz: 1.05 },
+    pic: { target: [0.15, 1.1, 0], half: 1.5 },
+    anchors: {
+      dozer: [2.35, 0.6, 0],
+      autoloader: [-1.25, 1.75, 0.3],
+      era: [1.7, 1.0, -0.4],
+      twinmg: [-0.45, 2.0, -0.42],
+      afterburner: [-2.2, 0.65, 0.42],
+      optics: [0.7, 1.9, 0.42],
+      he: [2.6, 1.35, 0],
+    },
+    // where each part's model sits on this hull: [x, y, z, scale, yaw]
+    mounts: {
+      dozer: [2.35, 0.25, 0, 0.95, 0],
+      autoloader: [-1.25, 1.62, 0.3, 0.55, 0],
+      era: [1.75, 0.95, 0, 0.8, 0],
+      twinmg: [-0.45, 1.62, -0.42, 0.6, 0],
+      afterburner: [-2.2, 0.55, 0, 0.75, 0],
+      optics: [0.7, 1.82, 0.42, 0.65, 0],
+      he: [-0.3, 1.62, -0.6, 0.55, 0],
+    },
+  },
 };
-export const TANK_ORDER = ['battle', 'light', 'missile'];
+export const TANK_ORDER = ['battle', 'light', 'missile', 'assault'];
 export const tankDef = (id) => TANKS[id] || TANKS.battle;

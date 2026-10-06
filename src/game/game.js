@@ -65,6 +65,10 @@ const SHOCK_DAMAGE = 45;
 const REPAIR_SHARE = 0.5; // a checkpoint on Easy repairs up to this much of the hull
 const AIM_TIME = 4; // seconds (real time) to aim a Piercing shot before it fires itself
 const AIM_SLOW = 0.25; // game speed while aiming it
+const HUNT_SLOW = 0.2; // game speed while Hunter-killer marks its targets
+const HUNT_MARK = 0.24; // real seconds between its locks
+const HUNT_GAP = 0.1; // game seconds between its shots (in slow motion: about a quarter second)
+const HUNT_FIRE_SLOW = 0.4; // game speed while it fires
 
 export function createGame({ renderer, pixel, level: startLevel, onExit = null }) {
   injectDevKitStyles();
@@ -218,6 +222,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       sal: null, // the missile tank's salvo, locking on
       arty: 0, // designating an artillery strike: seconds left to pick the spot
       aiming: 0, // Piercing shot: seconds left to aim it
+      hunt: null, // Hunter-killer: { targets, marked, phase 'mark' | 'fire', fired, aim }
       dash: 0, // Dash (light tank's Shift): seconds left
       retreat: 0, // Retreat (missile tank's Shift): seconds left
       brk: 0, // Breakthrough: seconds of charge left
@@ -1024,7 +1029,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   };
   function fire() {
     letGoFrame();
-    if (run.over || run.mode !== 'field' || run.locked || !run.gun) return;
+    if (run.over || run.mode !== 'field' || run.locked || !run.gun || run.hunt) return; // (Hunter-killer has the gun)
     queued = 0.7;
   }
   // Shift: boost. The battle tank's drums swing round and light, the light
@@ -1113,6 +1118,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       queued = 0;
     } else if (def.ability === 'breakthrough') breakthrough();
     else if (def.ability === 'salvo') lockSalvo();
+    else if (def.ability === 'hunter') startHunt();
   }
 
   // Equipment (Q). The artillery strike: Q, then click (or tap) a spot; the
@@ -1431,6 +1437,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       for (const e of locked) locks.push({ pos: e.pos.clone().setY(mslAim(e).y + 0.3), label: 'MSL LOCK', locked: !!(st && st.t > 0) });
     }
     for (const ms of missiles) if (ms.top) locks.push(ms.e?.alive ? { pos: ms.e.pos.clone().setY(mslAim(ms.e).y + 0.3), label: 'MSL LOCK', locked: false } : { pos: ms.aim.clone(), label: '', locked: false });
+    // Hunter-killer's locks: each stamped on as it marks them, red once it fires
+    if (run.hunt) for (const e of run.hunt.targets.slice(0, run.hunt.marked)) if (e.alive) locks.push({ pos: e.pos.clone().setY(mslAim(e).y + 0.3), label: 'LOCK', locked: run.hunt.phase === 'fire' });
     hud.setLocks(locks);
   }
   // the ground's height and tilt at a spot (markers lie along a ramp's slope)
@@ -2439,6 +2447,111 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // Breakthrough's icon: the light tank charging on its rockets, three
   // white chevrons of shock ahead of its nose
   let breakCanvas = null;
+  // The assault tank's Hunter-killer (E): the world all but stops and its
+  // fire control stamps a lock on each of up to five machines in view, one
+  // after another, nearest first (the turret swinging along); then, still
+  // in slow motion, the gun whips from one to the next, a round into each.
+  // One press: it takes the gun until it's done
+  function startHunt() {
+    if (run.abilityCd > 0 || run.hunt || run.over || run.mode !== 'field') return;
+    const reach = 22 * stats.view; // (about what's on screen)
+    const d = (e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z);
+    const foes = enemies.alive.filter((e) => !(e.delay > 0) && d(e) < reach).sort((a, b) => d(a) - d(b)).slice(0, stats.hunterTargets);
+    if (!foes.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'No targets!');
+    run.abilityCd = stats.hunterCooldown;
+    run.abilities = (run.abilities || 0) + 1;
+    run.hunt = { targets: foes, marked: 0, t: 0, phase: 'mark', fired: 0, gap: 0, aim: null };
+    trigger = false;
+    queued = 0;
+    combat.shake = Math.max(combat.shake, 0.15);
+  }
+  function huntFrame(realDt, dt) {
+    const h = run.hunt;
+    if (run.over || run.mode !== 'field') return void (run.hunt = null);
+    if (h.phase === 'mark') {
+      h.t += realDt;
+      while (h.marked < h.targets.length && h.t >= h.marked * HUNT_MARK + 0.12) {
+        const e = h.targets[h.marked++];
+        if (!e.alive) continue;
+        const at = enemies.aimPoint(e);
+        combat.glow.flash(at, 0xff4a3a, 0.2, 1.6, 0.18);
+        combat.glow.ring(at.clone().setY(0.08), 0xff4a3a, 0.4, 1.8, 0.3);
+        h.aim = at;
+      }
+      if (h.t >= h.targets.length * HUNT_MARK + 0.35) {
+        h.phase = 'fire';
+        h.gap = 0.02;
+        combat.shake = Math.max(combat.shake, 0.25);
+      }
+      return;
+    }
+    while (h.fired < h.targets.length && !h.targets[h.fired].alive) h.fired++;
+    if (h.fired >= h.targets.length) return void (run.hunt = null);
+    const e = h.targets[h.fired];
+    h.aim = enemies.aimPoint(e);
+    // the turret whips straight onto it
+    const want = wrapAngle(Math.atan2(-(h.aim.z - pos.z), h.aim.x - pos.x) - tank.group.rotation.y);
+    tank.turret.rotation.y = approachAngle(tank.turret.rotation.y, want, realDt * 14); // (whipping round at full speed, in the slowed world)
+    h.gap -= dt;
+    if (h.gap <= 0 && Math.abs(wrapAngle(want - tank.turret.rotation.y)) < 0.06) {
+      h.gap = HUNT_GAP;
+      h.fired++;
+      huntShot(e);
+    }
+  }
+  function huntShot(e) {
+    const m = tank.fire();
+    const from = m.position;
+    const at = enemies.aimPoint(e);
+    // the shot: a white-hot line straight in, the muzzle blast, the hit
+    combat.glow.tracer(from, at, 0xffc070, 0.32, 0.25);
+    combat.glow.tracer(from, at, 0xffffff, 0.12, 0.18);
+    combat.glow.flash(from, 0xffffff, 0.3, 1.6, 0.1);
+    combat.glow.flash(from, 0xffb347, 0.5, 2.2, 0.2);
+    combat.glow.spike(from, m.direction, 0xfff6d6, 2.6, 0.35, 0.1);
+    combat.glow.light(from, 0xffc070, 60, 0.18);
+    for (let i = 0; i < 6; i++) combat.puffs.spawn(from.clone(), new THREE.Vector3((Math.random() - 0.5) * 2, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 2).addScaledVector(m.direction, 2), { color: 0xd8d6cc, s0: 0.15, s1: 0.45, life: 0.5, drag: 4, lift: 0.5, fadeAt: 0.3 });
+    const dmg = Math.round(stats.cannonDamage * stats.hunterDamage);
+    const killed = enemies.damage(e, dmg, from.clone());
+    hud.damage(at.clone().setY(at.y + 0.6), dmg, 'big');
+    if (killed) hud.damage(at.clone().setY(at.y + 1.3), 0, 'kill');
+    combat.explode(at);
+    combat.shake = Math.max(combat.shake, 0.45);
+    run.hitstop = Math.max(run.hitstop, 0.05);
+  }
+  // its icon: a reticle, and lock brackets on three marks round it
+  let hunterCanvas = null;
+  function hunterArt() {
+    if (hunterCanvas) return hunterCanvas;
+    const c = (hunterCanvas = document.createElement('canvas'));
+    c.width = c.height = 26;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1d1b1e';
+    g.fillRect(0, 0, 26, 26);
+    const px = (x, y, w, h, col) => ((g.fillStyle = col), g.fillRect(x, y, w, h));
+    const bracket = (x, y, s, col) => {
+      px(x, y, 2, 1, col);
+      px(x, y, 1, 2, col);
+      px(x + s - 2, y, 2, 1, col);
+      px(x + s - 1, y, 1, 2, col);
+      px(x, y + s - 1, 2, 1, col);
+      px(x, y + s - 2, 1, 2, col);
+      px(x + s - 2, y + s - 1, 2, 1, col);
+      px(x + s - 1, y + s - 2, 1, 2, col);
+    };
+    for (const [x, y] of [[2, 3], [17, 4], [15, 17]]) {
+      bracket(x, y, 7, '#ff3b2f');
+      px(x + 3, y + 3, 1, 1, '#ffd0c8');
+    }
+    // the reticle in the middle: a ring and its ticks
+    for (let a = 0; a < 16; a++) px(Math.round(12 + Math.cos((a / 16) * Math.PI * 2) * 4.5), Math.round(13 + Math.sin((a / 16) * Math.PI * 2) * 4.5), 1, 1, '#ffffff');
+    px(12, 6, 1, 3, '#ffffff');
+    px(12, 18, 1, 3, '#ffffff');
+    px(5, 13, 3, 1, '#ffffff');
+    px(17, 13, 3, 1, '#ffffff');
+    px(12, 13, 1, 1, '#ffd36b');
+    return c;
+  }
   function breakArt() {
     if (breakCanvas) return breakCanvas;
     const c = (breakCanvas = document.createElement('canvas'));
@@ -2736,6 +2849,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.dilate -= realDt;
         dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
       }
+      if (run.hunt) dt = realDt * (run.hunt.phase === 'mark' ? HUNT_SLOW : HUNT_FIRE_SLOW); // (one slow-motion action: marking, then the shots)
       if (run.aiming > 0) {
         dt = realDt * AIM_SLOW;
         run.aiming -= realDt;
@@ -3088,7 +3202,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;
       mgActive = !!mgTarget;
 
-      tank.update(dt, t, { aimPoint: hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
+      if (run.hunt) huntFrame(realDt, dt);
+      tank.update(dt, t, { aimPoint: run.hunt?.aim ?? (hasAim && !run.over ? aimPoint : null), mgPoint, speed, turretRate: run.hunt ? 1 / HUNT_SLOW : run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
       run.levelT = Math.max(0, (run.levelT || 0) - realDt); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
       run.gmgT = Math.max(0, (run.gmgT || 0) - dt);
@@ -3181,10 +3296,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
       hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting || run.retreat > 0, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt(true) : boostPicture(true, stats.afterburner ? 'afterburner' : 'normal') } : null);
-      const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
+      const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : def.ability === 'hunter' ? stats.hunterCooldown : stats.breakCooldown;
       const eq = equipId();
       hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || !!run.msl || run.barrier > 0, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : run.barrier > 0 ? run.barrier / EQUIPMENT.shield.time : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
-      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : def.ability === 'salvo' ? equipmentArt('atgm') : breakArt() } : null, 1);
+      hud.setAbility(def.ability && run.ability && live ? { k: 1 - run.abilityCd / abilityCd, left: run.abilityCd, lit: run.aiming > 0 || run.brk > 0 || !!run.hunt, active: run.aiming > 0 ? run.aiming / AIM_TIME : run.brk > 0 ? run.brk / stats.breakTime : null, art: def.ability === 'pierce' ? pierceArt() : def.ability === 'salvo' ? equipmentArt('atgm') : def.ability === 'hunter' ? hunterArt() : breakArt() } : null, 1);
       if (run.boss) {
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);

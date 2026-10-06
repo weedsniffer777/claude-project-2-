@@ -44,7 +44,7 @@ export function applyCrew(s) {
     if (f > 0) for (const b of CREW[id].bonuses) b.apply(s, b.max * f);
   }
   // the cooldowns the commander shortens
-  for (const key of ['boostCooldown', 'pierceCooldown', 'breakCooldown', 'salvoCooldown']) if (typeof s[key] === 'number') s[key] *= s.cooldownMul;
+  for (const key of ['boostCooldown', 'pierceCooldown', 'breakCooldown', 'salvoCooldown', 'hunterCooldown']) if (typeof s[key] === 'number') s[key] *= s.cooldownMul;
 }
 
 // the cost of the next level up from lvl: scraps, and tokens at a promotion

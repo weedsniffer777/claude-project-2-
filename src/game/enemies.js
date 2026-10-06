@@ -287,7 +287,7 @@ const ARTY = {
   heavy: 'sub', // (boss or not: not shoved about by driving into it; only Breakthrough moves it)
   noGun: true,
   noStage2: true,
-  hp: 1600,
+  hp: 1120, // (the boss's; elsewhere spawned at a fraction of it)
   runSpeed: 4.2,
   walkSpeed: 2.0,
   turnRate: 2.6,

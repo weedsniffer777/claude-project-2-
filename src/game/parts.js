@@ -41,6 +41,9 @@ export const BASE_STATS = {
   breakSpeed: 1.0,
   breakCooldown: 8,
   salvoCooldown: 14, // the missile tank's Missile salvo (eight at once)
+  hunterCooldown: 13, // the assault tank's Hunter-killer: marks up to hunterTargets, then fires on each
+  hunterTargets: 5,
+  hunterDamage: 1.5, // x its shell damage, each
   breakShield: 0.25, // damage cut while it (or the dash) runs: grows with the tank's level to 0.5
   afterburner: false,
   extraMgs: 0, // extra roof machine guns (Extra MGs), each picking its own target
@@ -849,12 +852,12 @@ export function attachPart(tank, id) {
   const tier = tierOf(id);
   let g;
   if (tank.kind === 'light' && p.light) g = p.light(tank, tier);
-  else if (tank.kind === 'missile') {
+  else if (tank.kind === 'missile' || tank.kind === 'assault') {
     // the missile tank: the part's own model, bolted on where it goes on
     // this hull (tanks.js mounts), unless the part has its own fitting
     g = p.missile ? p.missile(tank, tier) : partModel(id);
     if (!p.missile) {
-      const [x, y, z, sc = 0.6, yaw = 0] = tankDef('missile').mounts?.[id] || [0, 1.2, 0];
+      const [x, y, z, sc = 0.6, yaw = 0] = tankDef(tank.kind).mounts?.[id] || [0, 1.2, 0];
       g.scale.setScalar(sc);
       g.position.set(x, y, z);
       g.rotation.y = yaw;
