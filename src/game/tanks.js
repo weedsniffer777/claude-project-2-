@@ -18,7 +18,7 @@ export const TANKS = {
     ability: 'pierce',
     abilityName: 'Piercing shot',
     blurb: 'Heavy and slow, with a big gun. Rams, and punches through lines.',
-    stats: { boostTime: 0.65, reload: 1.26 }, // a short, heavy shove; its gun reloads quicker than the base
+    stats: { speed: 1.05, boostTime: 0.65, reload: 1.26 }, // a short, heavy shove; its gun reloads quicker than the base
     // footprint for collisions (hull, covers, the rear drums), tank-local
     box: { cx: -0.25, hx: 2.25, hz: 1.15 },
     // its picture (carousel, rewards): framed on the hull, antennas aside
@@ -116,28 +116,21 @@ export const TANKS = {
     unlockText: 'Beat level 8 to unlock',
     // a quicker gun than the battle tank's, a little tougher, quicker on its
     // tracks; its dash short and snappy (about a length and a half)
-    stats: { maxHp: 110, speed: 1.12, reload: 1.05, cannonDamage: 62, boostCooldown: 4.5, dashTime: 0.32, dashSpeed: 1.3 },
+    stats: { maxHp: 110, speed: 1.1, reload: 1.05, cannonDamage: 62, boostCooldown: 4.5, dashTime: 0.32, dashSpeed: 1.3 },
     box: { cx: 0.02, hx: 2.2, hz: 1.05 },
     pic: { target: [0.15, 1.1, 0], half: 1.5 },
     anchors: {
-      dozer: [2.35, 0.6, 0],
-      autoloader: [-1.25, 1.75, 0.3],
-      era: [1.7, 1.0, -0.4],
-      twinmg: [-0.45, 2.0, -0.42],
-      afterburner: [-2.2, 0.65, 0.42],
-      optics: [0.7, 1.9, 0.42],
-      he: [2.6, 1.35, 0],
+      dozer: [2.5, 0.6, 0],
+      autoloader: [-1.2, 1.8, 0],
+      era: [1.9, 1.0, -0.4],
+      twinmg: [-0.4, 1.8, -0.42],
+      afterburner: [-2.2, 0.6, 0.42],
+      optics: [0.6, 1.75, -0.1],
+      rangefinder: [0.7, 1.8, 0.43],
+      he: [-0.83, 1.3, -1.05],
+      gmg: [-0.5, 1.9, 0.44],
     },
-    // where each part's model sits: [x, y, z, scale, yaw, 'turret' if on
-    // the turret (turret-local)]; no entry: nothing to see on this tank
-    mounts: {
-      dozer: [2.38, 0.28, 0, 0.95, 0],
-      era: [1.78, 0.93, 0, 0.8, 0],
-      he: [-1.0, 1.04, -0.62, 0.55, Math.PI / 2],
-      optics: [0.42, 0.55, -0.1, 0.6, 0, 'turret'],
-      rangefinder: [0.66, 0.66, 0.43, 0.5, 0, 'turret'],
-      autoloader: [-1.22, 0.6, -0.42, 0.5, 0, 'turret'],
-    },
+    // every part fits itself to this tank (its assault() in parts.js)
   },
 };
 export const TANK_ORDER = ['battle', 'light', 'missile', 'assault'];

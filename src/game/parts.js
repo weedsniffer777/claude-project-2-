@@ -142,6 +142,9 @@ export const PARTS = {
     missile(t) {
       return gmgOn(t.mgGun);
     },
+    assault(t) {
+      return gmgOn(t.mgGun);
+    },
     model: () => gmgLauncher(),
   },
   dozer: {
@@ -178,6 +181,19 @@ export const PARTS = {
       t.chassis.add(g);
       return g;
     },
+    // the assault tank: a wide blade out ahead of the wedge nose, its arms
+    // back under the nose to the lower hull
+    assault(t) {
+      const g = new THREE.Group();
+      put(g, box(0.15, 0.62, 2.08, RUST, { r: 0.03 }), 2.5, 0.4, 0).rotation.z = 0.18;
+      put(g, box(0.05, 0.1, 2.1, 0xc99a2e, { r: 0.01 }), 2.59, 0.68, 0);
+      for (const z of [-0.62, 0.62]) {
+        put(g, box(0.5, 0.12, 0.12, STEEL, { r: 0.02 }), 2.2, 0.36, z).rotation.z = -0.15;
+        put(g, cyl(0.05, 0.4, STEEL, { seg: 6 }), 2.3, 0.6, z * 1.3).rotation.z = -0.5; // the rams
+      }
+      t.chassis.add(g);
+      return g;
+    },
     light(t) {
       const g = new THREE.Group();
       put(g, box(0.12, 0.5, 1.9, RUST, { r: 0.025 }), 2.0, 0.34, 0).rotation.z = 0.18;
@@ -192,6 +208,17 @@ export const PARTS = {
     name: 'Autoloader',
     text: 'Main gun reloads faster (an autocannon fires faster too).',
     missile: () => new THREE.Group(), // (nothing to see on the missile tank: its pack loads itself)
+    // the assault tank: an armoured magazine on the bustle roof (over the
+    // stowage), its blow-off panels in two rows, a hazard band
+    assault(t) {
+      const g = new THREE.Group();
+      put(g, box(0.66, 0.26, 1.48, 0x8f7550, { r: 0.03 }), -1.24, 0.67, 0);
+      for (const dz of [-0.36, 0, 0.36]) for (const dx of [-0.15, 0.15]) put(g, box(0.26, 0.02, 0.32, 0x7a6444, { r: 0.01 }), -1.24 + dx, 0.81, dz); // blow-off panels
+      put(g, box(0.08, 0.265, 1.49, 0xc99a2e), -0.95, 0.67, 0); // hazard band
+      for (const s of [-1, 1]) put(g, box(0.1, 0.06, 0.04, DARK), -1.24, 0.72, s * 0.75); // handles
+      t.turret.add(g);
+      return g;
+    },
     icon: ['................', '..-----.........', '.-#####-######..', '.-#+#+#-#----#..', '.-#####-#----###', '.-#+#+#-#----#..', '.-#####-######..', '..-----.........', '................', '................'],
     apply(s) {
       if (s.mag) {
@@ -408,6 +435,49 @@ export const PARTS = {
       slope.userData.extra = [cheeks];
       return slope;
     },
+    // the assault tank: bricks shingled over the glacis (the driver's
+    // hatch clear), along the front skirts, and on the turret's swept
+    // cheeks (below the sight's notch on the right)
+    assault(t) {
+      const G = 0x56653a;
+      const g = new THREE.Group();
+      const slope = -Math.atan2(0.18, 0.75);
+      for (const x of [2.02, 1.74]) {
+        const row = new THREE.Group();
+        row.position.set(x, 0.82 + ((2.2 - x) / 0.75) * 0.18, 0);
+        row.rotation.z = slope;
+        g.add(row);
+        for (let i = 0; i < 7; i++) {
+          const z = -0.72 + i * 0.24;
+          if (x < 1.8 && z < -0.2 && z > -0.66) continue; // (the hatch)
+          put(row, box(0.26, 0.07, 0.22, G, { r: 0.012 }), 0, 0.045, z).rotation.z = 0.1;
+          put(row, box(0.27, 0.02, 0.23, ERA_EDGE), 0, 0.008, z);
+        }
+      }
+      for (const s of [-1, 1])
+        for (const x of [1.62, 1.86]) {
+          put(g, box(0.22, 0.3, 0.06, G, { r: 0.012 }), x, 0.66, s * 1.08);
+          put(g, box(0.23, 0.02, 0.07, ERA_EDGE), x, 0.82, s * 1.08);
+        }
+      t.chassis.add(g);
+      const tg = new THREE.Group();
+      const cheekX = (z) => 1.1 - ((Math.abs(z) - 0.24) / 0.62) * 0.24;
+      const yaw = Math.atan2(0.24, 0.62);
+      for (const side of [-1, 1])
+        for (const z of [0.36, 0.56, 0.76])
+          for (const y of [0.14, 0.38]) {
+            if (side > 0 && y > 0.28 && z < 0.7) continue; // (the notch)
+            const u = new THREE.Group();
+            u.position.set(cheekX(z) + 0.05 * Math.cos(yaw), y, side * (z + 0.05 * Math.sin(yaw)));
+            u.rotation.y = -side * yaw;
+            put(u, box(0.1, 0.2, 0.19, G, { r: 0.012 }), 0, 0, 0);
+            put(u, box(0.02, 0.21, 0.2, ERA_EDGE), -0.05, 0, 0);
+            tg.add(u);
+          }
+      t.turret.add(tg);
+      g.userData.extra = [tg];
+      return g;
+    },
   },
   twinmg: {
     type: 'weapons',
@@ -496,6 +566,7 @@ export const PARTS = {
       t.chassis.add(g);
       return g;
     },
+    assault: () => new THREE.Group(), // (its exhausts are already there: the flame changes)
     model() {
       // one of the T-55's own rear drums, re-rigged: rolled rims, straps
       // and buckles, the filler cap; on one end a rocket nozzle bolted on
@@ -562,6 +633,15 @@ export const PARTS = {
       t.turret.add(g);
       return g;
     },
+    // the assault tank: on the roof between the commander's sight and the
+    // gun
+    assault(t) {
+      const g = sightHead();
+      g.position.set(0.56, 0.54, -0.1);
+      g.scale.setScalar(0.42);
+      t.turret.add(g);
+      return g;
+    },
     model() {
       const g = new THREE.Group();
       const head = sightHead();
@@ -600,6 +680,18 @@ export const PARTS = {
       g.scale.setScalar(0.62);
       g.position.set(1.0, 0.8, 0.1);
       t.chassis.add(g);
+      return g;
+    },
+    // the assault tank: a closed ammo chest strapped on the turret's
+    // left side, a yellow band
+    assault(t) {
+      const g = new THREE.Group();
+      put(g, box(0.72, 0.26, 0.16, 0x4f5a3a, { r: 0.02 }), -0.88, 0.28, -0.95);
+      put(g, box(0.73, 0.03, 0.17, 0x3b4430, { r: 0.01 }), -0.88, 0.42, -0.95);
+      put(g, box(0.06, 0.262, 0.165, 0xc9a24a), -0.68, 0.28, -0.95);
+      put(g, box(0.25, 0.03, 0.01, 0xc9b98a), -0.95, 0.3, -1.035); // stencil
+      for (const x of [-1.1, -0.8]) put(g, box(0.04, 0.3, 0.18, DARK), x, 0.28, -0.95); // straps
+      t.turret.add(g);
       return g;
     },
     build(t) {
@@ -653,6 +745,14 @@ export const PARTS = {
       g.position.set(0.86, 1.28, 0.42); // on top of its sight box
       g.scale.setScalar(0.42);
       t.chassis.add(g);
+      return g;
+    },
+    // the assault tank: on top of the gunner's sight box
+    assault(t) {
+      const g = rangefinderHead();
+      g.position.set(0.66, 0.655, 0.43);
+      g.scale.setScalar(0.36);
+      t.turret.add(g);
       return g;
     },
     // on its pallet: on a tripod with its pan head
