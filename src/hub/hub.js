@@ -13,6 +13,7 @@ import { LevelBuilder, canvas, tex, blob, speckle } from '../levels/builder.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly, approachAngle } from '../models/kit.js';
 import { CREW, CREW_IDS, CREW_MAX, RANKS, rankOf, crewBonuses, crewCost, promotesAt, trainCrew } from '../game/crew.js';
 import { rankIcon } from '../ui/crewArt.js';
+import { fountain, popFrames, ascend } from '../ui/celebrate.js';
 import { snapshotCanvas } from '../render/snapshot.js';
 import { createCrew } from '../models/crew.js';
 import { pushOut } from '../game/collide.js';
@@ -98,6 +99,15 @@ const CSS = `
 @keyframes basePromo { 0%, 100% { transform: translate(-50%, calc(-100% - 22px)); } 50% { transform: translate(-50%, calc(-100% - 27px)); } }
 .base-tag.alert::after { content: 'Upgrade!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 @keyframes baseAlert { 50% { background: #b6ffc4; } }
+/* the upgrades walkthrough: the screen dimmed round a spotlight, a label
+   bouncing over what to click */
+.base-guide { position: fixed; inset: 0; z-index: 55; pointer-events: none; }
+.base-guide .lab { position: fixed; left: 0; top: 0; display: grid; gap: 4px; justify-items: center; padding: 7px 10px 9px; max-width: 220px; background: #17151a; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 4px 4px 0 4px #000; animation: baseGuide 0.9s steps(2) infinite; }
+.base-guide .lab .t { font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 3px 7px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; }
+.base-guide .lab b { font: 400 13px/1.2 'Pixelify Sans', monospace; font-weight: 400; color: #f1e9d8; text-align: center; }
+.base-guide .lab i { position: absolute; left: 50%; top: 100%; margin-left: -8px; width: 16px; height: 10px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.base-guide .lab.below i { top: auto; bottom: 100%; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+@keyframes baseGuide { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
 .base-menu { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: min(340px, calc(100vw - 48px)); padding: 16px 18px 18px;
   display: grid; gap: 12px; pointer-events: auto; }
 .base-crew { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box;
@@ -1250,9 +1260,34 @@ export function createHub({ renderer, pixel, onDeploy }) {
       card.querySelector('.ri').replaceWith(ri);
       portrait(id).then((url) => (card.querySelector('.pic').src = url));
       card.querySelector('.train').addEventListener('click', () => {
+        const lvl = save.crewLevel(id);
+        const before = crewBonuses(id, lvl);
         if (!trainCrew(id)) return;
         bankEl.textContent = bankTotal();
         openCrew();
+        const fresh = crewPanel.querySelector(`.card[data-id="${id}"] .frame`);
+        // a new rank: the full show; else the portrait pops
+        if (rankOf(lvl + 1) > rankOf(lvl)) {
+          portrait(id).then((pic) =>
+            ascend({
+              pic,
+              square: true,
+              name: CREW[id].name,
+              from: { name: `Level ${lvl}`, color: '#8fa3b8' },
+              to: { name: `Level ${lvl + 1}`, color: '#f2d23a' },
+              title: 'Promoted!',
+              badge: rankIcon(rankOf(lvl + 1)),
+              lines: crewBonuses(id).map((b, i) => ({ label: b.label, from: pct(before[i]), to: pct(b) })),
+            }).then(() => {
+              const f = crewPanel.querySelector(`.card[data-id="${id}"] .frame`);
+              popFrames(f);
+              if (f) fountain(f.getBoundingClientRect(), '#f2d23a', 30);
+            }),
+          );
+        } else if (fresh) {
+          popFrames(fresh);
+          fountain(fresh.getBoundingClientRect(), '#6be08a', 22);
+        }
       });
     }
     crewPanel.querySelector('.back').addEventListener('click', closeRoom);
@@ -1459,9 +1494,62 @@ export function createHub({ renderer, pixel, onDeploy }) {
     });
     freshTanks = [];
   }
+  // The upgrades walkthrough, once: the first time there's an upgrade to
+  // afford, the room's dimmed round the hangar ("Upgrades" over it); in the
+  // hangar, round its upgrades button. Done once the upgrades screen opens.
+  const guide = document.createElement('div');
+  guide.className = 'base-guide';
+  guide.hidden = true;
+  guide.innerHTML = '<div class="lab"><span class="t">Upgrades</span><b></b><i></i></div>';
+  let guideT = 0;
+  let guideWant = false;
+  const guideOn = (t) => {
+    if (t - guideT > 0.5) {
+      guideT = t;
+      guideWant = !save.tips().includes('hub-upgrades') && upgradeHint();
+    }
+    return guideWant;
+  };
+  function guideFrame(t) {
+    let target = null;
+    let text = '';
+    if (guideOn(t) && news.hidden && !workshop.isOpen) {
+      if (!open) {
+        const tag = tags.get('hangar');
+        if (!tag.hidden) {
+          const r = tag.getBoundingClientRect();
+          const [fx, fy] = toScreen(ROOMS.find((m) => m.id === 'hangar').focus);
+          const tx = r.left + r.width / 2;
+          target = { x: fx, y: fy, r: Math.max(150, Math.hypot(fx - tx, fy - r.top) + 20), above: r.top, labelX: tx, labelY: r.bottom };
+          text = 'You have scraps to spend! Go to the hangar.';
+        }
+      } else if (open.id === 'hangar') {
+        const b = fitting.el.querySelector('.upbtn');
+        if (b && !b.hidden && b.offsetParent) {
+          const r = b.getBoundingClientRect();
+          target = { x: r.left + r.width / 2, y: r.top + r.height / 2, r: Math.max(r.width, r.height) * 0.75 + 10, above: r.top };
+          text = 'Spend scraps here to upgrade your parts and tanks.';
+        }
+      }
+    }
+    guide.hidden = !target;
+    if (!target) return;
+    const rr = target.r * (1 + Math.sin(t * 4) * 0.04);
+    guide.style.background = `radial-gradient(circle at ${target.x}px ${target.y}px, transparent ${rr}px, rgba(0,0,0,0.72) ${rr + 26}px)`;
+    const lab = guide.querySelector('.lab');
+    if (lab.querySelector('b').textContent !== text) lab.querySelector('b').textContent = text;
+    const w = lab.offsetWidth;
+    const h = lab.offsetHeight;
+    const below = target.above - h - 18 < 8;
+    lab.classList.toggle('below', below);
+    const lx = target.labelX ?? target.x;
+    lab.style.left = `${Math.round(Math.min(window.innerWidth - w - 8, Math.max(8, lx - w / 2)))}px`;
+    lab.style.top = `${Math.round(below ? (target.labelY ?? target.y + target.r * 0.6) + 14 : target.above - h - 16)}px`;
+  }
   // the upgrades screen, over the hangar
   function openWorkshop(opts) {
     fitting.hide();
+    save.seeTip('hub-upgrades'); // (the walkthrough's done)
     workshop.show({
       tankId,
       ...opts,
@@ -1687,7 +1775,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     },
     openUpgrades: (tab = 'parts') => openWorkshop({ tab }),
     enter() {
-      document.body.append(root, fitting.el, workshop.el);
+      document.body.append(root, fitting.el, workshop.el, guide);
       window.addEventListener('keydown', onKeyDown);
       window.addEventListener('keyup', onKeyUp);
       window.addEventListener('blur', onBlur);
@@ -1713,6 +1801,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       root.remove();
       fitting.el.remove();
       workshop.el.remove();
+      guide.remove();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
@@ -1822,6 +1911,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
           promo.style.top = tag.style.top;
         }
       }
+      guideFrame(t);
     },
   };
 }

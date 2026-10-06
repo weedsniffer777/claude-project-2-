@@ -9,6 +9,7 @@
 // A level up pops; an evolve flashes the screen in the new tier's colour,
 // throws sparks, slams a banner down and grows the bars.
 import { uiZoom } from './scale.js';
+import { fountain, popFrames, ascend } from './celebrate.js';
 import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER } from '../game/tanks.js';
 import { partPicture } from '../render/partPictures.js';
@@ -319,12 +320,28 @@ export function createWorkshop({ renderer, cursor }) {
     const n = nextStep(id);
     if (busy || !affordable(n)) return;
     const lvl = levelOf(id);
+    // (what gets better, read off before it does)
+    const lines = statRows(id, tankFor(id), lvl)
+      .filter((r) => r.next)
+      .map((r) => ({ label: r.label, from: r.now, to: r.next }));
     spend(n);
     save.setPartLevel(id, lvl + 1);
     o?.onChange?.(id);
     const redraw = () => (renderList(), renderDetail());
     if (!n.evolve) return levelPop(redraw);
-    evolve(id, TIERS[tierOfLevel(lvl + 1)], lvl + 1 === 21 && partPerk(id) ? `New perk: ${partPerk(id).name}` : PARTS[id].name, redraw);
+    const tier = tierOfLevel(lvl);
+    evolve(
+      {
+        pic: partPicture(renderer, id, 216, 144),
+        name: PARTS[id].name,
+        from: TIERS[tier],
+        to: TIERS[tier + 1],
+        title: `${TIERS[tier + 1].name}!`,
+        lines,
+        perk: lvl + 1 === 21 && partPerk(id) ? partPerk(id) : null,
+      },
+      redraw,
+    );
   }
 
   // ------------------------------------------------------------- tanks
@@ -406,7 +423,20 @@ export function createWorkshop({ renderer, cursor }) {
       o?.onChange?.(null);
       const redraw = () => (renderTanks(), renderTank());
       // a promotion gets the full show
-      if (promo) evolve(null, { name: 'Promoted', color: '#c77dff' }, `${TANKS[id].name} · Lv ${lvl + 1}`, redraw);
+      if (promo)
+        evolve(
+          {
+            pic: tankPicture(renderer, id, 216, 144),
+            name: TANKS[id].name,
+            from: { name: `Lv ${lvl}`, color: '#ffb347' },
+            to: { name: `Lv ${lvl + 1}`, color: '#c77dff' },
+            title: 'Promoted!',
+            lines: TANK_ROWS.filter(([key]) => key !== 'breakShield' || TANKS[id].ability === 'breakthrough')
+              .map(([key, label, fmt]) => ({ label, from: fmt(now[key]), to: fmt(nx[key]) }))
+              .filter((l) => l.from !== l.to),
+          },
+          redraw,
+        );
       else levelPop(redraw);
     });
   }
@@ -417,9 +447,10 @@ export function createWorkshop({ renderer, cursor }) {
   function levelPop(redraw) {
     redraw();
     const frame = $('.detail .frame');
-    frame.animate([{ transform: 'scale(1.1)' }, { transform: 'scale(1)' }], { duration: 300, easing: 'ease-out' });
+    popFrames(frame);
     const tc = getComputedStyle($('.detail')).getPropertyValue('--tc').trim() || '#ffb347';
-    sparks(frame.getBoundingClientRect(), tc, 18, 0.6);
+    fountain(frame.getBoundingClientRect(), tc, 28);
+    sparks(frame.getBoundingClientRect(), tc, 10, 0.5);
     const lv = $('.detail .lvl');
     if (lv) {
       const plus = document.createElement('span');
@@ -432,46 +463,20 @@ export function createWorkshop({ renderer, cursor }) {
     }
     growBars(); // (no wait after a level: click away as fast as you like)
   }
-  // an evolve (or a tank's tenth level): the full show
-  function evolve(id, to, sub, redraw) {
+  // an evolve (or a tank's tenth level): the full show over everything,
+  // then the new card pops in the workshop behind it
+  function evolve(info, redraw) {
     busy = true;
-    $('.detail .frame').animate(
-      [{ transform: 'translate(0,0)' }, { transform: 'translate(-3px,1px)' }, { transform: 'translate(3px,-1px)' }, { transform: 'translate(-2px,0)' }, { transform: 'translate(0,0)' }],
-      { duration: 380, iterations: 1, easing: 'steps(5)' },
-    );
-    setTimeout(() => {
-      const flash = $('.flash');
-      flash.style.background = `radial-gradient(circle at 50% 45%, #ffffff 0%, ${to.color} 35%, transparent 75%)`;
-      flash.animate([{ opacity: 0.95 }, { opacity: 0 }], { duration: 700, easing: 'ease-out' });
-      redraw();
+    redraw();
+    ascend(info).then(() => {
+      busy = false;
       const nf = $('.detail .frame');
-      nf.animate([{ transform: 'scale(1.18)' }, { transform: 'scale(0.96)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'ease-out' });
-      nf.querySelector('.ring').animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(7)' }], { duration: 650, easing: 'ease-out' });
-      sparks(nf.getBoundingClientRect(), to.color, 46, 1);
-      if (id) $(`.list .card[data-id="${id}"]`)?.animate([{ transform: 'scale(1.25)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'ease-out' });
-      const banner = document.createElement('div');
-      banner.className = 'banner';
-      banner.style.setProperty('--tc', to.color);
-      banner.innerHTML = `${to.name}!<small></small>`;
-      banner.querySelector('small').textContent = sub;
-      root.append(banner);
-      banner
-        .animate(
-          [
-            { opacity: 0, transform: 'translate(-50%, -50%) scale(2.6)' },
-            { opacity: 1, transform: 'translate(-50%, -50%) scale(0.92)', offset: 0.18 },
-            { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.26 },
-            { opacity: 1, transform: 'translate(-50%, -50%) scale(1)', offset: 0.8 },
-            { opacity: 0, transform: 'translate(-50%, -60%) scale(1)' },
-          ],
-          { duration: 1700, easing: 'ease-out' },
-        )
-        .finished.then(() => banner.remove());
+      if (nf) {
+        popFrames(nf);
+        fountain(nf.getBoundingClientRect(), info.to.color, 36);
+      }
       growBars();
-      const perkEl = root.querySelector('.detail .perk:not(.locked)');
-      if (perkEl && id && levelOf(id) === 21) perkEl.animate([{ transform: 'scale(0.6)', opacity: 0 }, { transform: 'scale(1.06)', opacity: 1, offset: 0.6 }, { transform: 'scale(1)', opacity: 1 }], { duration: 600, delay: 300, easing: 'ease-out', fill: 'backwards' });
-      setTimeout(() => (busy = false), 600);
-    }, 380);
+    });
   }
   // the bars grow from nothing to where they are now
   function growBars() {
