@@ -1551,7 +1551,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const tab = (d, name, txt) => {
         const locked = d === 'hard' && hardLocked;
         const st = locked ? '<i class="lock"></i>Beat Easy to unlock' : `<i class="star ${d} ${done(d) ? 'got' : ''}"></i>${done(d) ? 'Cleared' : 'Not cleared'}`;
-        return `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''} ${locked ? 'locked' : ''}" data-d="${d}" ${locked ? 'disabled' : ''}><b>${name}</b><small>${txt}</small><span class="st">${st}</span></button>`;
+        return `<button type="button" class="dtab ${d} ${diff === d ? 'on' : ''} ${locked ? 'locked' : ''}" data-d="${d}" ${locked ? 'disabled' : ''} title="${txt}"><b>${name}</b><span class="st">${st}</span></button>`; // (what it means: on hover only, to save room)
       };
       info.innerHTML = `
         <span class="tagline px">Level ${z.n}</span>
@@ -1567,8 +1567,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
           const tip = had ? `<div class="fx-head">${esc(PARTS[id].name)}</div><div class="fx-how">Already found on this level.</div>` : partTip(id);
           return `<span class="${had ? 'got' : owned.includes(id) ? 'imp' : ''}"><img alt="${PARTS[id].name}" src="${partIcon(id)}"><div class="tip">${tip}</div></span>`;
         }).join('')}</div>
-        <span class="label">Possible resources</span>
-        <div class="rewards res"><span class="res scr"><i></i>Scraps<div class="tip"><div class="fx-head">Scraps</div><div class="fx-how">Currency used for upgrades and purchases.</div></div></span><span class="res tok"><i></i>Tokens<div class="tip"><div class="fx-head">Tokens</div><div class="fx-how">Needed for promoting parts, tanks and drones.</div></div></span></div>
         ${loadoutCard()}
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
       info.querySelector('.tohangar').addEventListener('click', toHangarNow);
