@@ -17,6 +17,7 @@ const FILES = {
   launch: 'launch.mp3',
   mg: 'mg.mp3',
   vulcan: 'vulcan.mp3',
+  vulcanStart: 'vulcan-start.mp3',
   vulcanTail: 'vulcan-tail.mp3',
   beep: 'beep.mp3',
   beep2: 'beep2.mp3',
@@ -38,7 +39,8 @@ let master = null;
 const buffers = {};
 const loops = {};
 
-// a loop that doesn't click where it wraps: its tail crossfaded into its head
+// a loop that doesn't click or dip where it wraps: its tail crossfaded into
+// its head at equal power (a straight fade sags in the middle)
 function loopify(buf, fade = 0.25) {
   const f = Math.floor(fade * buf.sampleRate);
   // (skip the encoder's silent lead-in)
@@ -54,7 +56,7 @@ function loopify(buf, fade = 0.25) {
     dst.set(src.subarray(0, n - f));
     for (let i = 0; i < f; i++) {
       const k = i / f;
-      dst[i] = src[i] * k + src[n - f + i] * (1 - k);
+      dst[i] = src[i] * Math.sqrt(k) + src[n - f + i] * Math.sqrt(1 - k);
     }
   }
   return out;
@@ -136,12 +138,15 @@ export const sfx = {
     ear.z = pos.z;
   },
   // a loop's level (0..1) and rate, eased there over about tau seconds
-  loop(name, gain, rate = 1, tau = 0.15) {
+  // (delay: start easing only that many seconds from now)
+  loop(name, gain, rate = 1, tau = 0.15, delay = 0) {
     const l = loops[name];
     if (!l) return;
     if (Math.abs(gain - l.target) > 0.002) {
       l.target = gain;
-      l.gain.gain.setTargetAtTime(gain, ctx.currentTime, tau);
+      const g = l.gain.gain;
+      (g.cancelAndHoldAtTime || g.cancelScheduledValues).call(g, ctx.currentTime); // (from where it is now)
+      g.setTargetAtTime(gain, ctx.currentTime + delay, tau);
     }
     if (l.src && Math.abs(rate - l.rate) > 0.01) {
       l.rate = rate;

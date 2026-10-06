@@ -1192,11 +1192,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     const k = live ? Math.min(1, Math.abs(speed) / (MAX_SPEED * stats.speed)) : 0;
     sfx.listen(pos);
     // (a faint idle rumble even standing still)
-    sfx.loop('treads', live ? 0.035 + k * 0.13 : 0, 0.75 + 0.4 * Math.min(1.4, k), k > 0.02 ? 0.35 : 0.2);
+    sfx.loop('treads', live ? 0.025 + k * 0.09 : 0, 0.75 + 0.4 * Math.min(1.4, k), k > 0.02 ? 0.35 : 0.2);
     // the Vulcan: its whir while rounds keep coming, then its wind-down
     vulcanT -= dt;
     const spin = live && vulcanT > 0;
-    sfx.loop('vulcan', spin ? 0.4 : 0, 1, spin ? 0.02 : 0.03);
+    // (spinning up: the burst's own start, then the steady loop takes over)
+    if (spin && !run.vulcanSpin) sfx.play('vulcanStart', { gain: 0.4 });
+    sfx.loop('vulcan', spin ? 0.4 : 0, 1, spin ? 0.015 : 0.03, spin && !run.vulcanSpin ? 0.22 : 0);
     if (!spin && run.vulcanSpin) sfx.play('vulcanTail', { gain: 0.4 });
     run.vulcanSpin = spin;
     warnBeeps(live ? dt : 0);
@@ -2904,7 +2906,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       gr.m.removeFromParent();
       grenades.splice(i, 1);
       const at = gr.to;
-      sfx.at('boom', at, { gain: 0.16, rate: 1.25 + Math.random() * 0.15 }); // (a small pop)
+      sfx.at('boom', at, { gain: 0.22, rate: 1.25 + Math.random() * 0.15 }); // (a small pop)
       // a small blast wherever it lands (ground, wall, machine): a flash, a
       // ball of fire, dirt and sparks thrown up, smoke
       combat.glow.flash(at, 0xffe0a0, 0.16, 1.8, 0.1);

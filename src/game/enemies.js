@@ -1351,7 +1351,7 @@ export class Enemies {
         sh.dot.material.dispose();
         sh.mesh.removeFromParent();
         e.shells.splice(i, 1);
-        this.combat.explode(hitSh.point, null, null, 0.16); // (shells: quieter)
+        this.combat.explode(hitSh.point, null, null, 0.22); // (shells: quieter)
         ctx.onShieldHit?.(hitSh.point);
         continue;
       }
@@ -1377,7 +1377,7 @@ export class Enemies {
         sh.mesh.removeFromParent();
         e.shells.splice(i, 1);
         const at = sh.at.clone().setY(sh.at.y + 0.2);
-        this.combat.explode(at, null, null, 0.16);
+        this.combat.explode(at, null, null, 0.22);
         this.combat.shake = Math.max(this.combat.shake, 0.25);
         const tb = ctx.tankBox;
         if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.artyBlast + Math.max(tb.hx, tb.hz) * 0.5) {
@@ -1680,13 +1680,13 @@ export class Enemies {
     const at = b.pos.clone().setY(Math.max(0.2, b.pos.y));
     if (b.shell) {
       // the mech's shell: a big burst, splash on the tank if it's close
-      this.combat.explode(at, null, null, 0.2);
+      this.combat.explode(at, null, null, 0.28);
       this.combat.shake = Math.max(this.combat.shake, 0.35);
       const tb = ctx.tankBox;
       if (tb && !b.hitTank && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < b.shell.blast + Math.max(tb.hx, tb.hz) * 0.5 && !shielded(ctx, at)) ctx.onTankHit?.(b.shell.splash, at);
       return;
     }
-    sfx.at('boom', at, { gain: 0.18, rate: 1.15 }); // (a rocket landing)
+    sfx.at('boom', at, { gain: 0.25, rate: 1.15 }); // (a rocket landing)
     this.combat.glow.flash(at, 0xffb070, 0.15, 1.2, 0.08);
     this.combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
     for (let k = 0; k < 3; k++) this.combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
