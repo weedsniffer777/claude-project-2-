@@ -287,6 +287,7 @@ function buildGates(scene) {
   B.crushable(() => P.bus(B, 162, -3.6, 0.3), { kind: 'prop', heavy: true, armored: true });
   // the wall above the roofs ahead: its line all along (built below)
 
+  const barriers = []; // (the guard posts' booms, lifted with the gate)
   // ========================================================= 3: the gate
   // The square: open, paved, ringed by the backs of low buildings and the
   // wall itself; tank traps scattered, lamp standards, a statue's plinth
@@ -319,19 +320,59 @@ function buildGates(scene) {
       B.pool(x, z, 3.4, 0xffa245, 0.2);
       B.block(x, z, 0.25, 0.25);
     }
-    // the customs booths: two little huts by the gate, striped barrier arms
+    // the guard posts either side of the gate's approach: a booth on a
+    // concrete plinth (windows all round, lit inside, a deep flat roof with
+    // a lamp under its eave, a door, a sign), and a barrier across the lane:
+    // a striped boom on a pedestal with its counterweight, its tip resting
+    // on a little fork post. The booms lift when the gate opens.
     for (const s of [-1, 1]) {
-      const z = GATE.z + s * (GATE.half + 4);
-      const hut = put(B.root, box(2.4, 2.6, 2.4, 0x6f7f74, { r: 0.05 }), WALL_X - 6, 1.3, z);
+      const bx = WALL_X - 7;
+      const z = GATE.z + s * (GATE.half + 4.5);
+      const plinth = put(B.root, box(3.2, 0.4, 3.2, 0x8d8b86, { r: 0.03 }), bx, 0.2, z);
+      B.solid(plinth);
+      const hut = put(B.root, box(2.6, 2.4, 2.6, 0x5f6f66, { r: 0.04 }), bx, 1.6, z);
       hut.castShadow = true;
       B.solid(hut);
-      put(B.root, box(2.6, 0.12, 2.6, 0x3e4043, { r: 0.02 }), WALL_X - 6, 2.66, z);
-      put(B.root, box(0.05, 0.9, 1.8, 0xffd9a0, { glow: true }), WALL_X - 7.23, 1.6, z);
-      B.emit(new THREE.Vector3(WALL_X - 8, 1.8, z), 0xffd9a0, 6, 5);
-      B.block(WALL_X - 6, z, 1.2, 1.2);
-      const arm = put(B.root, box(0.12, 0.12, GATE.half + 1, 0xd8d2c0), WALL_X - 6, 1.1, z - s * (GATE.half / 2 + 1.4));
-      arm.rotation.x = s * 0.15;
-      for (let k = 0; k < 4; k++) put(B.root, box(0.14, 0.14, 0.5, 0xc42a20), WALL_X - 6, 1.1, z - s * (1.6 + k * 1.2));
+      // windows on all four sides, lit warm, frames dark
+      for (const [dx, dz] of [[-1.31, 0], [1.31, 0], [0, -1.31], [0, 1.31]]) {
+        put(B.root, box(dz ? 1.8 : 0.04, 1.0, dz ? 0.04 : 1.8, 0xffd9a0, { glow: true }), bx + dx, 2.0, z + dz);
+        put(B.root, box(dz ? 1.9 : 0.06, 0.08, dz ? 0.06 : 1.9, 0x2a2b2e), bx + dx * 1.01, 2.52, z + dz * 1.01);
+        put(B.root, box(dz ? 0.06 : 0.06, 1.0, dz ? 0.06 : 0.06, 0x2a2b2e), bx + dx * 1.01, 2.0, z + dz * 1.01);
+      }
+      put(B.root, box(0.06, 1.8, 0.8, 0x3a3c3f), bx - 1.32, 1.3, z + s * 0.6); // the door (it faces the square)
+      // the roof: deep, overhanging, a fascia, a lamp under the front eave
+      put(B.root, box(3.4, 0.22, 3.4, 0x3e4043, { r: 0.02 }), bx, 2.92, z).castShadow = true;
+      put(B.root, box(3.42, 0.12, 3.42, 0xd9b23a), bx, 2.76, z);
+      B.lump(bx, 3.08, z, 1.4, 0.08, 1.4, 0xd6d9dd);
+      put(B.root, box(0.3, 0.12, 0.3, 0xffe8c0, { glow: true }), bx - 1.5, 2.66, z);
+      B.emit(new THREE.Vector3(bx - 2.4, 2.2, z), 0xffd9a0, 8, 6);
+      B.pool(bx - 2.6, z, 2.2, 0xffc890, 0.18);
+      put(B.root, cyl(0.03, 1.4, 0x3a3c3f, { seg: 4 }), bx + 1.1, 3.7, z + 1.1); // an aerial
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.4), mapMat(glyphSign(1.6, 0.4, { rand, board: '#1f3a5a', ink: '#e6e0cc' })));
+      plate.rotation.y = -Math.PI / 2;
+      plate.position.set(bx - 1.33, 2.62, z);
+      B.add(plate);
+      B.block(bx, z, 1.6, 1.6);
+      // the barrier: a pedestal by the booth, its boom across toward the
+      // middle of the lane
+      const px = bx - 2.4;
+      const pz = z - s * 1.2;
+      put(B.root, box(0.5, 1.0, 0.5, 0xd9b23a, { r: 0.03 }), px, 0.5, pz);
+      put(B.root, box(0.52, 0.18, 0.52, 0x1d1e20), px, 0.85, pz);
+      B.block(px, pz, 0.3, 0.3);
+      const pivot = new THREE.Group();
+      pivot.position.set(px, 1.05, pz);
+      const L = GATE.half + 4.5 - 1.2 - 0.3; // to just short of the lane's middle
+      put(pivot, box(0.5, 0.4, 0.4, 0x45484c, { r: 0.03 }), 0, 0, s * 0.45); // the counterweight, behind the pivot
+      put(pivot, box(0.14, 0.14, L, 0xeeeae0, { r: 0.02 }), 0, 0, -s * (L / 2));
+      for (let k = 0; k < Math.floor(L / 0.9); k += 2) put(pivot, box(0.16, 0.16, 0.9, 0xc42a20), 0, 0, -s * (0.45 + k * 0.9 + 0.45));
+      put(pivot, box(0.08, 0.08, 0.08, 0xff3b2f, { glow: true }), 0, 0.12, -s * (L - 0.2)); // its tip lamp
+      B.add(pivot);
+      B.keep(pivot);
+      // the fork post its tip rests on
+      put(B.root, box(0.1, 1.0, 0.1, 0xd8d2c0), px, 0.5, pz - s * (L - 0.3));
+      put(B.root, box(0.1, 0.1, 0.3, 0xd8d2c0), px, 1.0, pz - s * (L - 0.3));
+      barriers.push({ pivot, s });
     }
     K.container(B, 222, 0, 20, 0.3, CONTAINERS[1]);
     K.container(B, 248, 0, -22, -0.2, CONTAINERS[3]);
@@ -799,6 +840,7 @@ function buildGates(scene) {
     // the gate's leaves: swing slowly out
     gate.open += THREE.MathUtils.clamp(gate.want - gate.open, -dt * 2, dt * 0.35);
     const e = gate.open * gate.open * (3 - 2 * gate.open);
+    for (const br of barriers) br.pivot.rotation.x = br.s * e * 1.35; // (the booms lift, tips up)
     for (const l of leaves) l.leaf.position.z = l.z0 + l.s * e * (GATE.half + 0.2); // (sliding apart into the towers)
     if (ctx.api) script(ctx.api, dt);
   }
