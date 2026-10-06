@@ -94,10 +94,11 @@ export function createWallTurret({ heavy = true, rockets = false, y = 2.6 } = {}
       vents(pod, -0.45, 0.2, s * 0.56, 4, 0.18);
       for (let i = 0; i < 4; i++) put(pod, box(0.14, 0.06, 0.04, i % 2 ? C.dark : C.hazard), -0.35 + i * 0.14, -0.38, s * 0.63);
     }
-    put(pod, box(0.3, 0.26, 0.3, C.dark, { r: 0.04 }), 0.5, 0.32, 0.32); // the eye's housing
-    put(pod, box(0.08, 0.04, 0.34, C.plate), 0.66, 0.46, 0.32); // its brow
-    lenses.push(put(pod, cyl(0.15, 0.06, C.eye, { axis: 'x', seg: 12, glow: true }), 0.66, 0.31, 0.32));
-    put(pod, cyl(0.2, 0.05, C.dark, { axis: 'x', seg: 12 }), 0.64, 0.31, 0.32);
+    // the eye up on the roof, in its own armoured box, clear of the glacis
+    put(pod, box(0.42, 0.38, 0.4, C.dark, { r: 0.04 }), 0.28, 0.7, 0.3); // the eye's housing
+    put(pod, box(0.14, 0.05, 0.44, C.plate), 0.46, 0.91, 0.3); // its brow
+    put(pod, cyl(0.17, 0.05, C.dark, { axis: 'x', seg: 12 }), 0.5, 0.7, 0.3);
+    lenses.push(put(pod, cyl(0.13, 0.06, C.eye, { axis: 'x', seg: 12, glow: true }), 0.52, 0.7, 0.3));
     for (const s of [-1, 1]) put(pod, cyl(0.025, 0.5, C.dark, { seg: 5 }), -0.4, 0.7, s * 0.3); // antennas
     gun.position.set(0.6, -0.05, -0.12);
     pod.add(gun);

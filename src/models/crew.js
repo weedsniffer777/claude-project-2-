@@ -152,7 +152,7 @@ function dress(bone, role) {
     // upright in the model's own frame, whatever the chest bone's turn
     r.quaternion.copy(bone.chest.getWorldQuaternion(new THREE.Quaternion()).invert());
     const k = new THREE.Group();
-    k.position.set(Math.sign(sh.x || -1) * 62, 70, 30);
+    k.position.set(Math.sign(sh.x || -1) * 44, -40, 26); // (resting on the shoulder, the case down his chest)
     k.rotation.z = -Math.sign(sh.x || -1) * 0.12;
     r.add(k);
     at(k, mesh(new THREE.CylinderGeometry(24, 26, 170, 10), C.brass), 0, 0, 0);
