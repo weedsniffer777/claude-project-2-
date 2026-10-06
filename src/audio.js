@@ -28,8 +28,8 @@ const FILES = {
 const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
 // (no machine gun drowning out the rest: each sound has a shortest gap
 // between plays and a cap on how many ring at once)
-const GAP = { mg: 0.06, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08, boom: 0.03, crash: 0.12, beep2: 0.15 };
-const VOICES = { mg: 3, launch: 4, autocannon: 4, cannon: 3, explosion: 3, boom: 5, crash: 2 };
+const GAP = { mg: 0.035, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08, boom: 0.03, crash: 0.12, beep2: 0.15 };
+const VOICES = { mg: 4, launch: 4, autocannon: 4, cannon: 3, explosion: 3, boom: 5, crash: 2 };
 const lastAt = {};
 const ringing = {};
 // where the ears are (the tank): sounds out in the world fade with distance
