@@ -8,7 +8,7 @@
 //    speed every level.
 // A level up pops; an evolve flashes the screen in the new tier's colour,
 // throws sparks, slams a banner down and grows the bars.
-import { uiZoom } from './scale.js';
+import { watchScreens } from './fit.js';
 import { fountain, popFrames, ascend } from './celebrate.js';
 import { PARTS, TIERS, MAX_LEVEL, TANK_MAX, levelOf, tierOfLevel, evolvesAt, levelCost, evolveCost, tankLevelCost, tankPromotes, tankPromoteCost, partEffects, partPerk, statsFor } from '../game/parts.js';
 import { TANKS, TANK_ORDER } from '../game/tanks.js';
@@ -145,6 +145,9 @@ export function createWorkshop({ renderer, cursor }) {
   root.className = 'ws';
   root.hidden = true;
   root.style.setProperty('--cursor', cursor);
+  // (its zoom on screen: the small-screen zoom, and any more to fit it)
+  const zoomOf = () => parseFloat(getComputedStyle(root).zoom) || 1;
+  watchScreens(root, '.ws');
   root.innerHTML = `
     <div class="top"><h1>Upgrades</h1><div class="bank pnl sc"><i></i>Scraps <b>0</b></div><div class="bank pnl tk"><i></i>Tokens <b>0</b></div><button type="button" class="back">Back</button></div>
     <div class="tabs"><button type="button" data-tab="parts">Parts</button><button type="button" data-tab="tanks">Tanks</button></div>
@@ -492,8 +495,8 @@ export function createWorkshop({ renderer, cursor }) {
   }
   // pixel sparks flung off the picture
   function sparks(rect, color, count, reach) {
-    const cx = (rect.left + rect.width / 2) / uiZoom(); // (into the zoomed overlay's pixels)
-    const cy = (rect.top + rect.height / 2) / uiZoom();
+    const cx = (rect.left + rect.width / 2) / zoomOf(); // (into the zoomed overlay's pixels)
+    const cy = (rect.top + rect.height / 2) / zoomOf();
     for (let i = 0; i < count; i++) {
       const s = document.createElement('i');
       s.className = 'spark';

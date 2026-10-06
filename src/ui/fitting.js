@@ -8,7 +8,7 @@
 // storage asks which one to replace (or Cancel). A part just found at a
 // checkpoint is shown as New with an "Equip now" button. Upgrades have a
 // screen of their own (workshop.js), opened from the hangar.
-import { uiZoom } from './scale.js';
+import { watchScreens } from './fit.js';
 import * as THREE from 'three';
 import { fitsTank, unfitLabel, PARTS, PART_TYPES, statsFor, TIERS, tierOf, levelOf, partEffects, partPerk, effectsHtml, EFFECT_CSS } from '../game/parts.js';
 import { TANKS, TANK_ORDER, tankDef } from '../game/tanks.js';
@@ -266,6 +266,9 @@ export function createFitting({ renderer, cursor }) {
   root.className = 'fit';
   root.hidden = true;
   root.style.setProperty('--cursor', cursor);
+  // (its zoom on screen: the small-screen zoom, and any more to fit it)
+  const zoomOf = () => parseFloat(getComputedStyle(root).zoom) || 1;
+  watchScreens(root, '.fit');
   root.innerHTML = `
     <svg></svg>
     <div class="left pnl"><span class="tag px"></span><h2></h2><p></p><div class="bars"></div><div class="kit"></div><div class="equip"><span class="label">Equipment <kbd>Q</kbd></span><div class="slotbox"></div><span class="lock" hidden>Cannot change in battle.</span></div></div>
@@ -407,8 +410,8 @@ export function createFitting({ renderer, cursor }) {
     tip.querySelector('b').innerHTML = `${PARTS[id].name} <span class="tiername">${TIERS[tier].name} · Lv ${levelOf(id)}</span>`;
     // what it does at its tier, in numbers
     tip.querySelector('span').innerHTML = `${effectsHtml(id, o.tankId)}${where(id) ? `<br>On the ${where(id)}.` : ''}`;
-    tip.style.left = `${Math.round((Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100))) / uiZoom())}px`;
-    tip.style.top = `${Math.round((r.top - 12) / uiZoom())}px`;
+    tip.style.left = `${Math.round((Math.min(window.innerWidth - 220, Math.max(8, r.left + r.width / 2 - 100))) / zoomOf())}px`;
+    tip.style.top = `${Math.round((r.top - 12) / zoomOf())}px`;
     tip.style.transform = 'translateY(-100%)';
   }
   const hideTip = () => (tip.hidden = true);
@@ -681,7 +684,7 @@ export function createFitting({ renderer, cursor }) {
       root.append(pop);
       // under the slot if it fits; else over it; else beside it, kept on
       // screen (a phone on its side has little room under the panel)
-      const z = uiZoom();
+      const z = zoomOf();
       const r = box.getBoundingClientRect();
       const vw = window.innerWidth / z;
       const vh = window.innerHeight / z;
@@ -780,8 +783,8 @@ export function createFitting({ renderer, cursor }) {
     root.append(pop);
     const r = el.getBoundingClientRect();
     const pr = pop.getBoundingClientRect();
-    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / uiZoom())}px`;
-    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / uiZoom())}px`;
+    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / zoomOf())}px`;
+    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / zoomOf())}px`;
     el.classList.add('on');
   }
   function openPop(id, el) {
@@ -816,8 +819,8 @@ export function createFitting({ renderer, cursor }) {
     root.append(pop);
     const r = el.getBoundingClientRect();
     const pr = pop.getBoundingClientRect();
-    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / uiZoom())}px`;
-    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / uiZoom())}px`;
+    pop.style.left = `${Math.round((Math.max(8, Math.min(r.left, window.innerWidth - pr.width - 8))) / zoomOf())}px`;
+    pop.style.top = `${Math.round((Math.min(r.bottom + 10, window.innerHeight - pr.height - 8)) / zoomOf())}px`;
     el.classList.add('on');
   }
 
@@ -855,7 +858,7 @@ export function createFitting({ renderer, cursor }) {
         let at = o.anchor(id);
         if (!at) continue;
         const zr = el.getBoundingClientRect();
-        const k = uiZoom(); // (screen pixels into the zoomed overlay's own)
+        const k = zoomOf(); // (screen pixels into the zoomed overlay's own)
         const r = { left: zr.left / k, right: zr.right / k, top: zr.top / k, height: zr.height / k };
         at = [at[0] / k, at[1] / k];
         const ex = at[0] < r.left ? r.left - 4 : r.right + 4;

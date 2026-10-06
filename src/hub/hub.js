@@ -8,7 +8,7 @@
 // camera eases in and its screen opens straight away, wherever the crewman
 // is. Walking into a room opens it too. The crewman walks with WASD /
 // arrows, or click the hall floor where to go. Esc or Back closes a screen.
-import { watchPopups } from '../ui/fit.js';
+import { watchPopups, watchScreens } from '../ui/fit.js';
 import * as THREE from 'three';
 import { LevelBuilder, canvas, tex, blob, speckle } from '../levels/builder.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly, approachAngle } from '../models/kit.js';
@@ -1299,6 +1299,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   `;
   // (every popup fits the screen, whatever its size)
   watchPopups(root, '.base-news, .base-endless, .base-menu, .base-crew, .base-promo');
+  watchScreens(root, '.base-brief');
   const tags = new Map(ROOMS.map((r) => [r.id, root.querySelector(`.base-tag[data-id="${r.id}"]`)]));
   const menu = root.querySelector('.base-menu');
   const crewPanel = root.querySelector('.base-crew');
