@@ -1968,6 +1968,7 @@ function buildAvenue(scene) {
             api.spotlight({ targets: [api.ability2Screen(), () => (S.boss.alive ? new THREE.Vector3(S.boss.pos.x, 2, S.boss.pos.z) : null)], r: 110 }, () => (api.run.abilities || 0) > 0, { maxTime: 2.5 });
           }
           if (!S.boss.alive) {
+            api.clearPrompt(); // (no more "the boss is damaged")
             S.strike = airstrike(api);
             go(2);
           }
@@ -1976,6 +1977,7 @@ function buildAvenue(scene) {
           if (S.strike.update(dt)) {
             S.strike = null;
             api.arrow(new THREE.Vector3(END_X + 3, 0.6, 0), 'Exit');
+            api.prompt('Exit', 'Follow the <b>Exit</b> sign to complete the level!', { go: true, seconds: 5 });
             api.cameraTo(new THREE.Vector3(END_X + 1, 0, 0), 2.2); // (over to the way out, then back)
             go(3);
           }
