@@ -36,6 +36,12 @@ const FRONT = { n: -7.6, s: 7.2 }; // where the shacks' fronts stand
 const SHACK_A = { x0: 92, x1: 99.6 };
 const MARKET = { x0: 112, x1: 168, n: -18, s: 15 }; // the square
 const RAIL_X = 150; // the old railway across it
+const BED = { h: 0.3, top: 1.3, base: 2.1 }; // its gravel embankment
+// the ground's height: flat, but for the railway's bed
+const railH = (x) => {
+  const d = Math.abs(x - RAIL_X);
+  return d < BED.top ? BED.h : d < BED.base ? (BED.h * (BED.base - d)) / (BED.base - BED.top) : 0;
+};
 const SHACK_B = { x0: 196, x1: 203.6 };
 const DUMP_X = 214; // where the shacks end and the dump starts
 const END_X = 300;
@@ -543,13 +549,38 @@ function buildSlums(scene) {
     // the old railway across the square, bombed: rails in the dirt with
     // gaps blown out of them, craters, a buckled length twisted up, the
     // crossing's barrier snapped, its crossbuck bent, the signal box holed
-    const R = rails(B, rand, { gauge: 0.72 });
-    for (const [z0, z1] of [[MARKET.n - 30, -6], [-2, 3], [7, MARKET.s + 30]]) R.track(R.straight(RAIL_X, z0, RAIL_X, z1));
-    for (let z = MARKET.n - 30; z < MARKET.s + 30; z += 0.9) if (rand() > 0.2 && !(z > -6 && z < -2) && !(z > 3 && z < 7)) B.piece(2.4, 0.1, 0.22, 0x4a3a2e, RAIL_X, 0.04, z, 0, 0, 0); // sleepers
-    for (const z of [-4, 5]) {
+    // the bed: a gravel embankment, sloped sides, the rails up on it (above
+    // the road where it crosses); the blown-out lengths over by the square's
+    // edges
+    {
+      const [c, g] = canvas(64, 64);
+      g.fillStyle = '#827f7a';
+      g.fillRect(0, 0, 64, 64);
+      speckle(g, 64, 64, ['#8a8782', '#76736e', '#908d87', '#7a7772', '#6e6b66'], 64 * 40, rand);
+      const map = tex(c);
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(1, 30);
+      const shape = new THREE.Shape([new THREE.Vector2(-BED.base, 0), new THREE.Vector2(BED.base, 0), new THREE.Vector2(BED.top, BED.h), new THREE.Vector2(-BED.top, BED.h)]);
+      const len = MARKET.s - MARKET.n + 60;
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: len, bevelEnabled: false });
+      const uv = geo.attributes.uv;
+      const pos = geo.attributes.position;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (pos.getX(i) + BED.base) / (BED.base * 2), pos.getZ(i) / len); // (gravel along it, not stretched)
+      const bed = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ map, gradientMap }));
+      bed.position.set(RAIL_X, 0, MARKET.n - 30);
+      bed.receiveShadow = true;
+      B.add(bed);
+    }
+    const GAP = [[MARKET.n + 1, MARKET.n + 4], [MARKET.s - 4, MARKET.s - 1]];
+    const inGap = (z) => GAP.some(([a, b]) => z > a && z < b);
+    const R = rails(B, rand, { gauge: 0.72, y: () => BED.h + 0.09 }); // (on the sleepers)
+    for (const [z0, z1] of [[MARKET.n - 30, GAP[0][0]], [GAP[0][1], GAP[1][0]], [GAP[1][1], MARKET.s + 30]]) R.track(R.straight(RAIL_X, z0, RAIL_X, z1));
+    for (let z = MARKET.n - 30; z < MARKET.s + 30; z += 0.9) if (rand() > 0.15 && !inGap(z)) B.piece(2.2, 0.1, 0.22, 0x4a3a2e, RAIL_X, BED.h + 0.04, z, 0, 0, 0); // sleepers
+    for (const [a, b] of GAP) {
+      const z = (a + b) / 2;
       ST.rubble(RAIL_X + (rand() - 0.5), z, 1.6, 0.5);
       for (let k = 0; k < 2; k++) {
-        const bent = put(B.root, box(0.07, 0.07, 2.4, 0x8d9196), RAIL_X + (k ? 0.72 : -0.72), 0.5, z);
+        const bent = put(B.root, box(0.07, 0.07, 2.4, 0x8d9196), RAIL_X + (k ? 0.72 : -0.72), BED.h + 0.5, z);
         bent.rotation.x = (k ? 1 : -1) * 0.5;
         bent.rotation.y = (rand() - 0.5) * 0.6;
       }
@@ -1031,7 +1062,7 @@ function buildSlums(scene) {
     emitters: B.emitters,
     crushables: B.crushables,
     depotRoom: room,
-    heightAt: () => 0,
+    heightAt: (x) => railH(x), // (the tank rides up over the rail bed)
     spawn: { x: START_X + 5, z: -0.5, yaw: 0 },
     bounds,
     script: S,

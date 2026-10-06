@@ -2485,6 +2485,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const grenadeBaseMat = new THREE.MeshBasicMaterial({ color: 0xc9a85a });
   function lobGrenade(from, target) {
     const aim = enemies.aimPoint(target).clone();
+    // led: where it'll be when the round comes down (its pace, measured
+    // frame to frame), refined once for the longer flight
+    const flight = (dd) => 0.31 + dd * 0.031;
+    const v = target.gv || { x: 0, z: 0 };
+    for (let k = 0, T = flight(Math.hypot(aim.x - from.x, aim.z - from.z)); k < 2; k++) {
+      const lx = aim.x + v.x * T;
+      const lz = aim.z + v.z * T;
+      T = flight(Math.hypot(lx - from.x, lz - from.z));
+      if (k) Object.assign(aim, { x: lx, z: lz });
+    }
     const d = Math.hypot(aim.x - from.x, aim.z - from.z);
     // scatter grows with the range; one in four drops short
     const sc = 0.4 + d * 0.06;
@@ -2496,12 +2506,26 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     m.add(new THREE.Mesh(grenadeBaseGeo, grenadeBaseMat));
     m.position.copy(from);
     scene.add(m);
-    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.5 + d * 0.05, apex: 0.8 + d * 0.09, last: from.clone() }); // (slowish: you watch it arc over)
+    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: flight(d), apex: 0.7 + d * 0.08, last: from.clone() }); // (slowish: you watch it arc over)
     combat.glow.flash(from, 0xffc860, 0.08, 0.5, 0.06);
     combat.puffs.spawn(from.clone(), new THREE.Vector3(0, 0.6, 0), { color: 0x8f8a80, s0: 0.1, s1: 0.35, life: 0.4, drag: 3, lift: 0.4, fadeAt: 0.3 });
   }
   function grenadeFrame(dt) {
     trailPool?.update(dt);
+    // each machine's pace on the ground, smoothed (for leading the rounds)
+    if (stats.gmg && dt > 0) {
+      for (const e of enemies.alive) {
+        if (e.gp) {
+          const k = Math.min(1, dt * 6);
+          e.gv ??= { x: 0, z: 0 };
+          e.gv.x += ((e.pos.x - e.gp.x) / dt - e.gv.x) * k;
+          e.gv.z += ((e.pos.z - e.gp.z) / dt - e.gv.z) * k;
+          const sp = Math.hypot(e.gv.x, e.gv.z);
+          if (sp > 10) (e.gv.x *= 10 / sp), (e.gv.z *= 10 / sp); // (a shove or a jump isn't a pace)
+        }
+        e.gp = { x: e.pos.x, z: e.pos.z };
+      }
+    }
     for (let i = grenades.length - 1; i >= 0; i--) {
       const gr = grenades[i];
       gr.t += dt;

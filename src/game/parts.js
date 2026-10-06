@@ -121,7 +121,7 @@ export const PARTS = {
     apply(s) {
       s.gmg = true;
       s.gmgDamage = 15; // (scaled by mgDamage / 3 in the game: about the MG's damage over time on one target, plus the blast)
-      s.mgRange *= 0.8;
+      s.mgRange *= 1.3; // (lobbed: it reaches further than the MG it replaces)
     },
     tiers: [
       { text: 'Faster: a grenade every 0.3 s.', apply: (s) => (s.gmgRate = 0.3) },
