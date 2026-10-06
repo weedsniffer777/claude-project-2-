@@ -134,16 +134,16 @@ export const PARTS = {
     // the roof gun gets a launcher's chunky receiver, a short fat barrel and
     // a big ammo can over the top of it (it turns with the gun)
     build(t) {
-      return gmgOn(t.mgGun);
+      return gmgOn(t.mgGun, t);
     },
     light(t) {
-      return gmgOn(t.mgGun);
+      return gmgOn(t.mgGun, t);
     },
     missile(t) {
-      return gmgOn(t.mgGun);
+      return gmgOn(t.mgGun, t);
     },
     assault(t) {
-      return gmgOn(t.mgGun);
+      return gmgOn(t.mgGun, t);
     },
     model: () => gmgLauncher(),
   },
@@ -858,10 +858,26 @@ export function gmgLauncher() {
   for (const dz of [-0.06, 0.06]) put(g, box(0.1, 0.04, 0.04, DARK), -0.28, 0.03, dz); // spade grips
   return g;
 }
-function gmgOn(gun) {
+// the grenade launcher on the roof gun, and on every extra gun already
+// fitted (Extra MGs): all of them launchers (those go with this part)
+function gmgOn(gun, t) {
   const g = gmgLauncher();
+  g.userData.gmg = true;
   if (gun) gun.add(g);
+  g.userData.extra = [];
+  t?.group?.traverse((o) => o.userData.mounts && g.userData.extra.push(...gmgOnMounts(o.userData.mounts)));
   return g;
+}
+// launchers over each mount's gun that hasn't got one
+function gmgOnMounts(mounts) {
+  const out = [];
+  for (const mt of mounts) {
+    if (mt.gmg?.parent) continue;
+    mt.gmg = gmgLauncher();
+    mt.pivot.add(mt.gmg);
+    out.push(mt.gmg);
+  }
+  return out;
 }
 
 function vulcanBarrels() {
@@ -997,6 +1013,12 @@ export function attachPart(tank, id) {
     }
   } else g = p.build(tank, tier);
   for (const o of [g, ...(g.userData.extra || [])]) o.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
+  // extra guns fitted after the grenade launcher: launchers too
+  if (g.userData.mounts) {
+    let gmg = false;
+    tank.group?.traverse((o) => (gmg ||= !!o.userData.gmg));
+    if (gmg) for (const l of gmgOnMounts(g.userData.mounts)) l.traverse((m) => m.isMesh && m.layers.enable(PLAYER_LAYER));
+  }
   g.userData.part = id;
   return g;
 }

@@ -2632,7 +2632,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!g || run.over || run.mode !== 'field' || dt <= 0) return;
     // with the grenade launcher every extra gun's a launcher too
     for (const mt of g.userData.mounts) {
-      if (stats.gmg && !mt.gmg) mt.gmg = mt.pivot.add(gmgLauncher());
+      if (stats.gmg && !mt.gmg?.parent) mt.pivot.add((mt.gmg = gmgLauncher()));
       if (mt.gmg) mt.gmg.visible = !!stats.gmg;
     }
     // each mount takes the nearest machine nobody else is on yet (or, with
