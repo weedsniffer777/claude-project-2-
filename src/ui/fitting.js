@@ -102,7 +102,7 @@ const CSS = `
 .fit .info .tiername { font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--tc); }
 .fit .info p { margin: 0; font: 400 12px/1.25 'Pixelify Sans', monospace; color: #b9b0a0; text-transform: none; }
 .fit .info .where { font: 400 11px/1.2 'Pixelify Sans', monospace; color: #8f877a; }
-.fit .upbtn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px 10px; font-size: 12px; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
+.fit .upbtn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px 13px; font-size: 15px; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
 .fit .upbtn:hover { filter: brightness(1.12); }
 .fit .upbtn.hint { animation: fitglow 0.9s steps(2) infinite; }
 .fit .upbtn.evolve { background: #c77dff; box-shadow: 0 3px 0 #6a2fa0, 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; }
@@ -121,8 +121,8 @@ const CSS = `
 @keyframes starDrop { 0% { transform: translateY(-34px) scale(2.4); opacity: 0; filter: brightness(3); } 70% { opacity: 1; } 100% { transform: none; opacity: 1; filter: none; } }
 .fit .hd .stb { position: static; display: inline-block; margin-left: 6px; }
 .fit .item .evb, .fit .slot .evb { position: absolute; right: -6px; top: -8px; padding: 2px 4px; font: 400 9px/1 'Silkscreen', monospace; text-transform: uppercase; color: #fff; background: #8a45d0; box-shadow: 0 0 0 2px #000; animation: fitbounce 0.8s ease-in-out infinite; pointer-events: none; }
-.fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000; }
-.fit .btn.tankup small { font-size: 10px; margin-left: 4px; }
+.fit .btn.tankup { color: #111; background: #ffb347; box-shadow: 0 4px 0 #8a5a1c, 0 0 0 2px #000; padding: 11px 24px 12px; font-size: 16px; pointer-events: auto; }
+.fit .btn.tankup small { font-size: 12px; margin-left: 6px; }
 .fit .upbtn .dot { padding: 2px 5px; font-size: 9px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
 @keyframes fitglow { 50% { box-shadow: 0 3px 0 #8a5a1c, 0 0 0 2px #000, 0 0 0 5px #ffe2a0, 0 0 18px #ffc24a; } }
 .fit .slot.empty { color: var(--red); background: #241314; box-shadow: 0 0 0 2px #000, 0 0 0 4px #7a2a26; min-height: 54px; justify-content: center; font-size: 13px; }
@@ -587,14 +587,15 @@ export function createFitting({ renderer, cursor }) {
     // buttons
     const btns = $('.btns');
     btns.innerHTML = '';
-    // under the tank (hangar): level it up
+    // over the tank bar, in the middle (hangar): level it up
+    root.querySelector('.bottom > .tankup')?.remove();
     if (o.onUpgradeTank) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn tankup';
       b.innerHTML = `Upgrade tank <small>Lv ${save.tankLevel(o.tankId)}</small>`;
       b.addEventListener('click', () => !replacing && (closePop(), o.onUpgradeTank()));
-      btns.append(b);
+      root.querySelector('.bottom').prepend(b);
     }
     root.querySelector('.bigbtn')?.remove();
     for (const [label, fn, primary, center] of o.buttons || []) {

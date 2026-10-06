@@ -928,14 +928,14 @@ function buildEndless(scene) {
   }
 
   function start(api) {
-    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: 11.5, queue: [], groupT: 0, inBase: false, shut: 0 });
+    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: 7, queue: [], groupT: 0, inBase: false, shut: 0 });
     api.enableGun();
     api.revealScraps(false);
     api.giveRockets();
     if (api.tank.ability) api.giveAbility();
     api.objective('Get ready');
-    api.prompt('Endless', 'Survive as long as possible!', { go: true, seconds: 3.5 });
-    S.tip = 4; // (then the one other thing to know; the countdown waits till both are gone)
+    api.prompt('Endless', 'Survive as long as possible!', { go: true, seconds: 1.8 });
+    S.tip = 1.9; // (then the one other thing to know; the countdown waits till both are gone)
     base.openIn();
   }
 
@@ -947,7 +947,7 @@ function buildEndless(scene) {
     run.endlessT = S.time;
     run.endlessWave = S.wave;
     run.dmgMul = toughness().dmg;
-    if (S.tip > 0 && (S.tip -= dt) <= 0) api.prompt('Base', 'You can return to the <b>base</b> at any time to switch loadouts.', { go: true, seconds: 4 });
+    if (S.tip > 0 && (S.tip -= dt) <= 0) api.prompt('Base', 'You can return to the <b>base</b> at any time to switch loadouts.', { go: true, seconds: 1.8 });
     // The base: open the whole time (shut for a few seconds after you come
     // out). Inside, the machines out here are held frozen as they are, and
     // there's no free repair: it's for changing the loadout, not hiding.
