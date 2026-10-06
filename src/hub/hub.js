@@ -1818,10 +1818,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
     const tanks = all.filter((n) => n.kind === 'tank' && TANKS[n.id]);
     if (tanks.length) freshTanks = tanks.map((i) => i.id);
     newsQueue = [...tanks, ...all.filter((n) => n.kind === 'equipment' && EQUIPMENT[n.id]), ...all.filter((n) => n.kind === 'part' && PARTS[n.id])];
-    // Endless just opened: said once
+    // Endless just opened: said once, and first (before the new tank,
+    // equipment and parts the same level gave)
     if (endlessOpen() && !save.tips().includes('endless-news')) {
       save.seeTip('endless-news');
-      newsQueue.push({ kind: 'endless' });
+      newsQueue.unshift({ kind: 'endless' });
     }
     nextNews();
   }
