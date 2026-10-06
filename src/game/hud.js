@@ -169,6 +169,7 @@ const CSS = `
 .hud-picker .skip { padding: 7px 16px 8px; border: 0; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-picker .skip:hover { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--ink); }
 .hud.touch .hud-card { width: 150px; padding: 10px 8px 12px; }
+.hud-continue .tri { display: inline-block; width: 0; height: 0; margin-left: 4px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid currentColor; }
 .hud-continue { position: absolute; right: calc(24px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); padding: 14px 20px 15px; border: 0; cursor: pointer; pointer-events: auto;
   font: 400 16px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000, 0 5px 0 2px #2f6b40; animation: hudready 1s steps(2) infinite; }
 .hud-end .bank { color: var(--amber); font-size: 14px; }
@@ -549,7 +550,7 @@ export function createHud() {
       <div class="hud-chain px" hidden><span><small>Multiplier </small><span class="n">x2</span></span><div class="t"><i></i></div></div>
     </div>
     <div class="hud-picker" hidden><span class="title">Pick one part</span><div class="row"></div><button type="button" class="skip" hidden>Skip</button></div>
-    <button type="button" class="hud-continue" hidden>Continue &#9654;</button>
+    <button type="button" class="hud-continue" hidden>Continue <i class="tri"></i></button>
     <div class="hud-arrow" hidden><span class="lbl"></span><i></i></div>
     <div class="hud-center">
       <div class="hud-obj panel" hidden><span class="px tag">Objective</span><span class="text"></span></div>
@@ -1072,7 +1073,7 @@ export function createHud() {
     showPicker(list, onPick, skip, onHover, teach = false) {
       picker.hidden = !list;
       picker.classList.toggle('teach', !!teach && !!list);
-      picker.querySelector('.title').innerHTML = teach ? '<i class="ptr">▼</i> Pick a reward to keep permanently! <i class="ptr">▼</i>' : 'Pick one part';
+      picker.querySelector('.title').innerHTML = teach ? '<i class="ptr">▼\uFE0E</i> Pick a reward to keep permanently! <i class="ptr">▼\uFE0E</i>' : 'Pick one part';
       onSkip = skip;
       picker.querySelector('.skip').hidden = !skip;
       const row = picker.querySelector('.row');

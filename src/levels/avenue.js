@@ -1684,7 +1684,7 @@ function buildAvenue(scene) {
             api.enableGun();
             if (api.lesson('fire')) {
               S.lesson = performance.now(); // (6 s, then it's aimed and fired for you)
-              const slow = { slowK: 0.03, long: true, maxTime: 12 };
+              const slow = { slowK: 0.03, long: true, maxTime: 12, turretReal: true };
               if (api.touch) {
                 // on a phone, two steps: tap on them to aim, then FIRE
                 api.prompt('Enemies!', 'Tap where you want to aim the turret.', { danger: true });
@@ -1728,7 +1728,7 @@ function buildAvenue(scene) {
                 const f = api.fireScreen();
                 return { screen: [f.screen[0], f.screen[1] - 50] };
               }, 'Tap!', true);
-              api.spotlight({ targets: [api.fireScreen(), onEnemy(api)], r: 90 }, () => run.shots > S.shots, { slowK: 0.03, long: true, maxTime: 12 });
+              api.spotlight({ targets: [api.fireScreen(), onEnemy(api)], r: 90 }, () => run.shots > S.shots, { slowK: 0.03, long: true, maxTime: 12, turretReal: true });
             }
           }
           if (run.shots > S.shots && S.lesson) {

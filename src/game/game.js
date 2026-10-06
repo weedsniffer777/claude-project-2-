@@ -441,8 +441,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // fast the camera glides over (and back)
     // slowK: how slow (the game's speed under it); long: may stay up past
     // the usual few seconds (a lesson with its own timer)
-    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false, lock = false, camRate = 6, slowK = SLOW_MO, long = false } = {}) {
-      run.spot = { until, t: 0, maxTime: Math.min(maxTime, long ? 12 : slow ? 3 : 6), frame, frameK, slow, lock, slowK }; // never holds the game up for long
+    // turretReal: the turret keeps turning at its real speed (a lesson in
+    // aiming, in deep slow motion)
+    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false, lock = false, camRate = 6, slowK = SLOW_MO, long = false, turretReal = false } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, long ? 12 : slow ? 3 : 6), frame, frameK, slow, lock, slowK, turretReal }; // never holds the game up for long
       run.camRate = camRate;
       hud.setSpot(spec);
       if (hideHud) {
@@ -3318,7 +3320,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
       if (run.hunt) huntFrame(realDt, dt);
       // (Hunter-killer marking: the turret holds still)
-      tank.update(dt, t, { aimPoint: run.hunt ? (run.hunt.phase === 'fire' ? run.hunt.aim : null) : hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.hunt ? 1 / HUNT_SLOW : run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
+      tank.update(dt, t, { aimPoint: run.hunt ? (run.hunt.phase === 'fire' ? run.hunt.aim : null) : hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: (run.hunt ? 1 / HUNT_SLOW : run.aiming > 0 ? 1 / AIM_SLOW : 1) * (run.spot?.turretReal && dt > 0 ? realDt / dt : 1), levelGun: run.aiming > 0 || run.levelT > 0 });
       run.levelT = Math.max(0, (run.levelT || 0) - realDt); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
       run.gmgT = Math.max(0, (run.gmgT || 0) - dt);

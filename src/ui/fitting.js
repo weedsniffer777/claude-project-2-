@@ -66,6 +66,9 @@ const CSS = `
 .fit .equip .flag.new { color: #111; background: #6be08a; }
 .fit .equip .point { position: absolute; left: calc(100% + 10px); top: 50%; z-index: 2; font: 400 16px/1 'Silkscreen', monospace; color: #e0483a; text-shadow: 2px 2px 0 #000; pointer-events: none; animation: eqPoint 0.7s steps(2) infinite; }
 .fit .equip .point.new { color: #6be08a; }
+/* (pointers drawn, not typed: a typed arrow turns into an emoji on phones) */
+.fit .equip .point::before { content: ''; display: block; width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-right: 12px solid currentColor; filter: drop-shadow(2px 2px 0 #000); }
+.fit .tri { display: inline-block; width: 0; height: 0; margin-right: 6px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid currentColor; vertical-align: 0; }
 @keyframes eqFlag { 50% { filter: brightness(1.35); } }
 @keyframes eqPoint { 0%, 100% { transform: translate(0, -50%); } 50% { transform: translate(6px, -50%); } }
 .fit .pop .eqnew { margin-left: auto; font: 400 8px/1 'Silkscreen', monospace; padding: 2px 3px; color: #111; background: #6be08a; }
@@ -560,7 +563,7 @@ export function createFitting({ renderer, cursor }) {
     if (!replacing && o.highlight && sp.includes(o.highlight)) {
       msg.hidden = false;
       msg.innerHTML = o.teachEquip
-        ? `<span class="teachline">▶ Put <b></b> on your tank! You can change your tank's loadout at any checkpoint.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`
+        ? `<span class="teachline"><i class="tri"></i>Put <b></b> on your tank! You can change your tank's loadout at any checkpoint.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`
         : `<span>Found: <b></b>. It's in storage.</span><div class="row"><button type="button" class="btn go equip">Equip now</button></div>`;
       msg.classList.toggle('teach', !!o.teachEquip);
       msg.querySelector('b').textContent = PARTS[o.highlight].name;
@@ -646,7 +649,7 @@ export function createFitting({ renderer, cursor }) {
     if (hangar && owned.length && (unseen.length || !item)) {
       const isNew = unseen.length > 0;
       box.classList.add(isNew ? 'fresh' : 'missing');
-      slot.insertAdjacentHTML('beforeend', `<span class="flag${isNew ? ' new' : ''}">${isNew ? 'New!' : 'Missing equipment!'}</span><span class="point${isNew ? ' new' : ''}">◀</span>`);
+      slot.insertAdjacentHTML('beforeend', `<span class="flag${isNew ? ' new' : ''}">${isNew ? 'New!' : 'Missing equipment!'}</span><span class="point${isNew ? ' new' : ''}"></span>`);
     }
     $('.equip .lock').hidden = hangar || !owned.length;
     if (!hangar || !owned.length) return;
