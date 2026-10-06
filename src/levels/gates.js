@@ -36,7 +36,6 @@ const SW = 0.16;
 const CROSS = { x0: 30, x1: 42 }; // the crossroads on the ring road
 const CROSS_Z = 22;
 const SHACK_A = { x0: 96, x1: 103.6 };
-const SHACK_B = { x0: 196, x1: 203.6 };
 const PLAZA = { x0: 206, z: 28 }; // the square inside the wall
 const WALL_X = 262; // the wall's inner face
 const WALL_T = 6; // its thickness
@@ -168,7 +167,7 @@ function buildGates(scene) {
   }
   for (const [z, dir] of [[CURB.n - 0.35, -1], [CURB.s + 0.35, 1]]) {
     for (let x = START_X - 2; x < PLAZA.x0 - 2; x += 0.55) {
-      if (inCross(x) || (x > SHACK_A.x0 - 1 && x < SHACK_A.x1 + 1) || (x > SHACK_B.x0 - 1 && x < SHACK_B.x1 + 1)) continue;
+      if (inCross(x) || (x > SHACK_A.x0 - 1 && x < SHACK_A.x1 + 1)) continue;
       if (rand() < 0.12) x += 2;
       B.lump(x, SW, z + dir * rand() * 0.25, 0.5 + rand() * 0.4, 0.2 + rand() * 0.18, 0.35 + rand() * 0.2, rand() < 0.3 ? 0xa9aaac : 0xc7cacf, rand() * 3);
     }
@@ -249,16 +248,17 @@ function buildGates(scene) {
   K.works({ x0: SHACK_A.x1, x1: 128, zf: WALK.n, roof: 'gable', wall: K.BRICK, tin: false, doors: 2, H: 6 });
   K.works({ x0: 131, x1: 152, zf: WALK.n, roof: 'flat', wall: 0x7a4e3c, tin: false, doors: 3, dock: true, H: 6.5 });
   K.building({ x0: 155, x1: 176, floors: 6, panel: '#9a8a78', accent: '#7a5a44' });
-  K.works({ x0: 179, x1: SHACK_B.x0, zf: WALK.n, roof: 'saw', wall: K.BRICK, tin: false, doors: 2, H: 6 });
+  K.works({ x0: 179, x1: PLAZA.x0 - 2, zf: WALK.n, roof: 'saw', wall: K.BRICK, tin: false, doors: 2, H: 6 });
   K.works({ x0: SHACK_A.x1, x1: 124, zf: WALK.s + 0.3, side: 's', roof: 'flat', wall: 0x7a4e3c, tin: false, doors: 2 });
   ST.ruinedWall(127, 140, WALK.s + 5);
   ST.garages(143, 6, WALK.s + 4);
   K.works({ x0: 164, x1: 184, zf: WALK.s + 0.3, side: 's', roof: 'gable', wall: K.BRICK, tin: false, doors: 1 });
-  ST.pipes(186, SHACK_B.x0 - 0.5);
+  K.works({ x0: 187, x1: PLAZA.x0 - 2, zf: WALK.s + 0.3, side: 's', roof: 'flat', wall: 0x7a4e3c, tin: false, doors: 1 });
+  ST.pipes(186, PLAZA.x0 - 2.5);
   ST.lights({ xs: [110, 124, 138, 152, 166, 180, 192], wires: false });
   ST.barrelFire(134, WALK.n + 1.2);
   ST.barrelFire(172, WALK.s - 1.2);
-  ST.clutter(SHACK_A.x1 + 3, SHACK_B.x0 - 3, 11);
+  ST.clutter(SHACK_A.x1 + 3, PLAZA.x0 - 4, 11);
   // tank traps: rows across the road, each with a gap (staggered)
   const hedgehog = (x, z, yaw) => {
     for (const [rx, rz] of [[0.8, 0], [-0.8, 0], [0, 1.57]]) B.piece(1.9, 0.18, 0.18, 0x4a4c50, x, 0.6, z, rx, yaw + 0.8 + rz, 0.7 * Math.sign(rx || 1));
@@ -575,7 +575,6 @@ function buildGates(scene) {
 
   // the checkpoints
   const shackA = buildShack(B, { x0: SHACK_A.x0, x1: SHACK_A.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt });
-  const shackB = buildShack(B, { x0: SHACK_B.x0, x1: SHACK_B.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 1.2 }, heightAt });
 
   B.finish();
   B.mergeStatic();
@@ -586,7 +585,7 @@ function buildGates(scene) {
   B.emitters.push(...room.emitters);
   room.bindBlocks(B.blocks);
   const blocks = B.blocks;
-  for (const k of [shackA, shackB]) k.bindBlocks(blocks);
+  shackA.bindBlocks(blocks);
   const gate = { open: 0, want: 0 };
   const setGate = (open) => {
     gate.want = open ? 1 : 0;
@@ -596,9 +595,9 @@ function buildGates(scene) {
   };
 
   // ---------------------------------------------------- the level script
-  const SECTORS = ['The ring road', 'The wall district', 'The gate'];
+  const SECTORS = ['The ring road', 'The wall district'];
   const B1 = { minX: START_X + 2, maxX: shackA.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
-  const B2 = { minX: shackA.x1 + 1.2, maxX: shackB.x0 - 0.8, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
+  const B2 = { minX: shackA.x1 + 1.2, maxX: PLAZA.x0 + 2, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 };
   const S = { sector: 0, step: 0, t: 0, boss: null, waveT: 0 };
   const bounds = { ...B1 };
   const setBounds = (api, b) => api.setBounds(Object.assign(bounds, b));
@@ -700,10 +699,6 @@ function buildGates(scene) {
   }
   function sector2(api) {
     const x = api.tankPos.x;
-    if (S.step < 5 && x > shackB.x0 - 9) {
-      openShack(api, shackB);
-      go(5);
-    }
     switch (S.step) {
       case 0:
         if (x > SHACK_A.x1 + 4 || S.t > 3) {
@@ -735,17 +730,8 @@ function buildGates(scene) {
         }
         break;
       case 4:
-        if (api.enemiesAlive === 0 && S.t > 1.5) {
-          openShack(api, shackB);
-          go(5);
-        }
-        break;
-      case 5:
-        if (atDoor(api, shackB)) {
-          go(6);
-          if (api.enemiesAlive) api.clearEnemies();
-          api.depot(shackB, { offers: PARTS6, count: 2, onLeave: () => startSector3(api) });
-        }
+        // no second checkpoint: straight on into the square before the gate
+        if (x > PLAZA.x0 - 14) startSector3(api);
         break;
     }
   }
@@ -754,9 +740,8 @@ function buildGates(scene) {
   function startSector3(api) {
     S.sector = 2;
     go(0);
-    setBounds(api, { minX: shackB.x1 + 1.2, maxX: WALL_X - 1.6, minZ: WALK.n + 0.4, maxZ: WALK.s - 0.4 });
+    setBounds(api, { maxX: WALL_X - 1.6 });
     setGate(false);
-    api.sectors(SECTORS, 2, 'Level 6');
     api.objective('The gate');
     api.arrow(new THREE.Vector3(WALL_X - 2, 2, GATE.z), 'Gate');
   }
@@ -796,7 +781,7 @@ function buildGates(scene) {
       case 2:
         if (gate.open > 0.7 && x > WALL_X + WALL_T - 1 && Math.abs(api.tankPos.z - GATE.z) < GATE.half) {
           api.arrow(null);
-          api.sectors(SECTORS, 3, 'Level 6');
+          api.sectors(SECTORS, 2, 'Level 6');
           setBounds(api, { maxX: MAP.x1 + 200 });
           api.win('Level clear', { path: [[WALL_X + WALL_T + 10, GATE.z], [WALL_X + WALL_T + 120, GATE.z]] });
           go(3);
@@ -815,11 +800,15 @@ function buildGates(scene) {
     api.arrow(null);
     api.clearPrompt();
     api.clearEnemies();
-    if (S.sector < 2) {
-      const shack = S.sector === 0 ? shackA : shackB;
-      api.teleport(shack.door.x - 7, shack.door.z, 0);
-      openShack(api, shack);
+    if (S.sector === 0) {
+      api.teleport(shackA.door.x - 7, shackA.door.z, 0);
+      openShack(api, shackA);
       go(5);
+      return true;
+    }
+    if (S.sector === 1) {
+      api.teleport(PLAZA.x0 - 10, 0, 0);
+      startSector3(api);
       return true;
     }
     return false;
@@ -835,7 +824,7 @@ function buildGates(scene) {
 
   function update(dt, t, ctx = {}) {
     B.update(dt, t, ctx);
-    for (const k of [shackA, shackB]) k.update(dt, t);
+    shackA.update(dt, t);
     room.update(dt, t, ctx);
     // the gate's leaves: swing slowly out
     gate.open += THREE.MathUtils.clamp(gate.want - gate.open, -dt * 2, dt * 0.35);
@@ -856,7 +845,7 @@ function buildGates(scene) {
     spawn: { x: START_X + 5, z: -0.5, yaw: 0 },
     bounds,
     script: S,
-    shacks: [shackA, shackB],
+    shacks: [shackA],
     start,
     update,
     skipStage,

@@ -25,6 +25,7 @@ const DEFAULTS = {
   keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR' },
   // touch
   aimAssist: true, // touch: a tap near an enemy locks onto it; off: tap/drag to aim
+  dragShoot: true, // touch: drag to aim, let go to fire (overrides aimAssist)
   buttons: 'normal', // 'small' | 'normal' | 'large'
   hand: 'right', // 'right': stick left, FIRE right; 'left': mirrored
   stick: 1, // stick sensitivity
@@ -214,7 +215,13 @@ export function createSettingsMenu({ touch = () => false } = {}) {
 
     if (touch()) {
       box.append(head('Touch controls'));
-      box.append(row('Aiming', dropdown(s.aimAssist ? 'assist' : 'manual', [['assist', 'Tap to lock'], ['manual', 'Manual aim']], (v) => setSetting('aimAssist', v === 'assist')), s.aimAssist ? 'Tap near an enemy to lock onto it; the turret keeps tracking it. Tap open ground to aim there.' : 'Tap or drag on the screen to aim; FIRE shoots there.'));
+      const aimMode = s.dragShoot ? 'drag' : s.aimAssist ? 'assist' : 'manual';
+      const aimHelp = { drag: 'Drag anywhere to aim (it snaps onto a machine under your finger); let go to fire. Autocannons fire while you hold.', assist: 'Tap near an enemy to lock onto it; the turret keeps tracking it. Tap open ground to aim there.', manual: 'Tap or drag on the screen to aim; FIRE shoots there.' };
+      const setAim = (v) => {
+        setSetting('dragShoot', v === 'drag');
+        setSetting('aimAssist', v === 'assist');
+      };
+      box.append(row('Aiming', dropdown(aimMode, [['drag', 'Drag to shoot'], ['assist', 'Tap to lock'], ['manual', 'Manual aim']], setAim), aimHelp[aimMode]));
       box.append(row('Button size', dropdown(s.buttons, [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], (v) => setSetting('buttons', v))));
       box.append(row('Layout', dropdown(s.hand, [['right', 'Stick left, fire right'], ['left', 'Stick right, fire left']], (v) => setSetting('hand', v))));
       box.append(row('Stick sensitivity', dropdown(s.stick, [[0.7, 'Low'], [1, 'Normal'], [1.35, 'High']], (v) => setSetting('stick', +v))));

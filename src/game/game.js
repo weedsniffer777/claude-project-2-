@@ -1834,6 +1834,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         stick.x = dx / STICK_R;
         stick.y = dy / STICK_R;
         hud.setStick(true, dx, dy);
+      } else if (e.pointerId === dragTouch) {
+        dragPos = [e.clientX, e.clientY];
+        dragAim();
       } else aimAt(e.clientX, e.clientY);
       return;
     }
@@ -1875,7 +1878,17 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         aimAt(e.clientX, e.clientY);
         if (run.arty > 0) strikeOnAim = true; // the spot tapped, once the aim ray's found it
         else if (run.aiming > 0) pierceTouch = e.pointerId; // drag to aim, let go to fire
-        else if (!latch(e.clientX, e.clientY)) {
+        else if (settings().dragShoot && run.gun) {
+          // drag to shoot: the aim follows the finger (snapping onto a
+          // machine right under it); autocannons fire while it's down,
+          // the rest fire as it lets go
+          dragTouch = e.pointerId;
+          dragPos = [e.clientX, e.clientY];
+          autoTarget = null;
+          manualAim = true;
+          dragAim();
+          if (holdFire()) trigger = true;
+        } else if (!latch(e.clientX, e.clientY)) {
           aimTouch = e.pointerId; // just aiming at the spot (FIRE fires); drag to adjust
           manualAim = true;
         }
@@ -1892,6 +1905,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   };
   let aimTouch = null;
   let pierceTouch = null;
+  let dragTouch = null;
+  let dragPos = null;
   const onWinUp = (e) => {
     if (e.pointerType !== 'touch' && e.button === 0) trigger = false;
   };
@@ -1900,6 +1915,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (e.pointerType === 'mouse' && e.button === 0) trigger = false;
     if (e.pointerId === pierceTouch) firePierce();
     if (e.pointerId === aimTouch) aimTouch = null;
+    if (e.pointerId === dragTouch) {
+      dragTouch = null;
+      if (holdFire()) trigger = false;
+      else fire();
+    }
     if (e.pointerId === fireTouch) {
       trigger = false;
       fireTouch = null;
@@ -1954,7 +1974,25 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     hud.swapPulse?.();
     return true;
   }
+  // drag to shoot: aim at the finger, or at a machine close under it
+  function dragAim() {
+    const [cx, cy] = dragPos;
+    const maxPx = Math.max(window.innerWidth, window.innerHeight) * 0.07;
+    let best = null;
+    let bestD = maxPx;
+    for (const e of enemies.alive) {
+      if (e.delay > 0) continue;
+      const es = toScreen(enemies.aimPoint(e));
+      const d = Math.hypot(es.x - cx, es.y - cy);
+      if (d < bestD) {
+        bestD = d;
+        best = es;
+      }
+    }
+    aimAt(best ? best.x : cx, best ? best.y : cy);
+  }
   function touchAim() {
+    if (dragTouch !== null) return void dragAim(); // (the machine under it moves)
     if (pierceTouch !== null || run.arty > 0 || run.mode !== 'field') return;
     if (aimTouch !== null || manualAim) return;
     if (!autoTarget?.alive) {
@@ -3029,7 +3067,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       else if (stats.mag) hud.setAmmo({ n: run.mag, max: stats.mag, load: run.magT > 0 ? 1 - run.magT / stats.magReload : null });
       else hud.setAmmo({ n: reload >= 1 ? 1 : 0, max: 1, load: reload >= 1 ? null : reload });
       hud.setPassives(live ? passives() : []);
-      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting || run.retreat > 0, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt(true) : boostPicture(boosting, stats.afterburner ? 'afterburner' : 'normal') } : null);
+      hud.setAbility(run.rockets && live ? { k: 1 - run.boostCd / stats.boostCooldown, left: run.boostCd, lit: boosting || run.retreat > 0, active: run.boost > 0 ? run.boost / stats.boostTime : run.dash > 0 ? run.dash / stats.dashTime : run.retreat > 0 ? run.retreat / stats.retreatTime : null, art: def.move === 'retreat' ? retreatArt(true) : boostPicture(true, stats.afterburner ? 'afterburner' : 'normal') } : null);
       const abilityCd = def.ability === 'pierce' ? stats.pierceCooldown : def.ability === 'salvo' ? stats.salvoCooldown : stats.breakCooldown;
       const eq = equipId();
       hud.setAbility(eq && run.gun && live ? { k: 1 - run.equipCd / EQUIPMENT[eq].cooldown, left: run.equipCd, lit: run.arty > 0 || !!run.msl || run.barrier > 0, active: run.arty > 0 ? run.arty / (DESIGNATE[run.armed] || 8) : run.barrier > 0 ? run.barrier / EQUIPMENT.shield.time : null, cancel: run.arty > 0, art: equipmentArt(eq) } : null, 2);
