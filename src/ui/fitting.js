@@ -647,9 +647,25 @@ export function createFitting({ renderer, cursor }) {
         pop.append(b);
       }
       root.append(pop);
+      // under the slot if it fits; else over it; else beside it, kept on
+      // screen (a phone on its side has little room under the panel)
+      const z = uiZoom();
       const r = box.getBoundingClientRect();
-      pop.style.left = `${Math.round((r.left) / uiZoom())}px`;
-      pop.style.top = `${Math.round((r.bottom + 22) / uiZoom())}px`;
+      const vw = window.innerWidth / z;
+      const vh = window.innerHeight / z;
+      const pw = pop.offsetWidth;
+      const ph = pop.offsetHeight;
+      let left = r.left / z;
+      let top = r.bottom / z + 22;
+      if (top + ph > vh - 8) {
+        if (r.top / z - ph - 22 >= 8) top = r.top / z - ph - 22;
+        else {
+          left = r.right / z + 14;
+          top = Math.max(8, Math.min(r.top / z, vh - ph - 8));
+        }
+      }
+      pop.style.left = `${Math.round(Math.max(8, Math.min(left, vw - pw - 8)))}px`;
+      pop.style.top = `${Math.round(Math.max(8, top))}px`;
     });
   }
 
