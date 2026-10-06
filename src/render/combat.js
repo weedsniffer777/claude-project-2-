@@ -258,10 +258,11 @@ export class CombatFx {
   pierceShot(from, dir, len, { onPass, onEnd }) {
     const mat = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false });
     const g = new THREE.Group();
+    // (far thicker than the barrel: there's no mistaking it)
     const layers = [
-      [0.16, mat(0xffffff, 1)],
-      [0.38, mat(0xfff6e0, 0.6)],
-      [0.8, mat(0xffe2b0, 0.22)],
+      [0.42, mat(0xffffff, 1)],
+      [0.95, mat(0xfff6e0, 0.6)],
+      [1.9, mat(0xffe2b0, 0.22)],
     ].map(([w, m]) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), m);
       mesh.userData = { w, base: m.opacity };
@@ -269,9 +270,9 @@ export class CombatFx {
       return mesh;
     });
     const head = [
-      [0.32, mat(0xffffff, 1)],
-      [0.6, mat(0xfff6e0, 0.55)],
-      [1.0, mat(0xffe8c0, 0.2)],
+      [0.7, mat(0xffffff, 1)],
+      [1.3, mat(0xfff6e0, 0.55)],
+      [2.2, mat(0xffe8c0, 0.2)],
     ].map(([r, m]) => {
       const mesh = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), m);
       g.add(mesh);
@@ -281,16 +282,16 @@ export class CombatFx {
     // it, and rings of pressure peeling off behind
     const machMat = mat(0xffffff, 0.35);
     machMat.side = THREE.DoubleSide;
-    const mach = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.6, 16, 1, true), machMat);
+    const mach = new THREE.Mesh(new THREE.ConeGeometry(2.4, 3.2, 16, 1, true), machMat);
     const aim = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
     mach.quaternion.copy(aim);
     g.add(mach);
     head.push(mach);
     const rings = [];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 14; i++) {
       const rm = mat(0xffffff, 0);
       rm.side = THREE.DoubleSide;
-      const r = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 20), rm);
+      const r = new THREE.Mesh(new THREE.RingGeometry(1.7, 2.1, 24), rm);
       r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
       r.visible = false;
       g.add(r);
@@ -301,8 +302,8 @@ export class CombatFx {
     this.pierces.push({ from: from.clone(), dir: dir.clone(), len, along: 0, onPass, onEnd, g, layers, head, rings, ringT: 0, ringI: 0, fade: 0 });
   }
   updatePierces(dt) {
-    const SPEED = 55;
-    const FADE = 1.1;
+    const SPEED = 36; // (slow and heavy)
+    const FADE = 1.6;
     for (let i = (this.pierces?.length || 0) - 1; i >= 0; i--) {
       const s = this.pierces[i];
       const flying = s.along < s.len;
@@ -312,21 +313,22 @@ export class CombatFx {
         s.onPass(a0, s.along);
         const at = s.from.clone().addScaledVector(s.dir, s.along);
         for (const h of s.head) h.position.copy(at);
-        s.head[3].position.addScaledVector(s.dir, -0.6); // the cone sits just behind the round
+        s.head[3].position.addScaledVector(s.dir, -1.3); // the cone sits just behind the round
         // a pressure ring left behind every few hundredths of a second
         s.ringT -= dt;
         if (s.ringT <= 0) {
-          s.ringT = 0.03;
+          s.ringT = 0.035;
           const r = s.rings[s.ringI++ % s.rings.length];
           r.t = 0;
           r.mesh.position.copy(at);
           r.mesh.visible = true;
         }
         s.head[0].scale.setScalar(0.9 + Math.random() * 0.25);
-        this.glow.light(at, 0xffc070, 30, 0.06);
+        this.glow.light(at, 0xffc070, 55, 0.08);
         // embers shed off the head, a few wisps of smoke
-        for (let k = 0; k < 4; k++) this.fx.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 2.5, (Math.random() - 0.5) * 3).addScaledVector(s.dir, -2), { color: k % 2 ? 0xffd36b : 0xff9a3a, life: 0.3 + Math.random() * 0.3, size: 0.07, gravity: 5, glow: true });
-        if (Math.random() < 0.5) this.puffs.spawn(at, new THREE.Vector3(0, 0.6, 0), { color: 0xcfcac0, s0: 0.15, s1: 0.45, life: 0.7, drag: 2, lift: 0.8, fadeAt: 0.4 });
+        // a shower of sparks thrown off it, a few big ones
+        for (let k = 0; k < 14; k++) this.fx.spawn(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2, (Math.random() - 0.5) * 1.2)), new THREE.Vector3((Math.random() - 0.5) * 9, Math.random() * 7, (Math.random() - 0.5) * 9).addScaledVector(s.dir, -3), { color: k % 3 ? 0xffd36b : k % 2 ? 0xffffff : 0xff9a3a, life: 0.35 + Math.random() * 0.45, size: k < 3 ? 0.16 : 0.08, gravity: 9, glow: true });
+        for (let k = 0; k < 2; k++) this.puffs.spawn(at.clone().add(new THREE.Vector3(0, (Math.random() - 0.5) * 1.5, 0)), new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.8, (Math.random() - 0.5) * 1.5), { color: 0xcfcac0, s0: 0.35, s1: 1.1, life: 0.9, drag: 2, lift: 0.8, fadeAt: 0.4 });
         if (s.along >= s.len) {
           for (const h of s.head) h.visible = false;
           s.onEnd(at);
@@ -337,8 +339,8 @@ export class CombatFx {
           r.mesh.visible = false;
           continue;
         }
-        r.t = Math.min(1, r.t + dt / 0.35);
-        r.mesh.scale.setScalar(0.4 + r.t * 1.8);
+        r.t = Math.min(1, r.t + dt / 0.5);
+        r.mesh.scale.setScalar(0.5 + r.t * 2.2);
         r.mesh.material.opacity = (1 - r.t) * 0.7;
       }
       // the trail: from the muzzle to the head, thinning and fading once it's landed

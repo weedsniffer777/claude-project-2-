@@ -11,6 +11,14 @@ import { createSpider } from '../models/spider.js';
 import { pushOut } from './collide.js';
 import { createGunship } from '../models/gunship.js';
 import { shieldCross } from './shield.js';
+// a blast (or a rammer) out in front of the shield: the shield takes it,
+// not the tank behind it
+const shielded = (ctx, at) => {
+  const sh = ctx.shield;
+  if (!sh) return false;
+  const tp = new THREE.Vector3(sh.x, sh.y + 1, sh.z);
+  return !!shieldCross(sh, new THREE.Vector3(at.x, Math.min(Math.max(at.y, sh.y), sh.y + sh.h - 0.1), at.z), tp);
+};
 import { ENEMY_LAYER } from '../render/pixel.js';
 
 const DOG = {
@@ -547,6 +555,7 @@ export class Enemies {
   damage(e, amount, blastFrom = null) {
     if (!e.alive) return false;
     if (e.invuln) return false; // (the mech, mid-overload)
+    if (e.finisher && !e.finishing) return false; // (level 1's first time: only the Piercing shot it's being taught on)
     if (e.dazed > 0) amount *= e.stats.dazeTaken || 1;
     // the mech doesn't just go: blasts all over it, pieces torn off, then
     // it comes apart
@@ -1313,6 +1322,19 @@ export class Enemies {
       sh.t += dt;
       const u = Math.min(1, sh.t / sh.total);
       const p = arc(sh, u);
+      // into the shield: it bursts there
+      const hitSh = sh.last ? shieldCross(ctx.shield, sh.last, p) : null;
+      if (hitSh) {
+        sh.ring.removeFromParent();
+        sh.dot.removeFromParent();
+        sh.ring.material.dispose();
+        sh.dot.material.dispose();
+        sh.mesh.removeFromParent();
+        e.shells.splice(i, 1);
+        this.combat.explode(hitSh.point);
+        ctx.onShieldHit?.(hitSh.point);
+        continue;
+      }
       const ahead = arc(sh, Math.min(1, u + 0.02));
       sh.mesh.position.copy(p);
       if (ahead.distanceToSquared(p) > 1e-6) {
@@ -1338,7 +1360,10 @@ export class Enemies {
         this.combat.explode(at);
         this.combat.shake = Math.max(this.combat.shake, 0.25);
         const tb = ctx.tankBox;
-        if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.artyBlast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(S.artyDamage, at);
+        if (tb && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < S.artyBlast + Math.max(tb.hx, tb.hz) * 0.5) {
+          if (shielded(ctx, at)) ctx.onShieldHit?.(at);
+          else ctx.onTankHit?.(S.artyDamage, at);
+        }
       }
     }
   }
@@ -1451,7 +1476,8 @@ export class Enemies {
         const off = Math.abs(rx * e.dashDir.z - rz * e.dashDir.x);
         if (along > -2 && along < 3.2 && off < S.dashWidth / 2 + Math.max(tb.hx, tb.hz) * 0.6) {
           e.dashHit = true;
-          ctx.onTankHit?.(S.dashDamage, new THREE.Vector3(tb.x, 1, tb.z));
+          if (shielded(ctx, e.pos)) ctx.onShieldHit?.(e.pos.clone().setY(1.2));
+          else ctx.onTankHit?.(S.dashDamage, new THREE.Vector3(tb.x, 1, tb.z));
           this.combat.shake = Math.max(this.combat.shake, 0.6);
         }
       }
@@ -1637,14 +1663,14 @@ export class Enemies {
       this.combat.explode(at);
       this.combat.shake = Math.max(this.combat.shake, 0.35);
       const tb = ctx.tankBox;
-      if (tb && !b.hitTank && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < b.shell.blast + Math.max(tb.hx, tb.hz) * 0.5) ctx.onTankHit?.(b.shell.splash, at);
+      if (tb && !b.hitTank && !ctx.over && Math.hypot(at.x - tb.x, at.z - tb.z) < b.shell.blast + Math.max(tb.hx, tb.hz) * 0.5 && !shielded(ctx, at)) ctx.onTankHit?.(b.shell.splash, at);
       return;
     }
     this.combat.glow.flash(at, 0xffb070, 0.15, 1.2, 0.08);
     this.combat.fx.burst(at, { count: 12, speed: 5, color: 0xffb347, life: 0.3, size: 0.07, gravity: 10 });
     for (let k = 0; k < 3; k++) this.combat.puffs.spawn(at, new THREE.Vector3((Math.random() - 0.5) * 2, 1 + Math.random(), (Math.random() - 0.5) * 2), { color: 0x6f6a62, s0: 0.2, s1: 0.6, life: 0.7, drag: 3, lift: 0.5, fadeAt: 0.3 });
     const tb = ctx.tankBox;
-    if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
+    if (tb && !b.hitTank && Math.hypot(at.x - tb.x, at.z - tb.z) < Math.max(tb.hx, tb.hz) + 0.6 && !shielded(ctx, at)) ctx.onTankHit?.(Math.round(b.damage * 0.4), at);
   }
   // the mech's artillery rockets still in the air: gone with it
   clearShells(e) {

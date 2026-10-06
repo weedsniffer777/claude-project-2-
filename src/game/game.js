@@ -58,7 +58,7 @@ const INPUT_RIGHT = new THREE.Vector3(1, 0, 1).normalize();
 
 // Piercing shot (the battle tank's E): a line along the gun
 const PIERCE_LEN = 32;
-const PIERCE_HALF = 1.0; // how close to the line a machine must be (x its scale)
+const PIERCE_HALF = 1.4; // how close to the line a machine must be (x its scale)
 // Breakthrough (the light tank's Shift): the shockwave at the end of the dash
 const SHOCK_R = 3.2;
 const SHOCK_DAMAGE = 45;
@@ -941,7 +941,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   }
 
   // Back at the last checkpoint's door: a fresh tank with its parts, full
-  // hull, the machines that got you gone. Once per level.
+  // hull, the enemies where they've got to. Once per level.
   function revive() {
     const shack = run.checkpoint;
     hud.hideEnd();
@@ -956,8 +956,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     tank.group.position.set(shack.outside.x - 2.5, 0, shack.outside.z);
     tank.group.rotation.y = 0;
     speed = 0;
-    enemies.retire();
-    Object.assign(run, { over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, sal: null, retreat: 0, magT: 0, mag: stats.mag, mReload: false, trickleT: 0, rangeT: 0 });
+    // the fight's still on: the enemies stay as they are (they kept going
+    // while you were down); only the rounds in the air are gone, and a
+    // moment's grace to get moving
+    enemies.clearBolts();
+    Object.assign(run, { grace: 2, over: false, revived: true, hp: stats.maxHp, boost: 0, dash: 0, brk: 0, aiming: 0, arty: 0, msl: null, sal: null, retreat: 0, magT: 0, mag: stats.mag, mReload: false, trickleT: 0, rangeT: 0 });
     reload = 1;
     hud.setHull(run.hp, stats.maxHp);
     camTarget.set(pos.x + 0.6, 0.8, pos.z);
@@ -997,6 +1000,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.damage(at.clone().setY(2.4), 0, 'heal', 'Blocked');
       return;
     }
+    if (run.grace > 0) return; // (just revived)
     if (run.hard && run.boss?.e?.alive) damage *= 1.15; // (Hard: a boss fight hits harder)
     run.hp -= damage * stats.armor * (run.shield > 0 ? 1 - stats.breakShield : 1);
     hud.setHull(run.hp, stats.maxHp);
@@ -1669,9 +1673,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const hit = new Set();
     const broke = new Set();
     // the launch: a huge flash, blades of light, a ring of smoke at the muzzle
-    combat.glow.flash(from, 0xffffff, 0.4, 2.2, 0.12);
-    combat.glow.flash(from, 0xffb347, 0.6, 3.0, 0.25);
-    combat.glow.spike(from, dir, 0xfff6d6, 4.5, 0.5, 0.14);
+    combat.glow.flash(from, 0xffffff, 0.8, 4.0, 0.16);
+    combat.glow.flash(from, 0xffb347, 1.2, 5.5, 0.32);
+    combat.glow.spike(from, dir, 0xfff6d6, 7, 1.0, 0.18);
     const side = new THREE.Vector3(-dir.z, 0, dir.x);
     for (const s2 of [-1, 1]) combat.glow.spike(from, dir.clone().addScaledVector(side, s2 * 0.8).normalize(), 0xffc24a, 1.6, 0.25, 0.1);
     combat.glow.light(from, 0xffc070, 90, 0.25);
@@ -1680,8 +1684,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const r = side.clone().multiplyScalar(Math.cos(a)).add(new THREE.Vector3(0, Math.sin(a), 0));
       combat.puffs.spawn(from.clone().addScaledVector(r, 0.2), r.multiplyScalar(3.5).addScaledVector(dir, 1.5), { color: 0xd8d6cc, s0: 0.15, s1: 0.4, life: 0.5, drag: 4, lift: 0.6, fadeAt: 0.3 });
     }
-    combat.shake = Math.max(combat.shake, 0.6);
-    run.hitstop = Math.max(run.hitstop, 0.06);
+    combat.shake = Math.max(combat.shake, 0.8);
+    run.hitstop = Math.max(run.hitstop, 0.08);
+    run.dilate = Math.max(run.dilate || 0, 0.7); // the shot goes in slow motion
+    for (let i = 0; i < 30; i++) combat.fx.spawn(from, dir.clone().multiplyScalar(4 + Math.random() * 8).add(new THREE.Vector3((Math.random() - 0.5) * 7, Math.random() * 5, (Math.random() - 0.5) * 7)), { color: i % 3 ? 0xffd36b : 0xffffff, life: 0.4 + Math.random() * 0.4, size: i < 6 ? 0.15 : 0.08, gravity: 9, glow: true });
     combat.pierceShot(from, dir, len, {
       // as the round passes along the line from a0 to a1
       onPass(a0, a1) {
@@ -1693,6 +1699,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           if (along < a0 - 0.6 || along > a1 + 0.6) continue;
           if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
           hit.add(e);
+          if (e.finisher) e.finishing = true;
           const dmg = e.finisher ? Math.max(stats.pierceDamage, e.hp + 1) : stats.pierceDamage; // (the tutorial boss: the shot that finishes it)
           const killed = enemies.damage(e, dmg, from.clone());
           const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
@@ -1701,7 +1708,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           combat.sparkBlast(p);
           combat.shake = Math.max(combat.shake, 0.5);
           run.hitstop = Math.max(run.hitstop, 0.05);
-          run.dilate = Math.max(run.dilate || 0, 0.45); // and time drags for a moment
+          run.dilate = Math.max(run.dilate || 0, 0.6); // and time drags for a moment
         }
         for (const c of level.crushables || []) {
           if (c.done || c.armored || broke.has(c)) continue;
@@ -2917,6 +2924,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       strikeFrame(dt, t);
       missileFrame(dt);
       run.shield = Math.max(0, run.shield - dt);
+      if (run.grace > 0) run.grace -= dt;
       if (run.chain > 0) {
         run.chainT -= dt;
         if (run.chainT <= 0) {
