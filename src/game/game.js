@@ -13,6 +13,7 @@ import { createFitting } from '../ui/fitting.js';
 import { CombatFx } from '../render/combat.js';
 import { wrapAngle, approachAngle } from '../models/kit.js';
 import { injectDevKitStyles } from '../devkit/style.js';
+import { CG } from '../platform.js';
 import { LEVELS } from '../levels/index.js';
 import { Enemies } from './enemies.js';
 import { createHud } from './hud.js';
@@ -71,8 +72,8 @@ const HUNT_MARK = 0.24; // real seconds between its locks
 const HUNT_DWELL = 0.22; // real seconds the gun stays on each target after its shot
 const HUNT_FIRE_SLOW = 0.4; // game speed while it fires
 
-export function createGame({ renderer, pixel, level: startLevel, onExit = null }) {
-  injectDevKitStyles();
+export function createGame({ renderer, pixel, level: startLevel, onExit = null, adBreak = (go) => go() }) {
+  if (!CG) injectDevKitStyles();
   const canvas = renderer.domElement;
   let debug = null;
   let bowShock = null; // Breakthrough's shock cone, on the light tank
@@ -914,7 +915,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         'Destroyed',
         [['Enemies destroyed', enemies.killed], ['Scraps picked up', run.scrap]],
         'Retry',
-        () => loadLevel(levelDef.id),
+        () => adBreak(() => loadLevel(levelDef.id)),
         `Half recovered: +${kept} scraps${total != null ? ` · ${total} total` : ''}`,
         partCards(),
         onExit ? ['Exit', () => onExit()] : null,
@@ -940,7 +941,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const res = bankRun({ xp, time, wave: waves, kills });
     hud.showEndless(
       { title, time, waves, kills, scraps, tokens: run.tokens || 0, xp, total, ...res },
-      { retry: () => (hud.hideEndless(), loadLevel(levelDef.id)), exit: onExit ? () => (hud.hideEndless(), onExit()) : null },
+      { retry: () => (hud.hideEndless(), adBreak(() => loadLevel(levelDef.id))), exit: onExit ? () => (hud.hideEndless(), onExit()) : null },
     );
     setCursor();
   }
@@ -3438,6 +3439,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.update(realDt, camera, canvas);
     },
     loadLevel,
+    // being played right now (not paused, in a menu or over): the portal's told
+    get active() {
+      return run.mode === 'field' && !run.paused && !run.over;
+    },
     // (the phone's been turned upright: stop and show the pause menu)
     pause() {
       if (!run.paused && !run.over && run.mode === 'field') setPaused(true);

@@ -2,6 +2,9 @@
 // tank's loadout (the parts it had at the end of its last level), the levels
 // beaten. Every key starts 'scavenger.' (the dev kit's reset clears them all).
 // Storage can be missing or blocked: everything falls back to defaults.
+// (On CrazyGames it's the portal's store, kept with the player's account.)
+import { store } from '../platform.js';
+
 const K = {
   bank: 'scavenger.bank',
   owned: 'scavenger.owned',
@@ -33,7 +36,7 @@ let stage = null; // key -> value, while a run's open
 function read(key, fallback) {
   if (stage && staged(key) && key in stage) return structuredClone(stage[key]);
   try {
-    const v = localStorage.getItem(key);
+    const v = store.getItem(key);
     return v == null ? fallback : JSON.parse(v);
   } catch {
     return fallback;
@@ -45,7 +48,7 @@ function write(key, value) {
     return;
   }
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    store.setItem(key, JSON.stringify(value));
   } catch {
     // not saved: storage blocked
   }

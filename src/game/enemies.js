@@ -823,9 +823,11 @@ export class Enemies {
         vx = wx;
         vz = wz;
         speed = DOG.runSpeed;
-      } else if ((dist > DOG.range || !e.los) && (nav = ctx.navGoal?.(e.pos, tankPos))) {
+      } else if ((nav = ctx.navGoal?.(e.pos, tankPos))) {
         // the tank's up (or down) a level: the level says which way round
-        // (up the ramp, down off the deck)
+        // (up the ramp, down off the deck). Always, even in range and in
+        // sight: it keeps shooting on the move, but its legs go the way
+        // round, never at the wall nearest the tank
         vx = nav.x - e.pos.x;
         vz = nav.z - e.pos.z;
         speed = DOG.runSpeed;

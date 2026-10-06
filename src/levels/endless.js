@@ -105,15 +105,20 @@ const NAV = {
 function navGoal(p, t) {
   const hp = heightAt(p.x, p.z);
   const ht = heightAt(t.x, t.z);
-  if (Math.abs(hp - ht) < 1.2) {
+  const onRamp = rampAt(p.x, p.z) != null;
+  const tRamp = rampAt(t.x, t.z) != null;
+  // near the bottom of the ramp, level with it but one on the ramp and one
+  // off it: still round by the foot (its side wall's between them)
+  const low = Math.max(hp, ht) < DECK - 1 && onRamp !== tRamp;
+  if (Math.abs(hp - ht) < 1.2 && !low) {
     // (level with it, but on the deck vs the merge lane: through the gap)
     const pDeck = p.z < DECKZ.s;
     const tDeck = t.z < DECKZ.s;
     if (hp > DECK - 0.5 && pDeck !== tDeck && (t.x < MERGE.x0 || t.x > MERGE.x1 || p.x < MERGE.x0 || p.x > MERGE.x1)) return NAV.gate;
     return null;
   }
-  const onRamp = rampAt(p.x, p.z) != null;
-  if (ht > hp) {
+  if (low && onRamp) return NAV.out;
+  if (ht > hp || low) {
     // up: on the ramp, climb it; on the ground, get onto its foot
     if (onRamp) return NAV.top;
     if (p.x > BASE.x0 - 1 && p.z < AVE.wn + 1) return { x: p.x, z: AVE.wn + 3 }; // (east of the base: out onto the avenue first)

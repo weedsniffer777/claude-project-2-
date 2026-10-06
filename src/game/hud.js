@@ -2,6 +2,7 @@
 // cannon's reload ring, floating damage numbers, an on-screen target marker
 // and the end-of-run panel. Pixel type, black panels, bone-white text with
 // hazard amber; red only means danger (damage taken, low hull, machines).
+import { CG } from '../platform.js';
 import { watchPopups } from '../ui/fit.js';
 import { rebindHints, settings, keyLabel } from '../ui/settings.js';
 import * as THREE from 'three';
@@ -509,13 +510,30 @@ export const CURSOR = (() => {
   return `url(${c.toDataURL()}) ${C} ${C}, crosshair`;
 })();
 
+const LATIN = 'U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD';
+const LATIN_EXT = 'U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF';
+const LOCAL_FONTS = [
+  ['Pixelify Sans', '400 600', 'pixelify'],
+  ['Silkscreen', '400', 'silkscreen'],
+]
+  .flatMap(([family, weight, file]) => [
+    [family, weight, `${file}-latin-ext`, LATIN_EXT],
+    [family, weight, `${file}-latin`, LATIN],
+  ])
+  .map(([family, weight, file, range]) => `@font-face { font-family: '${family}'; font-style: normal; font-weight: ${weight}; font-display: swap; src: url(./fonts/${file}.woff2) format('woff2'); unicode-range: ${range}; }`)
+  .join('\n');
+
 let injected = false;
 function inject() {
   if (injected) return;
   injected = true;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap';
+  // (the CrazyGames build carries its own copies: no calls out to Google)
+  const link = document.createElement(CG ? 'style' : 'link');
+  if (CG) link.textContent = LOCAL_FONTS;
+  else {
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&display=swap';
+  }
   document.head.append(link);
   fixPixelifyH(link);
   const style = document.createElement('style');
@@ -1109,12 +1127,15 @@ export function createHud() {
         el.querySelector('[data-act="resume"]').focus();
       };
       el.querySelector('[data-act="exit"]').hidden = !acts.exit;
+      el.querySelector('[data-act="exit"]').textContent = acts.endless ? 'End run' : 'Exit';
       // (Endless: leaving ends the run, and keeps what it earned)
       el.querySelector('.ask h2').textContent = acts.endless ? 'End the run?' : 'Exit level?';
       el.querySelector('.ask > p').textContent = acts.endless ? "You keep this run's scraps and XP." : "This run's scraps will be lost!";
       for (const b of menu.querySelectorAll('button')) b.onclick = () => acts[b.dataset.act]?.();
       // Exit asks first: the run's progress is lost
+      // (Endless doesn't: ending the run keeps what it earned, so it just ends)
       el.querySelector('[data-act="exit"]').onclick = () => {
+        if (acts.endless) return void acts.exit?.();
         menu.hidden = true;
         ask.hidden = false;
         el.querySelector('[data-ask="no"]').focus();

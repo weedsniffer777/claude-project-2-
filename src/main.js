@@ -12,6 +12,7 @@ import { LEVELS } from './levels/index.js';
 import { CURSOR } from './game/hud.js';
 import { PARTS } from './game/parts.js';
 import { settings, onSettings } from './ui/settings.js';
+import { CG, platform, store } from './platform.js';
 
 // The themed cursor everywhere: over panels, text and empty UI too (not the
 // browser's arrow or text beam). Zero specificity, so anything that sets
@@ -28,13 +29,15 @@ canvas { touch-action: none; }`;
   document.addEventListener('selectstart', (e) => e.preventDefault());
 }
 
-const params = new URLSearchParams(location.search);
+// (the CrazyGames build takes no dev switches from the address)
+const params = CG ? new URLSearchParams() : new URLSearchParams(location.search);
 if (params.has('shot')) document.body.classList.add('dk-shot');
 
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;
 // The game (a run), and the base between runs: Exit at the end of a run goes
 // to the base; deploying from its planning table starts a run.
-const game = createGame({ renderer, pixel, level: params.get('level'), onExit: () => setMode(hub) });
+// (a run over: the portal may put an ad in before the base or the next go)
+const game = createGame({ renderer, pixel, level: params.get('level'), onExit: () => platform.midgame(() => setMode(hub)), adBreak: platform.midgame });
 const hub = createHub({
   renderer,
   pixel,
@@ -43,7 +46,7 @@ const hub = createHub({
     setMode(game);
   },
 });
-const viewer = createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
+const viewer = CG ? null : createModelViewer({ renderer, pixel, models: MODELS, params, onExit: () => setMode(game) });
 // The pixel grid is part of the art: always 540 rows, whatever the screen.
 // Quality tiers only trade shadow detail and lamp lights.
 //
@@ -63,7 +66,7 @@ const TIERS = [
 const AUTO_KEY = 'scavenger.autoTier';
 const readAuto = () => {
   try {
-    const v = localStorage.getItem(AUTO_KEY);
+    const v = store.getItem(AUTO_KEY);
     return v == null ? 0 : +v;
   } catch {
     return 0;
@@ -71,7 +74,7 @@ const readAuto = () => {
 };
 const writeAuto = (i) => {
   try {
-    localStorage.setItem(AUTO_KEY, String(i));
+    store.setItem(AUTO_KEY, String(i));
   } catch {
     // storage blocked: settle again next time
   }
@@ -136,7 +139,8 @@ function watchFrameRate(dt) {
 }
 
 renderer.info.autoReset = false;
-const devkit = createDevKit({
+// (none in the CrazyGames build: no DEV button, no frame counter)
+const devkit = CG ? { countFrame() {}, close() {}, isOpen: false } : createDevKit({
   tools: [
     { id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) },
     {
@@ -293,8 +297,10 @@ window.addEventListener('keydown', (e) => {
 // straight into level 1 until it's been beaten once; after that, the base
 const beatenOne = save.cleared().some((k) => k === 'avenue' || k === 'avenue:hard');
 setMode(params.get('devkit') === 'viewer' ? viewer : params.has('base') || (beatenOne && !params.has('level')) ? hub : game);
-window.__game = game.debug; // dev/test hook
-window.__hub = hub;
+if (!CG) {
+  window.__game = game.debug; // dev/test hook
+  window.__hub = hub;
+}
 
 const clock = new THREE.Timer();
 clock.connect(document);
@@ -315,11 +321,16 @@ function frame(now = performance.now()) {
   devkit.countFrame(raw, () => `${TIERS[tier].name}${autoQuality ? ' (auto)' : ''} · ${renderer.info.render.calls} draws`);
   requestAnimationFrame(frame); // (asked for first: one bad frame never stops the game)
   renderer.info.reset(); // (counted over the whole frame, every pass: the dev kit's draw count)
-  try {
-    mode.frame(dt, clock.getElapsed());
-  } catch (err) {
-    reportError(err);
+  // (held still while the portal shows an ad)
+  if (!platform.inAd) {
+    try {
+      mode.frame(dt, clock.getElapsed());
+    } catch (err) {
+      reportError(err);
+    }
   }
+  if (!window.__ready) platform.loadingStop(); // (the first frame's up)
+  platform.setPlaying(mode === game && game.active);
   window.__ready = true;
 }
 // an error in a frame: logged, and shown small in a corner (once each) so
@@ -330,6 +341,7 @@ function reportError(err) {
   if (seenErrors.has(msg)) return;
   seenErrors.add(msg);
   console.error(err);
+  if (CG) return; // (players don't get the red note)
   let el = document.querySelector('.err-note');
   if (!el) {
     el = document.createElement('div');

@@ -4,6 +4,7 @@
 // dropdowns or toggles, styled like the rest of the game.
 
 import { fitInside } from './scale.js';
+import { store } from '../platform.js';
 
 const KEY = 'scavenger.settings';
 export const ACTIONS = [
@@ -35,7 +36,7 @@ const listeners = new Set();
 function load() {
   let s = {};
   try {
-    s = JSON.parse(localStorage.getItem(KEY) || '{}') || {};
+    s = JSON.parse(store.getItem(KEY) || '{}') || {};
   } catch {
     // storage blocked: defaults
   }
@@ -51,7 +52,7 @@ export function settings() {
 export function setSetting(k, v) {
   settings()[k] = v;
   try {
-    localStorage.setItem(KEY, JSON.stringify(cur));
+    store.setItem(KEY, JSON.stringify(cur));
   } catch {
     // storage blocked: this session only
   }
