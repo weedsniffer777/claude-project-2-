@@ -556,7 +556,6 @@ export class Enemies {
   damage(e, amount, blastFrom = null) {
     if (!e.alive) return false;
     if (e.invuln) return false; // (the mech, mid-overload)
-    if (e.finisher && !e.finishing) return false; // (level 1's first time: only the Piercing shot it's being taught on)
     if (e.dazed > 0) amount *= e.stats.dazeTaken || 1;
     // the mech doesn't just go: blasts all over it, pieces torn off, then
     // it comes apart

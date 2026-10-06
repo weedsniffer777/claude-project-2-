@@ -1806,7 +1806,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     // level 1's boss, only the Piercing shot can finish it: the shot always
     // goes at it, wherever it was aimed (a miss would leave it stuck at half
     // till the ability came round again)
-    const fin = enemies.alive.find((e) => e.finisher && !(e.delay > 0));
+    const fin = enemies.alive.find((e) => e.pierceKill);
     if (fin) {
       tank.turret.rotation.y = Math.atan2(-(fin.pos.z - pos.z), fin.pos.x - pos.x) - tank.group.rotation.y;
       tank.group.updateWorldMatrix(true, true);
@@ -1814,6 +1814,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     tank.fire(); // the recoil
     sfx.play('cannon', { gain: 1, rate: 0.82 }); // (deeper: the big one)
     const { from, dir, len, wall } = pierceLine();
+    // (and it dies, full stop: not left to the beam's hit test)
+    if (fin) {
+      const dmg = Math.ceil(fin.hp) + 1;
+      enemies.damage(fin, dmg, from.clone());
+      hud.damage(new THREE.Vector3(fin.pos.x, 1.4 * fin.stats.scale, fin.pos.z), dmg, 'big');
+    }
     const hit = new Set();
     const broke = new Set();
     // the launch: a huge flash, blades of light, a ring of smoke at the muzzle
@@ -1843,8 +1849,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
           if (along < a0 - 0.6 || along > a1 + 0.6) continue;
           if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
           hit.add(e);
-          if (e.finisher) e.finishing = true;
-          const dmg = e.finisher ? Math.max(stats.pierceDamage, e.hp + 1) : stats.pierceDamage; // (the tutorial boss: the shot that finishes it)
+          const dmg = stats.pierceDamage;
           const killed = enemies.damage(e, dmg, from.clone());
           const p = new THREE.Vector3(e.pos.x, 1.4 * e.stats.scale, e.pos.z);
           hud.damage(p, dmg, 'big');

@@ -1961,7 +1961,7 @@ function buildAvenue(scene) {
           // kills it). Played before, it's had the ability all along.
           if (!S.taught && api.tank.ability === 'pierce' && S.boss.alive && S.boss.hp <= S.boss.maxHp * 0.5 && api.lesson('ability-pierce')) {
             S.taught = true;
-            S.boss.finisher = true;
+            S.boss.pierceKill = true; // (the Piercing shot finishes it, whatever it's aimed at; it's never made invincible)
             api.giveAbility();
             const how = api.touch ? 'tap the <b>E</b> button, drag to aim and let go' : 'press <kbd>E</kbd>, aim and click';
             api.prompt('Ability', `The boss is damaged! Finish it off with your <b>Piercing shot</b>: ${how}!`, { go: true, seconds: 9 });
