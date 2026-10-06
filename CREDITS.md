@@ -6,3 +6,7 @@
   dressed (helmet, collar, belt and kit added in code) and animated in code.
 - **Fonts** (`public/fonts/`, bundled in the CrazyGames build): Pixelify Sans by Stefie Justprince and
   Silkscreen by Jason Kottke, both under the SIL Open Font License 1.1 (https://openfontlicense.org).
+- **Sounds** (`src/assets/sounds/`, from Pixabay under the Pixabay Content License; trimmed, made mono,
+  the lock beep sped up and pitched up): UI click by emilianodleon ("select button ui"), rocket loop and
+  beep by freesound_community, explosion by soundreality ("explosion fx"), tank treads by dennish18
+  ("tank moving").

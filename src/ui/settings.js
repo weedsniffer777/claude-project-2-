@@ -17,12 +17,14 @@ export const ACTIONS = [
   ['ability', 'Ability'],
   ['equip', 'Equipment'],
   ['reload', 'Reload'],
+  ['pause', 'Pause'],
 ];
 const DEFAULTS = {
   quality: 'auto', // 'auto' or a tier index ('0' best .. '3' Potato)
+  volume: 0.75, // sound: 0 (off) .. 1
   fps: 60, // frame cap: 60, 30, or 0 (as fast as the screen goes)
   shake: 'on', // 'on' | 'reduced' | 'off'
-  keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR' },
+  keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR', pause: 'KeyP' },
   // touch
   aimAssist: true, // touch: a tap near an enemy (within 35 degrees of the tap's direction) locks onto it; off: full manual aim
   dragShoot: false, // (retired: drag to shoot; old saves move to the lock)
@@ -227,6 +229,7 @@ export function createSettingsMenu({ touch = () => false } = {}) {
         s.quality === 'auto' ? 'Picks the best look that keeps it smooth' : '',
       ),
     );
+    c1.append(row('Sound', dropdown(s.volume, [[0, 'Off'], [0.25, '25%'], [0.5, '50%'], [0.75, '75%'], [1, '100%']], (v) => setSetting('volume', +v))));
     c1.append(row('Frame rate', dropdown(s.fps, [[60, '60 fps'], [30, '30 fps (saves battery)'], [0, 'Unlimited']], (v) => setSetting('fps', +v))));
     c1.append(row('Screen shake', dropdown(s.shake, [['on', 'On'], ['reduced', 'Reduced'], ['off', 'Off']], (v) => setSetting('shake', v))));
 
@@ -253,7 +256,7 @@ export function createSettingsMenu({ touch = () => false } = {}) {
       }
       const note = document.createElement('div');
       note.className = 'note';
-      note.textContent = 'The arrow keys always drive too. Esc pauses. Aim with the mouse; click fires as well.';
+      note.textContent = 'The arrow keys always drive too. Esc pauses as well (unless it takes you out of fullscreen). Aim with the mouse; click fires as well.';
       c2.append(note);
     }
 

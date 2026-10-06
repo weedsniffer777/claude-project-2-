@@ -14,6 +14,7 @@ import { CombatFx } from '../render/combat.js';
 import { wrapAngle, approachAngle } from '../models/kit.js';
 import { injectDevKitStyles } from '../devkit/style.js';
 import { CG } from '../platform.js';
+import { sfx } from '../audio.js';
 import { LEVELS } from '../levels/index.js';
 import { Enemies } from './enemies.js';
 import { createHud } from './hud.js';
@@ -847,6 +848,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   // the tank goes up, its turret and parts thrown off; then the results.
   function lose() {
     run.over = true;
+    sfx.play('explosion', { gain: 0.9 });
     enemies.clearBolts();
     run.dying = { t: 0, bangs: 0, flung: [] };
     hud.clearPrompt();
@@ -1151,6 +1153,15 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     combat.shake = Math.max(combat.shake, 0.2);
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xffd08a, 0.2, 1.2, 0.12);
     launch(0.45);
+  }
+  // the tank's own sounds: the treads rattling, quiet, coming up from
+  // silence as it gets moving; the rockets roaring while they burn
+  function engineSounds() {
+    const live = !run.paused && !run.over && !run.dying;
+    const k = live ? Math.min(1, Math.abs(speed) / (MAX_SPEED * stats.speed)) : 0;
+    sfx.loop('treads', k * 0.16, 0.85 + 0.3 * Math.min(1.4, k), k > 0.02 ? 0.35 : 0.2);
+    const roar = live && (run.boost > 0 || run.dash > 0 || run.retreat > 0 || run.brk > 0);
+    sfx.loop('rocket', roar ? 0.5 : 0, 1, roar ? 0.04 : 0.18);
   }
   // The kick of a boost or dash starting: a beat of slowed time, the camera
   // punching out, a ring of dust blown off the ground behind the tank.
@@ -1516,6 +1527,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     // Hunter-killer's locks: each stamped on as it marks them, red once it fires
     if (run.hunt) for (const e of run.hunt.targets.slice(0, run.hunt.marked)) if (e.alive) locks.push({ pos: e.pos.clone().setY(mslAim(e).y + 0.3), label: 'LOCK', locked: run.hunt.phase === 'fire' });
     hud.setLocks(locks);
+    // a beep for each new lock (Hunter-killer's marks one by one, a missile's)
+    const nLocks = locks.reduce((n, l) => n + (l.label ? 1 : 0), 0);
+    if (nLocks > (run.lockN || 0)) sfx.play('lock', { gain: 0.45 });
+    run.lockN = nLocks;
   }
   // the ground's height and tilt at a spot (markers lie along a ramp's slope)
   const UP = new THREE.Vector3(0, 1, 0);
@@ -1922,6 +1937,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (e.code === 'Escape') {
       const devMenu = document.querySelector('.dk-menu');
       if (!devMenu || devMenu.hidden) setPaused(!run.paused); // (Esc closes the dev kit first)
+      return;
+    }
+    // (P by default: in fullscreen, Esc only gets you out of fullscreen)
+    if (actionFor(e.code) === 'pause') {
+      if (!e.repeat) setPaused(!run.paused);
       return;
     }
     if (run.paused) return;
@@ -2902,6 +2922,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       window.addEventListener('pointerup', onWinUp);
     },
     exit() {
+      sfx.loop('treads', 0, 1, 0.05);
+      sfx.loop('rocket', 0, 1, 0.05);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
@@ -2937,6 +2959,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     },
     frame(realDt, t) {
       if (debug?.timeScale) realDt *= debug.timeScale; // tests only
+      engineSounds();
       if (run.paused) {
         // the world holds still under the menu
         pixel.render(scene, camera);
@@ -3428,6 +3451,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
         const e = run.boss.e;
         hud.setBoss(run.boss.name, e.alive ? e.hp / e.maxHp : 0);
         if (!e.alive) {
+          sfx.play('explosion', { gain: 0.8, rate: 0.9 }); // (its last big bang)
           run.boss = null;
           hud.setBoss(null, null);
         }
@@ -3439,9 +3463,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       hud.update(realDt, camera, canvas);
     },
     loadLevel,
-    // being played right now (not paused, in a menu or over): the portal's told
-    get active() {
-      return run.mode === 'field' && !run.paused && !run.over;
+    // the pause menu's up (the portal's told play has stopped)
+    get paused() {
+      return run.paused;
     },
     // (the phone's been turned upright: stop and show the pause menu)
     pause() {

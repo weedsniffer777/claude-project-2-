@@ -1,0 +1,135 @@
+// Sound: one shared Web Audio graph. Short sounds fire and forget; loops
+// (treads, rockets) run silent all the time and get faded up and down.
+// Nothing plays until the player's first tap or key (browsers insist), and
+// everything goes quiet in a hidden tab, while the portal mutes, or with the
+// volume setting at Off.
+import { settings } from './ui/settings.js';
+import { platform } from './platform.js';
+
+const FILES = {
+  click: 'click.mp3',
+  rocket: 'rocket.mp3',
+  explosion: 'explosion.mp3',
+  treads: 'treads.mp3',
+  lock: 'lock.mp3',
+};
+const LOOPS = new Set(['rocket', 'treads']);
+
+let ctx = null;
+let master = null;
+const buffers = {};
+const loops = {};
+
+// a loop that doesn't click where it wraps: its tail crossfaded into its head
+function loopify(buf, fade = 0.25) {
+  const f = Math.floor(fade * buf.sampleRate);
+  // (skip the encoder's silent lead-in)
+  const d0 = buf.getChannelData(0);
+  let start = 0;
+  while (start < 4000 && Math.abs(d0[start]) < 1e-3) start++;
+  const n = buf.length - start;
+  if (n < f * 3) return buf;
+  const out = ctx.createBuffer(buf.numberOfChannels, n - f, buf.sampleRate);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const src = buf.getChannelData(c).subarray(start);
+    const dst = out.getChannelData(c);
+    dst.set(src.subarray(0, n - f));
+    for (let i = 0; i < f; i++) {
+      const k = i / f;
+      dst[i] = src[i] * k + src[n - f + i] * (1 - k);
+    }
+  }
+  return out;
+}
+
+async function load(name) {
+  try {
+    const res = await fetch(new URL(`./assets/sounds/${FILES[name]}`, import.meta.url));
+    const raw = await ctx.decodeAudioData(await res.arrayBuffer());
+    buffers[name] = LOOPS.has(name) ? loopify(raw) : raw;
+    if (LOOPS.has(name)) startLoop(name);
+  } catch (err) {
+    console.warn('sound', name, err);
+  }
+}
+
+function startLoop(name) {
+  const l = loops[name];
+  if (!l || l.src || !buffers[name]) return;
+  l.src = ctx.createBufferSource();
+  l.src.buffer = buffers[name];
+  l.src.loop = true;
+  l.src.playbackRate.value = l.rate;
+  l.src.connect(l.gain);
+  l.src.start();
+}
+
+function init() {
+  if (ctx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  ctx = new AC();
+  master = ctx.createGain();
+  master.gain.value = 0;
+  master.connect(ctx.destination);
+  for (const name of LOOPS) {
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.connect(master);
+    loops[name] = { gain, src: null, rate: 1, target: 0 };
+  }
+  for (const name of Object.keys(FILES)) load(name);
+}
+
+// the first tap or key wakes it (and any later one, if the browser slept it)
+const wake = () => {
+  init();
+  if (ctx?.state === 'suspended') ctx.resume().catch(() => {});
+};
+for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, wake, { capture: true, passive: true });
+
+export const sfx = {
+  // a one-shot: gain 0..1, rate (pitch and speed together)
+  play(name, { gain = 1, rate = 1 } = {}) {
+    if (!ctx || !buffers[name] || ctx.state !== 'running') return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffers[name];
+    src.playbackRate.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g).connect(master);
+    src.start();
+  },
+  // a loop's level (0..1) and rate, eased there over about tau seconds
+  loop(name, gain, rate = 1, tau = 0.15) {
+    const l = loops[name];
+    if (!l) return;
+    if (Math.abs(gain - l.target) > 0.002) {
+      l.target = gain;
+      l.gain.gain.setTargetAtTime(gain, ctx.currentTime, tau);
+    }
+    if (l.src && Math.abs(rate - l.rate) > 0.01) {
+      l.rate = rate;
+      l.src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.1);
+    }
+  },
+  // every frame: the overall level
+  update() {
+    if (!master) return;
+    const muted = document.hidden || platform.inAd || platform.muted;
+    const v = muted ? 0 : settings().volume ?? 0.75;
+    if (Math.abs(v - (master.v ?? -1)) > 0.001) {
+      master.v = v;
+      master.gain.setTargetAtTime(v, ctx.currentTime, 0.05);
+    }
+  },
+};
+
+// UI clicks: every button, dropdown and tab
+document.addEventListener(
+  'click',
+  (e) => {
+    if (e.target.closest?.('button, select, [role="button"], [data-act], [data-ask]')) sfx.play('click', { gain: 0.6 });
+  },
+  true,
+);

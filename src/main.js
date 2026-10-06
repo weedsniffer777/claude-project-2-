@@ -13,6 +13,7 @@ import { CURSOR } from './game/hud.js';
 import { PARTS } from './game/parts.js';
 import { settings, onSettings } from './ui/settings.js';
 import { CG, platform, store } from './platform.js';
+import { sfx } from './audio.js';
 
 // The themed cursor everywhere: over panels, text and empty UI too (not the
 // browser's arrow or text beam). Zero specificity, so anything that sets
@@ -252,9 +253,19 @@ function setMode(next) {
   resize();
 }
 
+// going in or out of fullscreen (or away to another tab) pauses a run: on
+// CrazyGames the page sits in a frame, so a big jump in its size is how a
+// fullscreen switch shows (not on phones, whose bars come and go)
+let lastSize = [window.innerWidth, window.innerHeight];
+const finePointer = matchMedia('(pointer: fine)');
+document.addEventListener('fullscreenchange', () => mode === game && game.pause());
+document.addEventListener('visibilitychange', () => document.hidden && mode === game && game.pause());
 function resize() {
   const w = window.innerWidth;
   const h = window.innerHeight;
+  const [lw, lh] = lastSize;
+  lastSize = [w, h];
+  if (mode === game && finePointer.matches && (Math.abs(w - lw) > lw * 0.08 || Math.abs(h - lh) > lh * 0.08)) game.pause();
   renderer.setSize(w, h);
   pixel.setSize(w, h);
   mode.resize(w, h);
@@ -329,8 +340,11 @@ function frame(now = performance.now()) {
       reportError(err);
     }
   }
+  sfx.update();
   if (!window.__ready) platform.loadingStop(); // (the first frame's up)
-  platform.setPlaying(mode === game && game.active);
+  // (in play from the first frame on, base and menus included; only the
+  // pause menu stops it)
+  platform.setPlaying(!(mode === game && game.paused));
   window.__ready = true;
 }
 // an error in a frame: logged, and shown small in a corner (once each) so

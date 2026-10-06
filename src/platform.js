@@ -5,6 +5,9 @@
 /* global __CG__ */
 export const CG = typeof __CG__ !== 'undefined' && __CG__;
 
+// ads are off for now (switched on for the full launch)
+const ADS = false;
+
 let sdk = null; // (set once it's up, on CrazyGames or localhost)
 let playing = false;
 let inAd = false;
@@ -77,10 +80,18 @@ export const platform = {
   get inAd() {
     return inAd;
   },
+  // the portal's own mute switch
+  get muted() {
+    try {
+      return !!sdk?.game?.settings?.muteAudio;
+    } catch {
+      return false;
+    }
+  },
   // a natural break (a run over, back to the base or going again): the
   // portal may show an ad (it decides how often), then go() carries on
   midgame(go) {
-    if (!sdk) return void go();
+    if (!sdk || !ADS) return void go();
     platform.setPlaying(false);
     let done = false;
     const finish = () => {
