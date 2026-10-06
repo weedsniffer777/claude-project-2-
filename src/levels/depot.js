@@ -116,7 +116,10 @@ function rollerDoor(B, x, z, w) {
 
 // x0..x1 along the street, z0..z1 across it (the roadway). fill: how far
 // the side walls run out to seal the sidewalks ({ n, s } world z).
-export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPOINT' }) {
+// exitFront: the tank comes back out the way it went in (the front door),
+// for a shed with its back to a wall. place(x, z, yaw) (after building, on
+// a builder of its own): moves and turns the whole shed into place.
+export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPOINT', exitFront = false }) {
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
   const L = x1 - x0;
@@ -285,14 +288,45 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
     goLamps[1].material = state.openOut && Math.sin(t * 6) > 0 ? glowMat(0x6be08a) : toon(0x1d2a20);
   }
 
-  return {
+  const shack = {
     x0,
     x1,
     z0,
     z1,
     door: new THREE.Vector3(x0 - 0.5, 1.6, cz),
-    // where the tank comes back out (the back door, already up)
-    outside: new THREE.Vector3(x1 + 3.2, 0, cz),
+    // where the tank comes back out, and the way it faces doing it
+    outside: exitFront ? new THREE.Vector3(x0 - 3.2, 0, cz) : new THREE.Vector3(x1 + 3.2, 0, cz),
+    exitDir: new THREE.Vector3(exitFront ? -1 : 1, 0, 0),
+    exitYaw: exitFront ? Math.PI : 0,
+    inward: null, // (set once it's been turned: the way in, in the world)
+    place(px, pz, yaw) {
+      B.root.position.set(px, 0, pz);
+      B.root.rotation.y = yaw;
+      const c = Math.cos(yaw);
+      const sn = Math.sin(yaw);
+      const turn = (v) => {
+        const x = v.x * c + v.z * sn;
+        const z = -v.x * sn + v.z * c;
+        v.x = x;
+        v.z = z;
+      };
+      const move = (v) => {
+        turn(v);
+        v.x += px;
+        v.z += pz;
+      };
+      for (const b of B.blocks) {
+        move(b);
+        b.yaw = (b.yaw || 0) + yaw;
+      }
+      for (const e of B.emitters) move(e.pos);
+      move(this.door);
+      move(this.outside);
+      turn(this.exitDir);
+      this.exitYaw = Math.atan2(-this.exitDir.z, this.exitDir.x);
+      this.inward = new THREE.Vector3(1, 0, 0);
+      turn(this.inward);
+    },
     // its door blocks live in this list (a level that merges several builders' lists)
     bindBlocks(list) {
       blocksRef = list;
@@ -312,16 +346,23 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
     },
     // the tank leaves through the back: snap that door open
     openOut() {
+      if (exitFront) {
+        state.openIn = true;
+        state.inDoor = 1;
+        return;
+      }
       state.openOut = true;
       state.outDoor = 1;
     },
     // (the endless base: shut behind you again)
     closeOut() {
-      state.openOut = false;
+      if (exitFront) state.openIn = false;
+      else state.openOut = false;
     },
     get inDoor() {
       return state.inDoor;
     },
     update,
   };
+  return shack;
 }

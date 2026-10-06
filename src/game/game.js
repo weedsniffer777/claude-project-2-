@@ -555,8 +555,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.clearPrompt();
       run.spot = null;
       run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds, focus: null };
-      level.bounds = { ...level.bounds, maxX: shack.x0 + 4 };
-      run.auto = new THREE.Vector3(shack.x0 + 3, 0, shack.door.z + (pos.z - shack.door.z) * 0.5); // (in through the door, wherever it is across the street)
+      if (shack.inward) run.auto = shack.door.clone().setY(0).addScaledVector(shack.inward, 3.5); // (a shed turned some other way: straight in)
+      else {
+        level.bounds = { ...level.bounds, maxX: shack.x0 + 4 };
+        run.auto = new THREE.Vector3(shack.x0 + 3, 0, shack.door.z + (pos.z - shack.door.z) * 0.5); // (in through the door, wherever it is across the street)
+      }
       setCursor();
       api.transition(() => {
         enemies.retire(); // whatever was left behind stays behind
@@ -1011,8 +1014,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     useTank(save.tank());
     scene.add(tank.group);
     fitParts(run.parts);
-    tank.group.position.set(shack.outside.x - 2.5, 0, shack.outside.z);
-    tank.group.rotation.y = 0;
+    tank.group.position.set(shack.outside.x - (shack.exitDir?.x ?? 1) * 2.5, 0, shack.outside.z - (shack.exitDir?.z ?? 0) * 2.5);
+    tank.group.rotation.y = shack.exitYaw ?? 0;
     speed = 0;
     // the fight's still on: the enemies stay as they are (they kept going
     // while you were down); only the rounds in the air are gone, and a
@@ -2232,7 +2235,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         const keep = Math.max(speed, 4);
         st.shack.openOut();
         level.bounds = st.fieldBounds;
-        api.teleport(st.shack.outside.x - 2.5, st.shack.outside.z, 0);
+        const d = st.shack.exitDir || { x: 1, z: 0 };
+        api.teleport(st.shack.outside.x - d.x * 2.5, st.shack.outside.z - d.z * 2.5, st.shack.exitYaw ?? 0);
         speed = keep;
         run.mode = 'field';
         run.locked = false;

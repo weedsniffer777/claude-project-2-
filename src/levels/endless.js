@@ -1,7 +1,7 @@
 // Endless: Outskirts. A crossroads on the edge of the city at dusk, ringed
 // by panel blocks and stacked containers; wrecks, barricades and rubble
-// heaps for cover; a fortified base (a checkpoint shed) across the avenue's
-// east end; an elevated road along the north side, a ramp up to it.
+// heaps for cover; a fortified base (a checkpoint shed) off the avenue's
+// north side; an elevated road along the north side, an on-ramp up to it.
 //
 // Waves come in from the edges and never stop. Between waves the base's
 // door opens: drive in to repair and change the loadout (the next wave
@@ -28,24 +28,58 @@ const ARENA = { minX: -58, maxX: 60, minZ: -35, maxZ: 38 };
 // the avenue (east-west, tram tracks down it) and the cross street
 const AVE = { n: -9, s: 9, wn: -12, ws: 12, x0: -76, x1: 46 };
 const CROSS = { x0: -8, x1: 8, w0: -11, w1: 11, n: -16, s: 46 };
-// the base: a shed across the avenue's far (east) end
-const BASE = { x0: 46, x1: 53.6, z0: -9, z1: 9 };
+// the base: a shed off the north side of the avenue, its back to the
+// elevated road, its door facing down the square (the world box it covers)
+const BASE = { x: 24, z: -19.5, x0: 18, x1: 30, z0: -23.3, z1: -15.7 };
 // the park square on the south-west corner
 const PARK = { x0: -54, x1: -14, z0: 15, z1: 38 };
 // the elevated road along the north side, running off out of sight both
-// ways (rubble across it at the arena's edges); a ramp up to it close by
-// the spawn, climbing east to a landing that joins it
+// ways (rubble across it at the arena's edges)
 const DECK = 4.5;
 const DECKZ = { n: -36, s: -24 };
 const DECKX = { x0: -130, x1: 130 };
-const RAMP = { x0: 10, x1: 34, n: -24, s: -16 };
-const LAND = { x0: 34, x1: 42, n: -24, s: -16 };
+// The on-ramp: it peels off the avenue's north lane, curves up and round
+// and merges into the elevated road's south lane, the merge lane tapering
+// off into it. Sampled along its centreline: point, height, width.
+const RAMP_W = 7;
+const MERGE = { x0: -10, x1: 14 }; // where it runs alongside the deck (no rail between)
+const RAMP = (() => {
+  const curve = new THREE.CatmullRomCurve3([[-54, -5.5], [-40, -8], [-28, -14], [-16, -19.6], [-4, -20.5], [6, -21.1], [13.5, -22.9]].map(([x, z]) => new THREE.Vector3(x, 0, z)));
+  const N = 64;
+  const pts = curve.getSpacedPoints(N);
+  const top = pts.findIndex((p) => p.x >= -6); // up at the deck's height from here
+  return pts.map((p, i) => {
+    const k = Math.min(1, i / top);
+    const h = DECK * k * k * (3 - 2 * k); // (eases on and off the slope)
+    const w = p.x <= 4 ? RAMP_W : RAMP_W - (RAMP_W - 1.2) * Math.min(1, (p.x - 4) / 9.5); // the merge lane narrowing
+    return { x: p.x, z: p.z, h, w };
+  });
+})();
+const RAMP_BOX = { x0: -60, x1: 18, z0: -27, z1: -1 };
+// where on the ramp (x, z) is: its height, or null when off it
+function rampAt(x, z) {
+  if (x < RAMP_BOX.x0 || x > RAMP_BOX.x1 || z < RAMP_BOX.z0 || z > RAMP_BOX.z1) return null;
+  let best = null;
+  let bestD = Infinity;
+  for (let i = 0; i < RAMP.length - 1; i++) {
+    const a = RAMP[i];
+    const b = RAMP[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const L2 = dx * dx + dz * dz;
+    const t = Math.max(0, Math.min(1, ((x - a.x) * dx + (z - a.z) * dz) / L2));
+    const d = Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
+    if (d < bestD) {
+      bestD = d;
+      best = { d, h: a.h + (b.h - a.h) * t, w: a.w + (b.w - a.w) * t };
+    }
+  }
+  return best && best.d <= best.w / 2 ? best.h : null;
+}
 
 function heightAt(x, z) {
   if (x >= DECKX.x0 && x <= DECKX.x1 && z >= DECKZ.n && z < DECKZ.s) return DECK;
-  if (x >= LAND.x0 && x <= LAND.x1 && z >= LAND.n && z <= LAND.s) return DECK;
-  if (x >= RAMP.x0 && x < LAND.x0 && z >= RAMP.n && z <= RAMP.s) return (DECK * (x - RAMP.x0)) / (LAND.x0 - RAMP.x0);
-  return 0;
+  return rampAt(x, z) ?? 0;
 }
 
 // The ground: snowy paving on the sidewalks and the square, slushy asphalt
@@ -89,17 +123,23 @@ function groundTexture(rand) {
     rect(x0, z0, x1, z1, '#4f5257');
     speckle(g, X(x1) - X(x0), Z(z1) - Z(z0), ['#46494d', '#5a5d62', '#55585c', '#6a6d72'], (X(x1) - X(x0)) * (Z(z1) - Z(z0)) * 0.14, rand, Z(z0), X(x0));
   };
-  road(AVE.x0 - 20, AVE.n, BASE.x1 + 10, AVE.s);
-  road(CROSS.x0, CROSS.n - 30, CROSS.x1, CROSS.s + 20);
+  road(MAP.x0, AVE.n, MAP.x1, AVE.s);
+  road(CROSS.x0, MAP.z0, CROSS.x1, MAP.z1);
+  // the ramp's foot, cut across the north sidewalk, and its footprint
+  g.strokeStyle = '#4f5257';
+  g.lineWidth = RAMP_W * GPX;
+  g.beginPath();
+  RAMP.forEach((p, i) => (i ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z))));
+  g.stroke();
   // curbs: a pale line along every road edge
   g.fillStyle = '#c4c2bc';
-  for (const z of [AVE.n, AVE.s]) for (let x = AVE.x0 - 20; x < BASE.x0; x += 0.5) if (x < CROSS.x0 || x > CROSS.x1) g.fillRect(X(x), Z(z) - 1, 0.5 * GPX + 1, 3);
-  for (const x of [CROSS.x0, CROSS.x1]) for (let z = CROSS.n - 30; z < CROSS.s + 20; z += 0.5) if (z < AVE.n || z > AVE.s) g.fillRect(X(x) - 1, Z(z), 3, 0.5 * GPX + 1);
+  for (const z of [AVE.n, AVE.s]) for (let x = MAP.x0; x < MAP.x1; x += 0.5) if ((x < CROSS.x0 || x > CROSS.x1) && !(z < 0 && x > -58 && x < -46)) g.fillRect(X(x), Z(z) - 1, 0.5 * GPX + 1, 3);
+  for (const x of [CROSS.x0, CROSS.x1]) for (let z = MAP.z0; z < MAP.z1; z += 0.5) if (z < AVE.n || z > AVE.s) g.fillRect(X(x) - 1, Z(z), 3, 0.5 * GPX + 1);
   // slush along the curbs, a broken centre line
   g.fillStyle = 'rgba(214,218,224,0.6)';
-  for (let x = AVE.x0 - 20; x < BASE.x0; x += 0.7) for (const z of [AVE.n + 0.3, AVE.s - 0.9]) if (rand() < 0.7) blob(g, X(x), Z(z + rand() * 0.6), (0.3 + rand() * 0.6) * GPX, (0.2 + rand() * 0.3) * GPX, rand, 6);
+  for (let x = MAP.x0; x < MAP.x1; x += 0.7) for (const z of [AVE.n + 0.3, AVE.s - 0.9]) if (rand() < 0.7) blob(g, X(x), Z(z + rand() * 0.6), (0.3 + rand() * 0.6) * GPX, (0.2 + rand() * 0.3) * GPX, rand, 6);
   g.fillStyle = '#d9d2b4';
-  for (let x = AVE.x0 - 20; x < BASE.x0; x += 6) if (x < CROSS.w0 - 2 || x > CROSS.w1 + 2) g.fillRect(X(x), Z(-0.1), 3 * GPX, 2);
+  for (let x = MAP.x0; x < MAP.x1; x += 6) if (x < CROSS.w0 - 2 || x > CROSS.w1 + 2) g.fillRect(X(x), Z(-0.1), 3 * GPX, 2);
   // zebra crossings on all four sides of the junction
   g.fillStyle = 'rgba(232,230,220,0.85)';
   for (let z = AVE.n + 0.6; z < AVE.s - 0.6; z += 1.2) for (const x of [CROSS.w0 - 3.2, CROSS.w1 + 0.8]) g.fillRect(X(x), Z(z), 2.4 * GPX, 0.6 * GPX);
@@ -107,7 +147,7 @@ function groundTexture(rand) {
   // the cross street's paint: a double yellow down the middle, dashed lane
   // lines, solid edge lines; stop lines and lane arrows at every approach;
   // the junction box hatched yellow
-  const crossZ = [[CROSS.n - 30, AVE.wn - 3.6], [AVE.ws + 3.6, CROSS.s + 20]];
+  const crossZ = [[MAP.z0, AVE.wn - 3.6], [AVE.ws + 3.6, MAP.z1]];
   for (const [za, zb] of crossZ) {
     g.fillStyle = '#d6b445';
     for (const dx of [-0.3, 0.15]) g.fillRect(X(dx), Z(za), 0.15 * GPX + 1, Z(zb) - Z(za));
@@ -117,7 +157,7 @@ function groundTexture(rand) {
   }
   // (the avenue: edge lines too, either side of the tracks)
   g.fillStyle = 'rgba(232,230,220,0.7)';
-  for (const dz of [AVE.n + 0.6, AVE.s - 0.75]) for (const [xa, xb] of [[AVE.x0 - 20, CROSS.w0 - 3.6], [CROSS.w1 + 3.6, BASE.x0 - 6]]) g.fillRect(X(xa), Z(dz), X(xb) - X(xa), 0.15 * GPX + 1);
+  for (const dz of [AVE.n + 0.6, AVE.s - 0.75]) for (const [xa, xb] of [[MAP.x0, CROSS.w0 - 3.6], [CROSS.w1 + 3.6, MAP.x1]]) g.fillRect(X(xa), Z(dz), X(xb) - X(xa), 0.15 * GPX + 1);
   // stop lines (across the near half of each approach)
   g.fillStyle = 'rgba(240,238,228,0.9)';
   g.fillRect(X(CROSS.x0), Z(AVE.wn - 4.2), X(0) - X(CROSS.x0), 0.5 * GPX);
@@ -174,10 +214,27 @@ function groundTexture(rand) {
     g.fillStyle = rand() < 0.5 ? 'rgba(79,82,87,0.7)' : 'rgba(214,218,224,0.5)';
     blob(g, X(-10 + rand() * 20), Z(-26 + rand() * 60), (0.4 + rand()) * GPX, (0.3 + rand() * 0.6) * GPX, rand, 8);
   }
-  // the base's yard: concrete, hazard stripes round the doors
-  rect(BASE.x0 - 6, AVE.wn, BASE.x1 + 8, AVE.ws, '#7d8186');
+  // the base's apron: concrete, hazard stripes either side of the door
+  rect(BASE.x0 - 2, BASE.z1, BASE.x1 + 2, AVE.wn, '#7d8186');
   g.fillStyle = '#c9a23a';
-  for (const x of [BASE.x0 - 5, BASE.x1 + 3]) for (let z = -3; z < 3; z += 1.3) g.fillRect(X(x), Z(z), 2.2 * GPX, 0.6 * GPX);
+  for (const x of [BASE.x - 4.6, BASE.x + 3.2]) for (let z = BASE.z1 + 0.3; z < AVE.wn - 0.3; z += 1.3) g.fillRect(X(x), Z(z), 1.4 * GPX, 0.6 * GPX);
+  // a car park on the south-east corner: painted bays, worn
+  g.fillStyle = 'rgba(232,230,220,0.65)';
+  for (const z of [17.5, 29]) for (let x = 41; x <= 57; x += 2.8) g.fillRect(X(x), Z(z), 0.12 * GPX + 1, 5 * GPX);
+  for (const z of [22.5, 29]) g.fillRect(X(41), Z(z), 16 * GPX, 0.12 * GPX + 1);
+  // drains and manhole covers
+  for (const [x, z] of [[-30, -8.6], [-30, 8.2], [20, -8.6], [20, 8.2], [40, -8.6], [-48, 8.2], [-7.6, 24], [7.2, -14], [7.2, 30]]) {
+    g.fillStyle = '#2e3033';
+    g.fillRect(X(x), Z(z), 0.5 * GPX, 0.4 * GPX);
+  }
+  for (const [x, z] of [[-14, -4], [14, 4], [0, 20], [-40, 4.5], [34, -4.5], [0, -14]]) {
+    g.fillStyle = '#3a3c3f';
+    g.beginPath();
+    g.arc(X(x), Z(z), 0.45 * GPX, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#55585c';
+    g.fillRect(X(x) - 0.3 * GPX, Z(z) - 1, 0.6 * GPX, 2);
+  }
   // potholes, scorch, snow drifts
   for (let i = 0; i < 90; i++) {
     const x = MAP.x0 + rand() * (MAP.x1 - MAP.x0);
@@ -275,7 +332,7 @@ function buildEndless(scene) {
   // ------------------------------------------------------------ the ring
   // north, beyond the elevated road: tall blocks along the skyline, on
   // past both edges
-  for (const [x0, x1, f] of [[-140, -112, 7], [-108, -84, 8], [-80, -62, 8], [-58, -30, 9], [-26, -4, 7], [0, 24, 8], [28, 54, 9], [58, 80, 7], [84, 110, 8], [114, 140, 6]]) K.building({ x0, x1, zf: -40, depth: 16, floors: f, holes: 2, broken: 0.35, shop: false });
+  for (const [x0, x1, f] of [[-140, -112, 7], [-108, -84, 8], [-80, -62, 8], [-58, -30, 9], [-26, -10, 7], [10, 24, 8], [28, 54, 9], [58, 80, 7], [84, 110, 8], [114, 140, 6]]) K.building({ x0, x1, zf: -40, depth: 16, floors: f, holes: 2, broken: 0.35, shop: false });
   // The arena's edge is the buildings themselves: their fronts stand on it,
   // turned a little this way and that and stepped in and out, so the
   // square closes round. West (facing in, east):
@@ -318,12 +375,36 @@ function buildEndless(scene) {
     K.container(B, 62.6, 2.6, 0.4, Math.PI / 2 + 0.05, CONTAINERS[(rand() * 5) | 0]);
     B.block(62.5, 0, 1.4, 13);
   }
+  // the streets run on past the blockages, between more blocks, out of sight
+  for (const [x, w, f] of [[-80, 13, 5], [-95, 14, 6], [-110, 13, 4], [-125, 15, 6]]) {
+    block(x, -18.5, w, 13, f, 0.02 * (rand() - 0.5), { shop: rand() < 0.5 });
+    block(x - 3, 18.5, w, 13, f - 1, Math.PI + 0.02 * (rand() - 0.5), { shop: rand() < 0.5 });
+  }
+  for (const [x, w, f] of [[82, 13, 5], [97, 14, 4], [112, 13, 6], [127, 14, 5]]) {
+    block(x, -18.5, w, 13, f, 0.02 * (rand() - 0.5), { shop: rand() < 0.5 });
+    block(x + 2, 18.5, w, 13, f - 1, Math.PI + 0.02 * (rand() - 0.5), { shop: rand() < 0.5 });
+  }
+  for (const [z, f] of [[60, 3], [74, 4]]) {
+    block(-19, z, 12, 13, f, -Math.PI / 2, { shop: true });
+    block(19, z + 3, 12, 13, f, Math.PI / 2);
+  }
+  // and more junk in the road out there: wrecks, a jack-knifed tram, heaps
+  P.car(B, -72, -4, 0.6, { kind: 'sedan' });
+  P.car(B, -86, 5, 2.4, { kind: 'van' });
+  P.tram(B, -100, 0, 0.35, { burn: 0.8 });
+  K.rubble(B, -118, -2, 4, 1.8, { solid: true, slabs: 3 });
+  P.car(B, 74, 4, 2.9, { kind: 'hatch', flipped: true });
+  P.bus(B, 90, -3, 0.4);
+  K.rubble(B, 106, 2, 4.5, 2, { solid: true, slabs: 3 });
+  P.car(B, 2, 52, 1.2, { kind: 'van' });
+  K.rubble(B, -3, 62, 4, 1.6, { solid: true, slabs: 2 });
+  P.car(B, -3, -48, 0.4, { kind: 'sedan' });
   // (and behind all that, in case: a hard edge)
   B.block(ARENA.minX - 3.5, 8, 0.5, 40);
   B.block(ARENA.maxX + 3.5, 8, 0.5, 40);
   B.block(0, ARENA.maxZ + 4, 80, 0.5);
   // a works shed out on the west edge, under the elevated road
-  K.works({ x0: -57.5, x1: -43.5, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
+  K.works({ x0: 43, x1: 59, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
 
   // ------------------------------------------------------ the elevated road
   {
@@ -333,39 +414,93 @@ function buildEndless(scene) {
     const side = toon(SIDE);
     const under = toon(0x6a675f);
     const deckTex = deckTexture(rand, dl, dw);
-    // the ramp: a slab of the same road, the same edge beams and rails,
-    // climbing east to the landing, flush with it at the top; filled in
-    // under with the same concrete
-    const len = RAMP.x1 - RAMP.x0;
-    const ang = Math.atan2(DECK, len);
-    const L = Math.hypot(len, DECK);
-    const rw = RAMP.s - RAMP.n;
-    const fill = new THREE.Shape();
-    fill.moveTo(0, -0.05);
-    fill.lineTo(len, -0.05);
-    fill.lineTo(len, DECK - 0.5);
-    fill.lineTo(0, -0.05);
-    const wedge = new THREE.Mesh(new THREE.ExtrudeGeometry(fill, { depth: rw, bevelEnabled: false }), side);
-    wedge.position.set(RAMP.x0, 0, RAMP.n);
-    wedge.receiveShadow = true;
-    B.add(wedge);
-    B.solid(wedge);
-    const rampTex = deckTexture(rand, L, rw);
-    const slope = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, rw), [side, side, new THREE.MeshToonMaterial({ map: rampTex, gradientMap }), under, side, side]);
-    slope.position.set((RAMP.x0 + RAMP.x1) / 2 + Math.sin(ang) * 0.45, DECK / 2 - Math.cos(ang) * 0.45, (RAMP.n + RAMP.s) / 2);
-    slope.rotation.z = ang;
-    slope.castShadow = slope.receiveShadow = true;
-    B.add(slope);
-    B.solid(slope);
-    // its rails (south side), climbing with it; a block along the side
-    // that drops off
-    for (let x = RAMP.x0 + 1; x <= RAMP.x1; x += 2) {
-      const y = heightAt(x, -20);
-      B.piece(0.1, 0.8, 0.1, 0x6f7276, x, y + 0.4, RAMP.s - 0.25, 0, 0, 0);
-      if (x + 2 <= RAMP.x1 + 0.01) B.piece(2.05, 0.28, 0.06, 0xa9adb2, x + 1, y + 0.62 + DECK / len, RAMP.s - 0.25, 0, 0, ang);
+    // the on-ramp: the same road surface and the same concrete, walled in
+    // down to the ground (an embankment), its edge beams and rails along
+    // both sides, the north rail stopping where it merges
+    {
+      const n = RAMP.length;
+      const total = RAMP.reduce((a, p, i) => a + (i ? Math.hypot(p.x - RAMP[i - 1].x, p.z - RAMP[i - 1].z) : 0), 0);
+      const side = (i) => {
+        const a = RAMP[Math.max(0, i - 1)];
+        const b = RAMP[Math.min(n - 1, i + 1)];
+        const L = Math.hypot(b.x - a.x, b.z - a.z);
+        return { nx: -(b.z - a.z) / L, nz: (b.x - a.x) / L }; // (to the left, going up: north)
+      };
+      const edge = (i, s) => {
+        const p = RAMP[i];
+        const { nx, nz } = side(i);
+        return new THREE.Vector3(p.x + nx * s * (p.w / 2), p.h, p.z + nz * s * (p.w / 2));
+      };
+      // the road surface
+      const pos = [];
+      const uv = [];
+      const idx = [];
+      let run = 0;
+      for (let i = 0; i < n; i++) {
+        if (i) run += Math.hypot(RAMP[i].x - RAMP[i - 1].x, RAMP[i].z - RAMP[i - 1].z);
+        const l = edge(i, 1);
+        const r = edge(i, -1);
+        pos.push(l.x, l.y + 0.02, l.z, r.x, r.y + 0.02, r.z);
+        uv.push(run / total, 1, run / total, 0);
+        if (i) idx.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const road = new THREE.Mesh(geo, new THREE.MeshToonMaterial({ map: deckTexture(rand, total, RAMP_W), gradientMap, side: THREE.DoubleSide }));
+      road.receiveShadow = true;
+      B.add(road);
+      B.solid(road);
+      // the walls down to the ground either side
+      for (const s of [1, -1]) {
+        const wp = [];
+        const wi = [];
+        for (let i = 0; i < n; i++) {
+          const e = edge(i, s);
+          wp.push(e.x, e.y + 0.02, e.z, e.x, 0, e.z);
+          if (i) wi.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+        }
+        const wg = new THREE.BufferGeometry();
+        wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+        wg.setIndex(wi);
+        wg.computeVertexNormals();
+        const w = new THREE.Mesh(wg, new THREE.MeshToonMaterial({ color: SIDE, gradientMap, side: THREE.DoubleSide }));
+        w.castShadow = w.receiveShadow = true;
+        B.add(w);
+      }
+      // rails and the blocks behind them, where it's high enough to fall
+      // off (and not along the merge, on the north side)
+      const railMat = toon(0xa9adb2);
+      const postMat = toon(0x6f7276);
+      const beamMat = toon(SIDE);
+      for (let i = 0; i < n - 1; i++) {
+        for (const s of [1, -1]) {
+          const a = edge(i, s);
+          const b = edge(i + 1, s);
+          if (Math.max(a.y, b.y) < 0.6) continue;
+          if (s > 0 && RAMP[i].x > MERGE.x0) continue;
+          const len = a.distanceTo(b);
+          const mid = a.clone().add(b).multiplyScalar(0.5);
+          const up = new THREE.Vector3(0, 0.62, 0);
+          const bar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.28, len + 0.05), railMat);
+          bar.position.copy(mid).add(up);
+          bar.lookAt(b.clone().add(up));
+          B.add(bar);
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.5, len + 0.05), beamMat);
+          beam.position.copy(mid).add(new THREE.Vector3(0, -0.15, 0));
+          beam.lookAt(b.clone().add(new THREE.Vector3(0, -0.15, 0)));
+          B.add(beam);
+          if (i % 2 === 0) {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.8, 0.1), postMat);
+            post.position.copy(a).add(new THREE.Vector3(0, 0.4, 0));
+            B.add(post);
+          }
+          B.block(mid.x, mid.z, len / 2 + 0.1, 0.3, -Math.atan2(b.z - a.z, b.x - a.x));
+        }
+      }
     }
-    B.piece(L, 0.5, 0.2, SIDE, (RAMP.x0 + RAMP.x1) / 2, DECK / 2 - 0.6, RAMP.s - 0.05, 0, 0, ang);
-    B.block((RAMP.x0 + 4 + RAMP.x1) / 2, RAMP.s, (RAMP.x1 - RAMP.x0 - 4) / 2, 0.35);
     // the deck's slab and the landing, worn asphalt, edge beams, guard
     // rails, piers to the ground
     const top = new THREE.MeshToonMaterial({ map: deckTex, gradientMap });
@@ -374,12 +509,6 @@ function buildEndless(scene) {
     slab.castShadow = slab.receiveShadow = true;
     D.add(slab);
     D.solid(slab);
-    const landTex = deckTexture(rand, LAND.x1 - LAND.x0, LAND.s - LAND.n);
-    const land = new THREE.Mesh(new THREE.BoxGeometry(LAND.x1 - LAND.x0, 0.9, LAND.s - LAND.n), [side, side, new THREE.MeshToonMaterial({ map: landTex, gradientMap }), under, side, side]);
-    land.position.set((LAND.x0 + LAND.x1) / 2, -0.45, (LAND.n + LAND.s) / 2);
-    land.castShadow = land.receiveShadow = true;
-    D.add(land);
-    D.solid(land);
     const rail = (x0, z0, x1, z1) => {
       const len = Math.hypot(x1 - x0, z1 - z0);
       const yaw = -Math.atan2(z1 - z0, x1 - x0);
@@ -393,22 +522,17 @@ function buildEndless(scene) {
       D.piece(len, 0.5, 0.2, SIDE, (x0 + x1) / 2, -0.7, (z0 + z1) / 2, 0, yaw, 0);
     };
     rail(DECKX.x0, DECKZ.n + 0.25, DECKX.x1, DECKZ.n + 0.25);
-    rail(DECKX.x0, DECKZ.s - 0.25, LAND.x0, DECKZ.s - 0.25);
-    rail(LAND.x1, DECKZ.s - 0.25, DECKX.x1, DECKZ.s - 0.25);
-    rail(LAND.x0 + 0.5, LAND.s - 0.25, LAND.x1, LAND.s - 0.25);
-    rail(LAND.x1 - 0.25, LAND.n, LAND.x1 - 0.25, LAND.s);
+    rail(DECKX.x0, DECKZ.s - 0.25, MERGE.x0, DECKZ.s - 0.25);
+    rail(MERGE.x1, DECKZ.s - 0.25, DECKX.x1, DECKZ.s - 0.25);
     // where the deck's edges stop things
     B.block((DECKX.x0 + DECKX.x1) / 2, DECKZ.n, dl / 2, 0.35);
-    B.block((DECKX.x0 + LAND.x0) / 2, DECKZ.s, (LAND.x0 - DECKX.x0) / 2, 0.35);
-    B.block((LAND.x1 + DECKX.x1) / 2, DECKZ.s, (DECKX.x1 - LAND.x1) / 2, 0.35);
-    B.block((LAND.x0 + LAND.x1) / 2, LAND.s, (LAND.x1 - LAND.x0) / 2, 0.35);
-    B.block(LAND.x1, (LAND.n + LAND.s) / 2, 0.35, (LAND.s - LAND.n) / 2);
+    B.block((DECKX.x0 + MERGE.x0) / 2, DECKZ.s, (MERGE.x0 - DECKX.x0) / 2, 0.35);
+    B.block((MERGE.x1 + DECKX.x1) / 2, DECKZ.s, (DECKX.x1 - MERGE.x1) / 2, 0.35);
     // piers under it
     for (let x = DECKX.x0 + 4; x < DECKX.x1; x += 14) {
       for (const z of [DECKZ.n + 3, DECKZ.s - 3]) put(B.root, box(1.3, DECK - 0.9, 1.3, 0x8a8780, { r: 0.04 }), x, (DECK - 0.9) / 2, z).castShadow = true;
       put(B.root, box(1.5, 0.8, dw - 1, 0x7d7a73, { r: 0.04 }), x, DECK - 1.3, (DECKZ.n + DECKZ.s) / 2);
     }
-    put(B.root, box(1.2, DECK - 0.9, 1.2, 0x8a8780, { r: 0.04 }), (LAND.x0 + LAND.x1) / 2, (DECK - 0.9) / 2, (LAND.n + LAND.s) / 2);
     // on the deck: lamp posts, wrecks, debris; rubble and barricades across
     // it at the arena's edges (it runs on beyond, out of sight)
     for (let x = DECKX.x0 + 6; x < DECKX.x1 - 4; x += 18) {
@@ -437,11 +561,11 @@ function buildEndless(scene) {
   }
 
   // ------------------------------------------------- streets: lamps, tracks
-  ST.lights({ xs: [-52, -38, -24, 20, 32], skip: (x) => Math.abs(x) < 14 });
+  ST.lights({ xs: [-52, -38, -24, 20, 32, 44, 56], skip: (x, side) => Math.abs(x) < 14 || (side < 0 && (x < -14 || (x > BASE.x0 - 4 && x < BASE.x1 + 4))) });
   for (const [x, z, dir] of [[CROSS.w0 - 0.6, AVE.wn + 0.4, 1], [CROSS.w1 + 0.6, AVE.ws - 0.4, -1], [CROSS.w1 + 0.6, AVE.wn + 0.4, 1], [CROSS.w0 - 0.6, AVE.ws - 0.4, -1]]) ST.signal(x, z, dir, rand() < 0.5 ? 'blink' : 'dead');
   {
     const R = rails(B, rand);
-    for (const z of [-2.4, 2.4]) R.track(R.straight(AVE.x0 - 10, z, BASE.x0 - 3, z));
+    for (const z of [-2.4, 2.4]) R.track(R.straight(MAP.x0, z, MAP.x1, z));
     // one track turns off down the cross street toward the square
     R.track([...R.bend({ x: -14, z: 2.4 }, { x: -2, z: 2.4 }, { x: -2, z: 14 }), ...R.straight(-2, 14, -2, CROSS.s + 10)]);
   }
@@ -454,39 +578,38 @@ function buildEndless(scene) {
   }
   // heat pipes along the south sidewalk, up and over the avenue on an arch
   ST.pipes(-44, -31, AVE.ws + 1.6);
-  ST.pipeArch(-30, AVE.ws + 1.6, AVE.wn - 1.6);
-  ST.pipes(-29, -20, AVE.wn - 1.6);
+  ST.pipes(44, 60, AVE.ws + 1.6);
+  ST.pipeArch(39, AVE.ws + 1.6, AVE.wn - 1.6);
   // utility poles leaning down the cross street, one down across the road
   for (const [x, z] of [[-9.6, 20], [-9.6, 33], [9.6, 26], [9.6, -14]]) P.bentPole(B, x, 0, z, 5.4 + rand(), rand() * 3, rand() < 0.3 ? 0.9 : 0.15, 0x5a5d61);
   P.fallenPole(B, -50, 6.5, 0.35);
   // sidewalk furniture: kiosks (their tubes flicker), a shelter, a bent
   // sign, fires, bins, benches, dumpsters, junk
-  ST.kiosk(24, AVE.wn + 1.2, 1);
+  ST.kiosk(-14, AVE.wn - 1.8, 1);
   ST.kiosk(20, AVE.ws + 2.4, -1);
   ST.kiosk(-50, PARK.z0 + 1.6, -1);
   ST.shelter(-18, AVE.ws - 1.0, -1);
-  ST.shelter(36, AVE.wn + 1.0, 1);
+  ST.shelter(-2, AVE.wn + 1.0, 1);
   ST.bentSign(-14, AVE.wn + 0.6);
   ST.barrelFire(12, AVE.ws + 2.2);
-  ST.barrelFire(-40, AVE.wn - 2);
+  ST.barrelFire(14, -14.5);
   ST.barrelFire(42, 30);
-  ST.clutter(-56, -34, 9);
   ST.clutter(14, 40, 9);
-  for (const [x, z, yaw] of [[-36, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
-  for (const [x, z] of [[-34, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
+  for (const [x, z, yaw] of [[34.5, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
+  for (const [x, z] of [[31, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
   P.dumpster(B, -54, 37, 0.3, 0x4e6355);
   P.dumpster(B, 44, 37.5, -0.2, 0x4f5d73);
-  P.dumpster(B, 58, -14, 1.4, 0x5e5a4c);
-  for (const [x, z] of [[-52, 36], [46, 36], [56, 30], [-56, -14]]) P.crates(B, x, 0, z);
+  P.dumpster(B, 37, -21, 1.4, 0x5e5a4c);
+  for (const [x, z] of [[-52, 36], [46, 36], [38, -16.5], [-56, 13.5]]) P.crates(B, x, 0, z);
   P.billboard(B, 30, 38.6, 0.08, (w, h) => sign(w, h, { board: true }));
   P.billboard(B, -40, 38.8, -0.1, (w, h) => sign(w, h, { board: true }));
   // the scrub: in the park, along the building fronts, up through the
   // paving where nobody's swept for years
   for (const [x, z, r] of [
     [-56, 16, 1.2], [-55, 28, 1], [-48, 37, 1.3], [-22, 37, 1], [-16, 16, 0.9], [-44, 30, 0.7],
-    [-57, -22, 1], [-50, -14, 0.8], [-30, -16, 0.9], [-14, -18, 1], [4, -14, 0.7],
+    [-57, -14, 1], [-44, -22, 0.8], [-30, -24, 0.9], [-20, -14, 0.7], [4, -14, 0.7], [16, -22, 0.8], [33, -14.5, 0.7],
     [58, 24, 1.2], [57, 36, 1], [36, 37, 1.1], [20, 37, 0.9], [44, 18, 0.8], [14, 30, 0.7],
-    [58, -20, 1], [46, -18, 0.8], [-56, 10, 0.6], [-6, 37, 0.8], [12, 18, 0.6],
+    [58, -22, 1], [-56, -23, 0.8], [-56, 10, 0.6], [-6, 37, 0.8], [12, 18, 0.6],
   ]) scrub(x, z, r);
 
   // ---------------------------------------------------------- the park
@@ -526,8 +649,8 @@ function buildEndless(scene) {
   // ------------------------------------------------------------- cover
   // kept out toward the edges, so the middle of the square is open ground:
   // a stranded tram, wrecks, barricade lines, heaps, a container lot
-  P.tram(B, -44, -2.4, 0.03, { burn: 0.7 });
-  P.bus(B, -20, 6.5, 0.15);
+  P.tram(B, -40, 2.4, 0.03, { burn: 0.7 });
+  P.bus(B, -22, -5.5, 0.12);
   for (const [x, z, yaw, kind] of [
     [-52, -6, 0.3, 'sedan'],
     [22, -7, 2.9, 'hatch'],
@@ -535,31 +658,84 @@ function buildEndless(scene) {
     [24, 24, 2.6, 'van'],
     [-6, 32, 1.4, 'hatch'],
     [44, 26, 0.6, 'hatch'],
-    [-30, -18, 1.3, 'sedan'],
+    [52, -5, 1.3, 'sedan'],
+    [-48, 8, 2.8, 'hatch'],
   ]) P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 });
-  for (const [cx, cz, n, yaw] of [[30, 17, 3, -0.4], [-48, -15, 3, 0.1], [16, 34, 3, 1.2]]) {
+  for (const [cx, cz, n, yaw] of [[30, 17, 3, -0.4], [48, 5, 3, 1.4], [16, 34, 3, 1.2]]) {
     for (let k = 0; k < n; k++) K.jersey(B, cx + Math.cos(yaw) * k * 1.7, cz - Math.sin(yaw) * k * 1.7, yaw + (rand() - 0.5) * 0.2);
   }
-  for (const [x, z, r, h] of [[0, -20, 4, 1.8], [40, 33, 2, 1.1]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
-  for (const [x, z, yaw] of [[-38, -18, 0.1], [-24, -19, 0.05]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
-  K.container(B, -38.2, 2.6, -18.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
+  for (const [x, z, r, h] of [[40, 33, 2, 1.1]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
+  for (const [x, z, yaw] of [[-52, -20, 0.1], [-44, -21, 1.55]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
+  K.container(B, -52.2, 2.6, -20.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
   for (let k = 0; k < 5; k++) P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 2 : AVE.ws + 2 + rand() * 6, 3);
-  for (const [x, z, r] of [[-12, 4, 2], [8, -4, 1.6], [30, 10, 1.8], [-50, -4, 1.4]]) P.scorch(B, x, z, r);
+  for (const [x, z, r] of [[-12, 4, 2], [8, -4, 1.6], [30, 10, 1.8], [-50, 4, 1.4]]) P.scorch(B, x, z, r);
 
-  // the base: a shed across the avenue's far end, a sandbagged yard round
-  // it; it can be driven round either side
-  const base = buildShack(B, { x0: BASE.x0, x1: BASE.x1, z0: BASE.z0, z1: BASE.z1, fill: { n: BASE.z0, s: BASE.z1 }, heightAt, label: 'BASE' });
-  for (const s of [-1, 1]) for (let x = BASE.x0 - 4; x < BASE.x1 + 6; x += 1.1) B.piece(1.05, 0.5, 0.6, 0x8a7d62, x, 0.25, s * (AVE.ws + 3), 0, (rand() - 0.5) * 0.15, 0);
-  for (const s of [-1, 1]) B.block((BASE.x0 + BASE.x1 + 2) / 2, s * (AVE.ws + 3), 7, 0.4);
+  // ------------------------------------------------- the grey corners
+  // the car park (south-east): wrecks left in the bays, a barrier arm, a
+  // booth, a lamp
+  for (const [x, z, yaw, kind] of [[42.5, 20, Math.PI / 2, 'sedan'], [48, 20, Math.PI / 2 + 0.2, 'hatch'], [53.6, 31.5, Math.PI / 2, 'van'], [45, 31.5, Math.PI / 2 - 0.15, 'sedan']]) P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 });
+  put(B.root, box(1.6, 2.2, 1.6, 0x58707a, { r: 0.06 }), 39.5, 1.1, 16.2).castShadow = true;
+  B.block(39.5, 16.2, 0.8, 0.8);
+  put(B.root, box(3.2, 0.12, 0.12, 0xd8c050), 41.5, 1.0, 14.6).rotation.z = 0.5;
+  ST.lampPole(57.5, 25, 1, 13);
+  // the junction's corners: bollards along the curbs, electrical cabinets,
+  // planters, a phone box
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    P.bollards(B, sx > 0 ? CROSS.w1 + 0.4 : CROSS.w0 - 5.4, sx > 0 ? CROSS.w1 + 5.4 : CROSS.w0 - 0.4, 0, sz * (AVE.ws - 0.5));
+    P.planter(B, sx * (CROSS.w1 + 1.6), 0, sz * (AVE.ws + 1.8));
+  }
+  P.cabinet(B, -12.6, 0, 16, Math.PI / 2);
+  P.cabinet(B, 12.6, 0, -13.4, -Math.PI / 2);
+  P.cabinet(B, -12.6, 0, 27, Math.PI / 2);
+  {
+    const ph = put(B.root, box(1.0, 2.3, 1.0, 0x8a2f28, { r: 0.05 }), 12.8, 1.15, 20);
+    ph.rotation.y = 0.2;
+    ph.castShadow = true;
+    put(B.root, box(0.8, 1.5, 0.04, 0x9fc3d0, { glow: true }), 12.8 - 0.52, 1.25, 20).rotation.y = Math.PI / 2 + 0.2;
+    B.block(12.8, 20, 0.55, 0.55);
+  }
+  // the strip beside the park (west of the cross street): a newsstand,
+  // benches, a bin, scrub
+  ST.kiosk(-12.4, 33, 1);
+  P.bench(B, -12.6, 0, 22, Math.PI / 2);
+  P.bin(B, -12.4, 0, 24.5);
+  // round the base: sandbag walls either side of its apron, a floodlight
+  // mast, fuel drums, a guard post
+  for (const s of [-1, 1]) {
+    for (let z = BASE.z1 - 0.5; z < AVE.wn - 0.4; z += 1.1) B.piece(0.6, 0.5, 1.05, 0x8a7d62, BASE.x + s * 7.4, 0.25, z, 0, (rand() - 0.5) * 0.15, 0);
+    for (let z = BASE.z1 - 0.5; z < AVE.wn - 1; z += 1.1) B.piece(0.6, 0.45, 1.0, 0x7f735a, BASE.x + s * 7.4, 0.72, z + 0.5, 0, (rand() - 0.5) * 0.15, 0);
+    B.block(BASE.x + s * 7.4, (BASE.z1 + AVE.wn) / 2, 0.4, (AVE.wn - BASE.z1) / 2);
+  }
+  {
+    const mx = BASE.x1 + 3.5;
+    const mz = BASE.z0 + 2;
+    put(B.root, cyl(0.14, 7.5, 0x6a6d70, { seg: 8 }), mx, 3.75, mz).castShadow = true;
+    put(B.root, box(1.6, 0.12, 0.3, 0x45484c), mx, 7.4, mz);
+    for (const dx of [-0.55, 0.55]) put(B.root, box(0.45, 0.35, 0.3, 0xfff2c8, { glow: true }), mx + dx, 7.65, mz + 0.1).rotation.x = 0.5;
+    B.emit(new THREE.Vector3(mx, 6.5, mz + 3), 0xfff2c8, 20, 14);
+    B.pool(mx - 4, mz + 7, 5, 0xfff2c8, 0.12, { sx: 1.2, sz: 0.9 });
+    B.block(mx, mz, 0.25, 0.25);
+  }
+  for (let i = 0; i < 5; i++) put(B.root, cyl(0.32, 0.9, [0x3f5a3a, 0x7a3a2a, 0x3a4a6a][i % 3], { seg: 10 }), BASE.x0 - 2.4 + (i % 3) * 0.7, 0.45, BASE.z0 + 1.2 + ((i / 3) | 0) * 0.7).castShadow = true;
+  B.block(BASE.x0 - 1.7, BASE.z0 + 1.6, 1.2, 0.8);
+
+  // the base: a shed of its own off the avenue's north side, its back to
+  // the elevated road, its door facing down the square (in and out the same
+  // door)
+  const BB = new LevelBuilder(scene, 9095);
+  const base = buildShack(BB, { x0: -3.8, x1: 3.8, z0: -6, z1: 6, fill: { n: -6, s: 6 }, heightAt: () => 0, label: 'BASE', exitFront: true });
+  base.place(BASE.x, BASE.z, Math.PI / 2);
 
   B.finish();
   B.mergeStatic();
   D.finish();
   D.mergeStatic();
+  BB.finish();
+  BB.mergeStatic();
   const room = buildDepotRoom(scene);
-  const blocks = [...B.blocks, ...D.blocks, ...room.blocks];
-  const colliders = [...B.colliders, ...D.colliders, ...room.colliders];
-  const emitters = [...B.emitters, ...D.emitters, ...room.emitters];
+  const blocks = [...B.blocks, ...D.blocks, ...BB.blocks, ...room.blocks];
+  const colliders = [...B.colliders, ...D.colliders, ...BB.colliders, ...room.colliders];
+  const emitters = [...B.emitters, ...D.emitters, ...BB.emitters, ...room.emitters];
   room.bindBlocks(blocks);
   base.bindBlocks(blocks);
 
@@ -583,7 +759,7 @@ function buildEndless(scene) {
       const x = side === 0 ? ARENA.minX + inset : side === 1 ? ARENA.maxX - inset : ARENA.minX + 4 + along * (ARENA.maxX - ARENA.minX - 8);
       const z = side === 2 ? ARENA.minZ + inset : side === 3 ? ARENA.maxZ - inset : ARENA.minZ + 4 + along * (ARENA.maxZ - ARENA.minZ - 8);
       if (Math.hypot(x - api.tankPos.x, z - api.tankPos.z) < 22) continue;
-      if (x > BASE.x0 - 8 && Math.abs(z) < AVE.ws + 4) continue; // (not in the base's yard)
+      if (x > BASE.x0 - 10 && x < BASE.x1 + 10 && z < AVE.wn + 4) continue; // (not by the base)
       const q = new THREE.Vector3(x, 0, z);
       pushOut(q, () => ({ x: q.x, z: q.z, hx: 0.9, hz: 0.7, yaw: 0 }), blocks, 2);
       if (Math.hypot(q.x - x, q.z - z) > 0.2) continue;
@@ -676,7 +852,8 @@ function buildEndless(scene) {
       api.objective(`${S.phase === 'intro' ? 'First wave' : `Wave ${S.wave + 1}`} in ${Math.ceil(Math.max(0, S.left))} s · ${mm}:${ss}`);
       api.waveHud({ wave: S.wave, next: Math.max(0, S.left) });
       // into the base (open between waves)
-      if (S.phase === 'break' && base.inDoor > 0.6 && near(api) < 5) {
+      if (S.out > 0) S.out -= dt;
+      if (S.phase === 'break' && !(S.out > 0) && base.inDoor > 0.6 && near(api) < 5) {
         closeBase(api);
         S.phase = 'inbase';
         api.depot(base, {
@@ -684,7 +861,8 @@ function buildEndless(scene) {
           onLeave: () => {
             S.phase = 'break';
             S.left = Math.max(S.left, 3);
-            S.shut = 2;
+            S.shut = 1.2;
+            S.out = 4; // (out the same door: not straight back in)
           },
         });
         return;
@@ -721,6 +899,7 @@ function buildEndless(scene) {
   function update(dt, t, ctx = {}) {
     B.update(dt, t, ctx);
     D.update(dt, t, ctx);
+    BB.update(dt, t, ctx);
     base.update(dt, t);
     room.update(dt, t, ctx);
     if (ctx.api) script(ctx.api, dt);
