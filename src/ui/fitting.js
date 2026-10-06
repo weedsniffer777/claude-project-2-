@@ -169,6 +169,14 @@ const CSS = `
 .fit .bigbtn .contnote { position: absolute; left: 50%; bottom: calc(100% + 16px); transform: translateX(-50%); width: max-content; max-width: min(360px, 80vw); padding: 8px 12px 9px; font: 400 14px/1.3 'Pixelify Sans', monospace; text-transform: none; color: #b6ffc4; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--go); pointer-events: none; }
 .fit .bigbtn .contnote::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -8px; width: 16px; height: 10px; background: var(--go); clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .fit .msg.teach .equip { animation: fitTeach 0.8s steps(2) infinite; }
+.fit .teachbox { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: 7; width: min(400px, calc(100vw - 32px)); box-sizing: border-box; padding: 16px 18px 18px; display: grid; gap: 10px; justify-items: center; text-align: center; background: #17151a; box-shadow: 0 0 0 2px #000, 0 0 0 5px var(--go), 0 0 26px 4px #6be08a66, 0 0 0 200vmax rgba(4, 3, 6, 0.6); pointer-events: auto; }
+.fit .teachbox .tt { font: 400 13px/1 'Silkscreen', monospace; text-transform: uppercase; padding: 4px 8px; color: #111; background: var(--go); box-shadow: 0 0 0 2px #000; }
+.fit .teachbox img { width: 168px; height: 112px; image-rendering: pixelated; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4540; }
+.fit .teachbox .teachline { font: 400 18px/1.25 'Pixelify Sans', monospace; color: #b6ffc4; }
+.fit .teachbox .teachline b { color: #fff; font-weight: 400; }
+.fit .teachbox small { font-size: 13px; color: #b9b0a0; }
+.fit .teachbox .equip { padding: 12px 34px 13px; font-size: 17px; animation: fitTeach 0.8s steps(2) infinite; }
+.fit .btn.bigbtn.waiting { filter: grayscale(1) brightness(0.5); animation: none; cursor: not-allowed; box-shadow: 0 5px 0 #222, 0 0 0 3px #000; }
 @keyframes fitTeach { 50% { filter: brightness(1.3); box-shadow: 0 0 0 2px #000, 0 0 14px 3px #6be08a; } }
 .fit .btn { padding: 8px 14px 9px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .fit .btn.go { color: #111; background: var(--go); box-shadow: 0 3px 0 #2f6b40, 0 0 0 2px #000; }
@@ -551,6 +559,7 @@ export function createFitting({ renderer, cursor }) {
     // the message box: a fresh find, or which slot to replace
     const msg = $('.msg');
     msg.hidden = true;
+    root.querySelector('.teachbox')?.remove();
     if (!replacing && o.highlight && sp.includes(o.highlight)) {
       msg.hidden = false;
       msg.innerHTML = o.teachEquip
@@ -559,6 +568,17 @@ export function createFitting({ renderer, cursor }) {
       msg.classList.toggle('teach', !!o.teachEquip);
       msg.querySelector('b').textContent = PARTS[o.highlight].name;
       msg.querySelector('.equip').addEventListener('click', () => equip(o.highlight));
+      // the first part ever: the same, big and in the middle of the screen
+      // (the small one in the panel stays out of the way under it)
+      if (o.teachEquip) {
+        msg.hidden = true;
+        const tb = document.createElement('div');
+        tb.className = 'teachbox';
+        tb.innerHTML = `<span class="tt">New part!</span><img alt="" src="${partPicture(renderer, o.highlight, 168, 112)}"><span class="teachline">Put <b></b> on your tank!</span><small>You can change your tank's loadout at any checkpoint.</small><button type="button" class="btn go equip">Equip now</button>`;
+        tb.querySelector('b').textContent = PARTS[o.highlight].name;
+        tb.querySelector('.equip').addEventListener('click', () => equip(o.highlight));
+        root.append(tb);
+      }
     }
     // the tanks (hangar only)
     const tanks = $('.tanks');
@@ -594,9 +614,14 @@ export function createFitting({ renderer, cursor }) {
       b.className = `btn${primary ? ' go' : ''}${center ? ' bigbtn' : ''}`;
       b.textContent = label;
       b.addEventListener('click', () => {
-        if (replacing) return;
+        if (replacing || (center && o.teachEquip)) return;
         fn();
       });
+      // the first time through, the new part not on yet: Continue waits
+      if (center && o.teachEquip) {
+        b.disabled = true;
+        b.classList.add('waiting');
+      }
       // center: a big button low in the middle of the screen (the
       // checkpoint's Continue)
       if (center) root.append(b);
