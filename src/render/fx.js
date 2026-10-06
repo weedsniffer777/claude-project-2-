@@ -1,34 +1,60 @@
 // Tiny pooled cube-particle system for muzzle smoke, blasts and debris.
 import * as THREE from 'three';
 import { DecalGeometry } from 'three/examples/jsm/geometries/DecalGeometry.js';
-import { glowMat, toon } from '../models/kit.js';
+import { toon, gradientMap } from '../models/kit.js';
 
 const geo = new THREE.BoxGeometry(1, 1, 1);
 
+// Every pool here is one InstancedMesh per look (a single draw call however
+// many are out): each particle owns a slot, written each frame; a spent one
+// is scaled to nothing. Colour per instance.
+const HIDE = new THREE.Matrix4().makeScale(0, 0, 0);
+const _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _s = new THREE.Vector3();
+const _c = new THREE.Color();
+const UNIT_Q = new THREE.Quaternion();
+function instanced(scene, geometry, material, n, { shadow = false, order = 0 } = {}) {
+  const m = new THREE.InstancedMesh(geometry, material, n);
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  for (let i = 0; i < n; i++) {
+    m.setMatrixAt(i, HIDE);
+    m.setColorAt(i, _c.set(0xffffff));
+  }
+  m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled = false; // (its bounds are one particle's: never cull it)
+  m.castShadow = shadow;
+  m.renderOrder = order;
+  scene.add(m);
+  return m;
+}
+const solidMat = () => new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap });
+const glowWhite = () => new THREE.MeshBasicMaterial({ color: 0xffffff });
+
 export class Fx {
   constructor(scene, size = 120) {
+    this.solid = instanced(scene, geo, solidMat(), size);
+    this.lit = instanced(scene, geo, glowWhite(), size);
     this.pool = [];
-    for (let i = 0; i < size; i++) {
-      const mesh = new THREE.Mesh(geo, toon(0xffffff));
-      mesh.visible = false;
-      scene.add(mesh);
-      this.pool.push({ mesh, vel: new THREE.Vector3(), life: 0, max: 1, size: 0.1, gravity: 0, grow: 0 });
-    }
+    for (let i = 0; i < size; i++) this.pool.push({ i, glow: false, pos: new THREE.Vector3(), rot: new THREE.Euler(), vel: new THREE.Vector3(), life: 0, max: 1, size: 0.1, gravity: 0, grow: 0 });
     this.cursor = 0;
   }
 
   spawn(pos, vel, { color = 0xffffff, life = 0.5, size = 0.12, gravity = 0, grow = 0, glow = false }) {
     const p = this.pool[this.cursor];
     this.cursor = (this.cursor + 1) % this.pool.length;
-    p.mesh.material = glow ? glowMat(color) : toon(color);
-    p.mesh.position.copy(pos);
-    p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+    if (p.glow !== glow) (p.glow ? this.lit : this.solid).setMatrixAt(p.i, HIDE);
+    p.glow = glow;
+    const mesh = glow ? this.lit : this.solid;
+    mesh.setColorAt(p.i, _c.set(color));
+    mesh.instanceColor.needsUpdate = true;
+    p.pos.copy(pos);
+    p.rot.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     p.vel.copy(vel);
     p.life = p.max = life;
     p.size = size;
     p.gravity = gravity;
     p.grow = grow;
-    p.mesh.visible = true;
   }
 
   burst(pos, { count = 10, speed = 3, color = 0xffa733, glow = true, ...rest } = {}) {
@@ -50,20 +76,23 @@ export class Fx {
   update(dt) {
     for (const p of this.pool) {
       if (p.life <= 0) continue;
+      const mesh = p.glow ? this.lit : this.solid;
       p.life -= dt;
       if (p.life <= 0) {
-        p.mesh.visible = false;
+        mesh.setMatrixAt(p.i, HIDE);
         continue;
       }
       p.vel.y -= p.gravity * dt;
-      p.mesh.position.addScaledVector(p.vel, dt);
-      if (p.mesh.position.y < 0.05 && p.gravity > 0) {
-        p.mesh.position.y = 0.05;
+      p.pos.addScaledVector(p.vel, dt);
+      if (p.pos.y < 0.05 && p.gravity > 0) {
+        p.pos.y = 0.05;
         p.vel.multiplyScalar(0.3);
       }
       const k = p.life / p.max;
-      p.mesh.scale.setScalar(p.size * (k + p.grow * (1 - k)));
+      mesh.setMatrixAt(p.i, _m.compose(p.pos, _q.setFromEuler(p.rot), _s.setScalar(p.size * (k + p.grow * (1 - k)))));
     }
+    this.solid.instanceMatrix.needsUpdate = true;
+    this.lit.instanceMatrix.needsUpdate = true;
   }
 }
 
@@ -79,15 +108,17 @@ const spikeGeo = new THREE.OctahedronGeometry(1, 0);
 
 export class Glow {
   constructor(scene, { size = 48, lights = 4 } = {}) {
+    // one instanced mesh per shape, additive: an item's fade is its colour
+    // dimmed (additive light: the same thing as its opacity)
+    const add = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+    this.meshes = {
+      flash: instanced(scene, sphereGeo, add(), size, { order: 10 }),
+      ring: instanced(scene, ringGeo, add(), size, { order: 10 }),
+      tracer: instanced(scene, streakGeo, add(), size, { order: 10 }),
+      spike: instanced(scene, spikeGeo, add(), size, { order: 10 }),
+    };
     this.items = [];
-    for (let i = 0; i < size; i++) {
-      const mat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-      const mesh = new THREE.Mesh(sphereGeo, mat);
-      mesh.visible = false;
-      mesh.renderOrder = 10;
-      scene.add(mesh);
-      this.items.push({ mesh, life: 0, max: 1, s0: 1, s1: 1, kind: 'flash', len: 1, width: 1 });
-    }
+    for (let i = 0; i < size; i++) this.items.push({ i, life: 0, max: 1, s0: 1, s1: 1, kind: 'flash', len: 1, width: 1, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), color: new THREE.Color() });
     this.decals = [];
     for (let i = 0; i < 10; i++) {
       const mat = new THREE.MeshBasicMaterial({ color: 0x1b1712, transparent: true, depthWrite: false });
@@ -108,57 +139,50 @@ export class Glow {
     this.lightCursor = 0;
   }
 
-  next() {
+  // the next item, its old shape's slot cleared; kind: its new shape
+  next(kind) {
     const it = this.items[this.cursor];
     this.cursor = (this.cursor + 1) % this.items.length;
+    if (it.kind !== kind) this.meshes[it.kind].setMatrixAt(it.i, HIDE);
+    it.kind = kind;
     return it;
   }
 
   // Expanding, fading glow ball.
   flash(pos, color, from, to, life) {
-    const it = this.next();
-    Object.assign(it, { kind: 'flash', life, max: life, s0: from, s1: to });
-    it.mesh.geometry = sphereGeo;
-    it.mesh.material.color.set(color);
-    it.mesh.position.copy(pos);
-    it.mesh.rotation.set(0, 0, 0);
-    it.mesh.visible = true;
+    const it = this.next('flash');
+    Object.assign(it, { life, max: life, s0: from, s1: to });
+    it.color.set(color);
+    it.pos.copy(pos);
+    it.quat.copy(UNIT_Q);
   }
 
   // Flat shockwave ring on the ground.
   ring(pos, color, from, to, life) {
-    const it = this.next();
-    Object.assign(it, { kind: 'ring', life, max: life, s0: from, s1: to });
-    it.mesh.geometry = ringGeo;
-    it.mesh.material.color.set(color);
-    it.mesh.position.copy(pos);
-    it.mesh.rotation.set(0, 0, 0);
-    it.mesh.visible = true;
+    const it = this.next('ring');
+    Object.assign(it, { life, max: life, s0: from, s1: to });
+    it.color.set(color);
+    it.pos.copy(pos);
+    it.quat.copy(UNIT_Q);
   }
 
   // Bright streak from a to b that thins out as it fades.
   tracer(a, b, color, width, life) {
-    const it = this.next();
+    const it = this.next('tracer');
     const len = a.distanceTo(b);
-    Object.assign(it, { kind: 'tracer', life, max: life, len, width });
-    it.mesh.geometry = streakGeo;
-    it.mesh.material.color.set(color);
-    it.mesh.position.copy(a).add(b).multiplyScalar(0.5);
-    it.mesh.lookAt(b);
-    it.mesh.scale.set(width, width, len);
-    it.mesh.visible = true;
+    Object.assign(it, { life, max: life, len, width });
+    it.color.set(color);
+    it.pos.copy(a).add(b).multiplyScalar(0.5);
+    it.quat.setFromRotationMatrix(_m.lookAt(b, it.pos, THREE.Object3D.DEFAULT_UP)); // (as Object3D.lookAt: +z toward b)
   }
 
   // Anime starburst blade: a long thin diamond from pos along dir.
   spike(pos, dir, color, len, width, life) {
-    const it = this.next();
-    Object.assign(it, { kind: 'spike', life, max: life, len, width });
-    it.mesh.geometry = spikeGeo;
-    it.mesh.material.color.set(color);
-    it.mesh.position.copy(pos).addScaledVector(dir, len * 0.5);
-    it.mesh.lookAt(pos.clone().addScaledVector(dir, len));
-    it.mesh.scale.set(width, width, len * 0.5);
-    it.mesh.visible = true;
+    const it = this.next('spike');
+    Object.assign(it, { life, max: life, len, width });
+    it.color.set(color);
+    it.pos.copy(pos).addScaledVector(dir, len * 0.5);
+    it.quat.setFromRotationMatrix(_m.lookAt(pos.clone().addScaledVector(dir, len), it.pos, THREE.Object3D.DEFAULT_UP));
   }
 
   scorch(pos, radius, life = 5) {
@@ -182,24 +206,30 @@ export class Glow {
   update(dt) {
     for (const it of this.items) {
       if (it.life <= 0) continue;
+      const mesh = this.meshes[it.kind];
       it.life -= dt;
       if (it.life <= 0) {
-        it.mesh.visible = false;
+        mesh.setMatrixAt(it.i, HIDE);
         continue;
       }
       const k = it.life / it.max; // 1 -> 0
       const u = 1 - k;
-      it.mesh.material.opacity = k * k;
+      mesh.setColorAt(it.i, _c.copy(it.color).multiplyScalar(k * k));
       if (it.kind === 'spike') {
         const w = it.width * k;
-        it.mesh.scale.set(w, w, it.len * 0.5 * (0.7 + 0.3 * u));
+        _s.set(w, w, it.len * 0.5 * (0.7 + 0.3 * u));
       } else if (it.kind === 'tracer') {
         const w = it.width * (0.4 + 0.6 * k);
-        it.mesh.scale.set(w, w, it.len);
+        _s.set(w, w, it.len);
       } else {
         const ease = 1 - Math.pow(1 - u, 3);
-        it.mesh.scale.setScalar(it.s0 + (it.s1 - it.s0) * ease);
+        _s.setScalar(it.s0 + (it.s1 - it.s0) * ease);
       }
+      mesh.setMatrixAt(it.i, _m.compose(it.pos, it.quat, _s));
+    }
+    for (const m of Object.values(this.meshes)) {
+      m.instanceMatrix.needsUpdate = true;
+      m.instanceColor.needsUpdate = true;
     }
     for (const d of this.decals) {
       if (d.life <= 0) continue;
@@ -232,14 +262,9 @@ function easeOut(u) {
 
 export class Puffs {
   constructor(scene, size = 200) {
+    this.mesh = instanced(scene, puffGeo, solidMat(), size, { shadow: true });
     this.pool = [];
-    for (let i = 0; i < size; i++) {
-      const mesh = new THREE.Mesh(puffGeo, toon(0xffffff));
-      mesh.visible = false;
-      mesh.castShadow = true;
-      scene.add(mesh);
-      this.pool.push({ mesh, vel: new THREE.Vector3(), life: 0, max: 1, delay: 0, s0: 0.2, s1: 0.5, drag: 3, lift: 0.5, stretch: 1, fadeAt: 0.4 });
-    }
+    for (let i = 0; i < size; i++) this.pool.push({ i, pos: new THREE.Vector3(), rot: new THREE.Euler(), vel: new THREE.Vector3(), life: 0, max: 1, delay: 0, s0: 0.2, s1: 0.5, drag: 3, lift: 0.5, stretch: 1, fadeAt: 0.4 });
     this.cursor = 0;
   }
 
@@ -249,11 +274,11 @@ export class Puffs {
   spawn(pos, vel, { color = 0xd9dcd6, s0 = 0.15, s1 = 0.5, life = 1, drag = 3, lift = 0.5, delay = 0, stretch = 1, fadeAt = 0.4 } = {}) {
     const p = this.pool[this.cursor];
     this.cursor = (this.cursor + 1) % this.pool.length;
-    p.mesh.material = toon(color);
-    p.mesh.position.copy(pos);
-    p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
-    p.mesh.visible = delay <= 0;
-    p.mesh.scale.setScalar(s0);
+    this.mesh.setColorAt(p.i, _c.set(color));
+    this.mesh.instanceColor.needsUpdate = true;
+    this.mesh.setMatrixAt(p.i, HIDE); // (shown from its first update: after any delay)
+    p.pos.copy(pos);
+    p.rot.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     p.vel.copy(vel);
     Object.assign(p, { life, max: life, delay, s0, s1, drag, lift, stretch, fadeAt });
   }
@@ -263,49 +288,45 @@ export class Puffs {
       if (p.life <= 0) continue;
       if (p.delay > 0) {
         p.delay -= dt;
-        if (p.delay <= 0) p.mesh.visible = true;
         continue;
       }
       p.life -= dt;
       if (p.life <= 0) {
-        p.mesh.visible = false;
+        this.mesh.setMatrixAt(p.i, HIDE);
         continue;
       }
       const u = 1 - p.life / p.max;
       p.vel.multiplyScalar(Math.exp(-p.drag * dt));
       p.vel.y += p.lift * dt;
-      p.mesh.position.addScaledVector(p.vel, dt);
-      p.mesh.rotation.y += dt * 0.6;
-      let s = p.s0 + (p.s1 - p.s0) * easeOut(Math.min(1, u / 0.25));
-      if (u > p.fadeAt) s *= 1 - easeOut((u - p.fadeAt) / (1 - p.fadeAt));
-      p.mesh.scale.set(s, s * (1 / p.stretch), s);
+      p.pos.addScaledVector(p.vel, dt);
+      p.rot.y += dt * 0.6;
+      let sc = p.s0 + (p.s1 - p.s0) * easeOut(Math.min(1, u / 0.25));
+      if (u > p.fadeAt) sc *= 1 - easeOut((u - p.fadeAt) / (1 - p.fadeAt));
+      this.mesh.setMatrixAt(p.i, _m.compose(p.pos, _q.setFromEuler(p.rot), _s.set(sc, sc * (1 / p.stretch), sc)));
     }
+    this.mesh.instanceMatrix.needsUpdate = true;
   }
 }
 
 export class Debris {
   constructor(scene, size = 90) {
+    this.mesh = instanced(scene, rockGeo, solidMat(), size, { shadow: true });
     this.pool = [];
-    for (let i = 0; i < size; i++) {
-      const mesh = new THREE.Mesh(rockGeo, toon(0x6b5a45));
-      mesh.visible = false;
-      mesh.castShadow = true;
-      scene.add(mesh);
-      this.pool.push({ mesh, vel: new THREE.Vector3(), spin: new THREE.Vector3(), life: 0, max: 1, size: 0.1, gravity: 14, drag: 0 });
-    }
+    for (let i = 0; i < size; i++) this.pool.push({ i, pos: new THREE.Vector3(), rot: new THREE.Euler(), scale: new THREE.Vector3(), vel: new THREE.Vector3(), spin: new THREE.Vector3(), life: 0, max: 1, size: 0.1, gravity: 14, drag: 0 });
     this.cursor = 0;
   }
 
   spawn(pos, vel, { color = 0x6b5a45, size = 0.1, life = 2.5, gravity = 14, drag = 0 } = {}) {
     const d = this.pool[this.cursor];
     this.cursor = (this.cursor + 1) % this.pool.length;
-    d.mesh.material = toon(color);
-    d.mesh.position.copy(pos);
-    d.mesh.visible = true;
+    this.mesh.setColorAt(d.i, _c.set(color));
+    this.mesh.instanceColor.needsUpdate = true;
+    d.pos.copy(pos);
+    d.rot.set(0, 0, 0);
     d.vel.copy(vel);
     d.spin.set((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14);
     Object.assign(d, { life, max: life, size, gravity, drag });
-    d.mesh.scale.set(size, size * (0.6 + Math.random() * 0.5), size * (0.7 + Math.random() * 0.5));
+    d.scale.set(size, size * (0.6 + Math.random() * 0.5), size * (0.7 + Math.random() * 0.5));
   }
 
   update(dt) {
@@ -313,26 +334,28 @@ export class Debris {
       if (d.life <= 0) continue;
       d.life -= dt;
       if (d.life <= 0) {
-        d.mesh.visible = false;
+        this.mesh.setMatrixAt(d.i, HIDE);
         continue;
       }
       d.vel.y -= d.gravity * dt;
       if (d.drag) d.vel.multiplyScalar(Math.exp(-d.drag * dt));
-      d.mesh.position.addScaledVector(d.vel, dt);
-      d.mesh.rotation.x += d.spin.x * dt;
-      d.mesh.rotation.y += d.spin.y * dt;
-      d.mesh.rotation.z += d.spin.z * dt;
+      d.pos.addScaledVector(d.vel, dt);
+      d.rot.x += d.spin.x * dt;
+      d.rot.y += d.spin.y * dt;
+      d.rot.z += d.spin.z * dt;
       const floor = d.size * 0.5;
-      if (d.mesh.position.y < floor) {
-        d.mesh.position.y = floor;
+      if (d.pos.y < floor) {
+        d.pos.y = floor;
         d.vel.y = Math.abs(d.vel.y) * 0.3;
         d.vel.x *= 0.55;
         d.vel.z *= 0.55;
         d.spin.multiplyScalar(0.5);
       }
       const k = d.life / d.max;
-      if (k < 0.2) d.mesh.scale.multiplyScalar(0.92); // settle and vanish
+      if (k < 0.2) d.scale.multiplyScalar(0.92); // settle and vanish
+      this.mesh.setMatrixAt(d.i, _m.compose(d.pos, _q.setFromEuler(d.rot), d.scale));
     }
+    this.mesh.instanceMatrix.needsUpdate = true;
   }
 }
 

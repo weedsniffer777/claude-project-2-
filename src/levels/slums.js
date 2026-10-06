@@ -801,6 +801,13 @@ function buildSlums(scene) {
   trash(START_X - 4, -5.5, 1.6);
   B.block(START_X - 5, 0, 1.5, 9);
 
+  // the shack fronts: walls to the machines too, the length of the road
+  // either side of the market (lean-tos and tarp nooks have nothing solid
+  // inside them: nothing goes in under them where the tank can't follow);
+  // and the square's own edges
+  for (const [a, b] of [[START_X - 30, MARKET.x0], [MARKET.x1, DUMP_X]]) for (const z of [FRONT.n + 0.1, FRONT.s - 0.1]) B.block((a + b) / 2, z, (b - a) / 2, 0.25);
+  for (const z of [MARKET.n + 0.1, MARKET.s - 0.1]) B.block((MARKET.x0 + MARKET.x1) / 2, z, (MARKET.x1 - MARKET.x0) / 2, 0.25);
+
   // the checkpoints
   const shackA = buildShack(B, { x0: SHACK_A.x0, x1: SHACK_A.x1, z0: ROAD.n + 0.1, z1: ROAD.s - 0.1, fill: { n: FRONT.n - 0.5, s: FRONT.s + 0.8 }, heightAt });
   const shackB = buildShack(B, { x0: SHACK_B.x0, x1: SHACK_B.x1, z0: ROAD.n + 0.1, z1: ROAD.s - 0.1, fill: { n: FRONT.n - 0.5, s: FRONT.s + 0.8 }, heightAt });
@@ -887,7 +894,7 @@ function buildSlums(scene) {
       case 2:
         if (x > 46) {
           // an artillery drone squatting on the road ahead
-          api.spawnArty(ahead(api, 80, 86), -1, { yaw: Math.PI, hpScale: 0.35 });
+          api.spawnArty(ahead(api, 80, 86), -1, { yaw: Math.PI, hpScale: 0.21 });
           for (const d of [0.3, 0.7]) fromAlley(api, 'dog', 72, 84, d);
           go(3);
         }
@@ -943,9 +950,9 @@ function buildSlums(scene) {
       case 1:
         if (x > MARKET.x0 - 2) {
           // the market: machines all over it, two artillery drones beyond the railway
-          api.spawnArty(RAIL_X + 10, -10, { yaw: Math.PI, hpScale: 0.35 });
-          api.spawnArty(RAIL_X + 12, 9, { yaw: Math.PI, hpScale: 0.35, delay: 1 });
-          if (api.run.hard) api.spawnArty(RAIL_X + 14, 0, { yaw: Math.PI, hpScale: 0.35, delay: 2 }); // (two at most; three on Hard)
+          api.spawnArty(RAIL_X + 10, -10, { yaw: Math.PI, hpScale: 0.21 });
+          api.spawnArty(RAIL_X + 12, 9, { yaw: Math.PI, hpScale: 0.21, delay: 1 });
+          if (api.run.hard) api.spawnArty(RAIL_X + 14, 0, { yaw: Math.PI, hpScale: 0.21, delay: 2 }); // (two at most; three on Hard)
           for (const [z, d] of [[-8, 0], [6, 0.4], [-2, 0.8]]) api.spawnDog(MARKET.x0 + 20, z, { delay: d });
           api.spawnWalker(MARKET.x0 + 28, 8, { delay: 0.6 });
           go(2);
@@ -1019,8 +1026,8 @@ function buildSlums(scene) {
       case 3:
         if (x > 266) {
           // the pair covering the barricade
-          S.final = [api.spawnArty(END_X - 10, -4, { yaw: Math.PI, hpScale: 0.5 }), api.spawnArty(END_X - 8, 4, { yaw: Math.PI, hpScale: 0.5, delay: 0.6 })];
-          if (api.run.hard) S.final.push(api.spawnArty(END_X - 6, 0, { yaw: Math.PI, hpScale: 0.5, delay: 1.2 })); // (a third on Hard)
+          S.final = [api.spawnArty(END_X - 10, -4, { yaw: Math.PI, hpScale: 0.3 }), api.spawnArty(END_X - 8, 4, { yaw: Math.PI, hpScale: 0.3, delay: 0.6 })];
+          if (api.run.hard) S.final.push(api.spawnArty(END_X - 6, 0, { yaw: Math.PI, hpScale: 0.3, delay: 1.2 })); // (a third on Hard)
           api.spawnWalker(END_X - 14, 3, { delay: 1 });
           drone(api, END_X - 12, END_X - 6, 1.4);
           api.objective('Destroy the artillery drones');

@@ -279,7 +279,7 @@ function buildRiver(scene) {
     if (o.shop) for (let k = 0; k < cols; k++) if (rand() > 0.3) B.piece(cw * 0.9, 0.05, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][k % 3], x0 + (k + 0.5) * cw, 1.45 - rand() * 0.3, zf + 0.42, -0.35 - rand() * 0.5, 0, (rand() - 0.5) * 0.3);
     P.facadeClutter(B, x0, x1, zf, H);
     for (let i = 0; i < 3; i++) B.piece(0.6 + rand(), 0.5 + rand() * 0.6, 0.6 + rand(), 0x7b7a76, x0 + 1 + rand() * (w - 2), H + 0.3, zf - 2 - rand() * (depth - 4));
-    B.lump((x0 + x1) / 2, H + 0.05, zf - depth / 2, w / 2.4, 0.12, depth / 2.8, 0xd0d3d8);
+    B.snowPatch((x0 + x1) / 2, H, zf - depth / 2, w * 0.9, depth * 0.85);
     if (o.sign) {
       const sw = Math.min(w * 0.6, 8);
       const s = new THREE.Mesh(new THREE.PlaneGeometry(sw, 0.55), sign(sw, 0.55, { ink: o.sign }));
@@ -305,7 +305,7 @@ function buildRiver(scene) {
     B.block((x0 + x1) / 2, zf + depth / 2, w / 2, depth / 2);
     for (let x = x0 + 1.2; x < x1 - 1; x += 2.6) if (rand() < 0.7) B.piece(1.8, 0.06, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][(rand() * 3) | 0], x, 1.45, zf - 0.42, 0.4, 0, 0);
     B.piece(w, 0.3, 0.2, 0x8d8b86, (x0 + x1) / 2, H + 0.15, zf + 0.1);
-    B.lump((x0 + x1) / 2, H + 0.05, zf + depth / 2, w / 2.2, 0.12, depth / 2.6, 0xd0d3d8);
+    B.snowPatch((x0 + x1) / 2, H, zf + depth / 2, w * 0.9, depth * 0.85);
   }
   const ribs = (() => {
     const [c, g] = canvas(16, 16);
@@ -328,7 +328,7 @@ function buildRiver(scene) {
     m.castShadow = m.receiveShadow = true;
     B.add(m);
     B.solid(m);
-    B.lump(x, y + 2.62, z, 2.4, 0.1, 1.0, 0xd0d3d8, yaw);
+    B.snowPatch(x, y + 2.6, z, 5.6, 2.2, yaw);
     return m;
   }
   function jersey(x, z, yaw = 0, h = 0.9, w = 1.6) {

@@ -35,7 +35,7 @@ const WALK = { n: -7.5, s: 7.5 }; // where the buildings' fronts stand
 const SHACK_A = { x0: 90, x1: 97.6 };
 const SPUR_X = 150; // the rail spur across the road
 const SHACK_B = { x0: 190, x1: 197.6 }; // built into the factory's front
-const HALL = { x0: 198, x1: 246, n: -13, s: 13 };
+const HALL = { x0: 198, x1: 246, n: -19, s: 19 };
 const HALL_H = 10;
 const WALL_X = HALL.x1 - 3; // the defence wall's face
 const DOOR = { z: 0, half: 3.5, h: 6 }; // its blast door
@@ -451,14 +451,30 @@ function buildIndustrial(scene) {
     // (the near one, between the camera and the floor, only its plinth:
     // the rest of it there just for its shadow)
     for (const s of [-1, 1]) {
-      if (s < 0) tin(H, LEN, HALL_H, 0.3, MIDX, HALL_H / 2, s * (WID / 2 + 0.15), 0x5d6660).receiveShadow = true;
+      if (s < 0) tin(H, LEN, HALL_H + 4, 0.3, MIDX, (HALL_H + 4) / 2, HALL.n - 0.15, 0x5d6660).receiveShadow = true;
       else {
         const ghost = new THREE.Mesh(new THREE.BoxGeometry(LEN, HALL_H - 1.6, 0.3), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
-        ghost.position.set(MIDX, 1.6 + (HALL_H - 1.6) / 2, s * (WID / 2 + 0.15));
+        ghost.position.set(MIDX, 1.6 + (HALL_H - 1.6) / 2, HALL.s + 0.15);
         ghost.castShadow = true;
         H.add(ghost);
       }
-      put(H.root, box(LEN, 1.6, 0.34, BRICK[2], { r: 0.02 }), MIDX, 0.8, s * (WID / 2 + 0.15));
+      put(H.root, box(LEN, 1.6, 0.34, BRICK[2], { r: 0.02 }), MIDX, 0.8, s < 0 ? HALL.n - 0.15 : HALL.s + 0.15);
+    }
+    // the ends, inside: the front wall either side of the checkpoint and
+    // over it, the back wall behind the defence wall; tall, so nothing
+    // outside shows; and dark ground all round beyond them
+    const endH = HALL_H + 4;
+    for (const [za, zb] of [[HALL.n - 0.3, CURB.n + 0.1], [CURB.s - 0.1, HALL.s + 0.3]]) tin(H, 0.6, endH, zb - za, HALL.x0 - 0.3, endH / 2, (za + zb) / 2, 0x5d6660);
+    tin(H, 0.6, endH - 3.6, CURB.s - CURB.n, HALL.x0 - 0.3, 3.6 + (endH - 3.6) / 2, 0, 0x5d6660);
+    for (const [za, zb] of [[HALL.n - 0.3, DOOR.z - DOOR.half - 1], [DOOR.z + DOOR.half + 1, HALL.s + 0.3]]) tin(H, 0.6, endH, zb - za, HALL.x1 + 0.3, endH / 2, (za + zb) / 2, 0x4a4f55);
+    tin(H, 0.6, endH - DOOR.h - 0.5, DOOR.half * 2 + 2, HALL.x1 + 0.3, DOOR.h + 0.5 + (endH - DOOR.h - 0.5) / 2, DOOR.z, 0x4a4f55);
+    {
+      const dark = new THREE.Mesh(new THREE.PlaneGeometry(200, 160), new THREE.MeshBasicMaterial({ color: 0x0b0c0d }));
+      dark.rotation.x = -Math.PI / 2;
+      dark.position.set(MIDX, -0.05, 0);
+      H.add(dark);
+      // the corridor out beyond the door: walls either side, dim
+      for (const s of [-1, 1]) tin(H, 18, 6, 0.4, HALL.x1 + 9, 3, DOOR.z + s * (DOOR.half + 1.2), 0x3a3c3f);
     }
     // columns, a crane rail on them each side, the crane across
     for (let x = HALL.x0 + 4; x < WALL_X - 3; x += 8) {
@@ -592,6 +608,14 @@ function buildIndustrial(scene) {
     put(H.root, box(14, 0.1, DOOR.half * 2 + 2, 0x2a2a28), HALL.x1 + 7, 0.02, DOOR.z);
     H.emit(new THREE.Vector3(HALL.x1 + 10, 3, DOOR.z), 0xfff1d6, 0, 12, { level: 0, priority: true });
   }
+
+  // the yards either side: off limits. Walls along both sides of the road
+  // (behind the buildings' fronts, in the gaps between them), so nothing
+  // runs off where the tank can't follow; the spur's gateway piled up
+  for (const z of [WALK.n - 0.3, WALK.s + 0.9]) B.block((START_X - 10 + HALL.x0) / 2, z, (HALL.x0 - START_X + 10) / 2, 0.3);
+  for (let k = 0; k < 4; k++) B.piece(1.6, 0.9, 0.7, pick([0x9a978f, 0x8d8b86]), SPUR_X + (k - 1.5) * 1.15, 0.45, WALK.n - 1.2 + (rand() - 0.5) * 0.4, 0, (rand() - 0.5) * 0.4, 0);
+  heap(SPUR_X + 0.5, WALK.n - 3.2, 1.6);
+  K.container(B, SPUR_X - 0.4, 0, WALK.n - 5.5, 0.35, CONTAINERS[2]);
 
   // the checkpoints
   const shackA = buildShack(B, { x0: SHACK_A.x0, x1: SHACK_A.x1, z0: CURB.n + 0.1, z1: CURB.s - 0.1, fill: { n: WALK.n - 0.5, s: WALK.s + 0.8 }, heightAt });
@@ -748,7 +772,7 @@ function buildIndustrial(scene) {
       case 1:
         if (x > 118) {
           // an artillery drone up the spur, in the works' gateway
-          api.spawnArty(SPUR_X + 4, -2, { yaw: Math.PI, hpScale: 0.35 });
+          api.spawnArty(SPUR_X + 4, -2, { yaw: Math.PI, hpScale: 0.21 });
           for (const [dz, d] of [[-1, 0.3], [1, 0.7]]) api.spawnDog(ahead(api, 140, 150), onRoad(dz), { delay: d });
           drone(api, 142, 152, 1);
           go(2);
@@ -788,7 +812,7 @@ function buildIndustrial(scene) {
   // 3: the factory, and the defence wall
   // its boss bar: every turret's HP together
   const grid = {
-    name: 'Defence wall',
+    name: 'Defense system',
     hardened: true, // (each turret toughened on Hard itself, below)
     get alive() {
       return S.turrets.some((e) => e.alive);
@@ -812,16 +836,17 @@ function buildIndustrial(scene) {
   function wakeWall(api) {
     wall.awake = true;
     const T = [
-      { z: -7, heavy: true, slide: { mid: -7, amp: 2.4, speed: 0.5, phase: 0 } },
-      { z: 7, heavy: true, slide: { mid: 7, amp: 2.4, speed: 0.5, phase: Math.PI } },
-      { z: -5, heavy: false, slide: { mid: -4.5, amp: 5, speed: 0.4, phase: 0.6 } },
-      { z: 5, heavy: false, slide: { mid: 4.5, amp: 5, speed: 0.4, phase: 2.4 } },
+      // two beam cannons low down, either side; machine guns on the rail above
+      { heavy: true, slide: { mid: -10, amp: 3, speed: 0.4, phase: 0 } },
+      { heavy: true, slide: { mid: 9, amp: 3, speed: 0.4, phase: Math.PI } },
+      { heavy: false, slide: { mid: -6, amp: 6, speed: 0.35, phase: 0.6 } },
+      { rockets: true, slide: { mid: 5, amp: 6, speed: 0.3, phase: 2.4 } },
     ];
-    if (api.run.hard) T.push({ z: 0, heavy: false, slide: { mid: 0, amp: 7, speed: 0.3, phase: 1.2 } });
-    S.turrets = T.map((o, i) => api.spawnWallTurret(WALL_X - 1.1, o.z, { heavy: o.heavy, slide: o.slide, delay: 0.4 + i * 0.35 }));
+    if (api.run.hard) T.push({ heavy: false, slide: { mid: 0, amp: 10, speed: 0.28, phase: 1.2 } });
+    S.turrets = T.map((o, i) => api.spawnWallTurret(WALL_X - 1.1, o.slide.mid, { heavy: o.heavy, rockets: o.rockets, slide: o.slide, delay: 0.4 + i * 0.35 }));
     if (api.run.hard) for (const e of S.turrets) e.hp = e.maxHp = Math.round(e.maxHp * 1.35);
-    api.boss(grid, 'Defence wall');
-    api.objective('Destroy the defence wall');
+    api.boss(grid, 'Defense system');
+    api.objective('Destroy the defense system');
     api.spotlight({ targets: [() => new THREE.Vector3(WALL_X, 4, 0)], r: 200 }, () => S.t > 2.4, { maxTime: 2.8, frame: () => new THREE.Vector3(WALL_X - 4, 0, 0), frameK: 1 });
     S.waveT = 10;
   }

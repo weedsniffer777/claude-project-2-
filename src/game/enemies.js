@@ -112,8 +112,7 @@ const BRIDGE_GUN = {
 // The defence wall's turrets (level 8's boss): gun pods riding rails on
 // the wall's face, up off the floor. They slide along while they look for
 // a shot and stop to charge it. The heavy ones: one big slow hit; the
-// quick ones: a light shot every second or so.
-// the artillery's target rings (one geometry for them all; each its own
+// quick ones: a light shot every second or so.// the artillery's target rings (one geometry for them all; each its own
 // material, blinking on its own)
 const SHELL_RING = new THREE.RingGeometry(0.85, 1, 28).rotateX(-Math.PI / 2);
 const SHELL_DOT = new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2);
@@ -122,13 +121,14 @@ const WALL_HEAVY = {
   model: () => createWallTurret({ heavy: true, y: 2.6 }),
   hp: 700,
   range: 46,
-  charge: 1.8,
-  track: 0.9,
+  charge: 2.2,
+  track: 0.8,
   lock: 0.5,
-  reload: 2.2,
-  damage: 20,
+  reload: 3.6,
+  damage: 15,
   box: { hx: 1.0, hz: 0.9 },
   scale: 1.4, // (below the 'big machine' line: ordinary drops)
+  heavy: true, // (bolted to the wall: no shoving it)
   aimY: 2.6,
   muzzleY: 2.6,
   hit: [2.6, 1.4, 1.6, 2.6],
@@ -137,17 +137,38 @@ const WALL_HEAVY = {
 const WALL_QUICK = {
   ...WALL_HEAVY,
   model: () => createWallTurret({ heavy: false, y: 5.2 }),
+  sniper: false, // (machine-gun bursts down a red funnel, like the walkers)
   hp: 420,
-  charge: 0.7,
-  track: 1.6,
-  lock: 0.25,
-  reload: 0.9,
-  damage: 7,
+  range: 30,
+  burst: 6,
+  burstGap: 0.1,
+  reload: 2.8,
+  damage: 2.2,
+  windup: 0.75,
+  spread: 0.07,
+  boltSpeed: 24,
   aimY: 5.2,
   muzzleY: 5.2,
   hit: [2.0, 1.1, 1.2, 5.2],
   scrap: 20,
 };
+// ... and one with a rocket pod up on the top rail: a red funnel, then a
+// burst of slow rockets straight down it at the tank (side-step them)
+const WALL_ROCKETS = {
+  ...WALL_QUICK,
+  model: () => createWallTurret({ heavy: false, rockets: true, y: 5.2 }),
+  rocketPod: true,
+  hp: 480,
+  range: 32,
+  burst: 4,
+  burstGap: 0.3,
+  reload: 4.2,
+  damage: 9,
+  windup: 1.0,
+  spread: 0.1,
+  rocketSpeed: 11,
+};
+
 
 // The attack drone: flies (over walls and wrecks), quick, darting from spot
 // to spot round the tank. To shoot it has to stop: it hangs in the air, its
@@ -424,7 +445,7 @@ export class Enemies {
   // a defence wall turret: heavy or quick; slide: { mid, amp, speed, phase }
   // (it rides its rail along z)
   spawnWallTurret(x, z, opts = {}) {
-    const e = this.spawn(opts.heavy ? WALL_HEAVY : WALL_QUICK, 'gun', x, z, opts);
+    const e = this.spawn(opts.rockets ? WALL_ROCKETS : opts.heavy ? WALL_HEAVY : WALL_QUICK, 'gun', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
     if (opts.slide) e.slide = { ...opts.slide };
     return e;
@@ -771,7 +792,7 @@ export class Enemies {
       // riding a rail (the wall turrets): along it while looking for a
       // shot, stopped while it charges
       if (e.slide) {
-        if (!(e.charge > 0)) e.slideT = (e.slideT ?? e.slide.phase ?? 0) + dt * e.slide.speed;
+        if (!(e.charge > 0) && !(e.windup > 0) && !(e.burstLeft > 0) && !(e.artyLeft > 0) && !(e.artyWind > 0)) e.slideT = (e.slideT ?? e.slide.phase ?? 0) + dt * e.slide.speed;
         e.pos.z = e.slide.mid + Math.sin(e.slideT ?? 0) * e.slide.amp;
       }
       if (DOG.flying) {
@@ -820,7 +841,7 @@ export class Enemies {
         vz = tx * s + tz * 0.3;
         speed = DOG.runSpeed * 0.7;
       }
-      if (DOG.sniper && (e.charge > 0 || DOG.static)) speed = 0; // planted while it lines up a shot
+      if ((DOG.sniper && e.charge > 0) || DOG.static) speed = 0; // planted while it lines up a shot (a fixed gun never moves)
       if (e.hold) speed = 0; // (the mech: down, or planted for / in a dash)
       const len = Math.hypot(vx, vz) || 1;
       const before = e.pos.clone();
@@ -950,17 +971,31 @@ export class Enemies {
         e.burstLeft--;
         e.fireTimer = e.burstLeft > 0 ? DOG.burstGap : DOG.reload + Math.random() * 0.6;
         e.recoil = 1;
-        const from = e.model.muzzle();
-        const dir = new THREE.Vector3(e.lock.x - from.x, 0, e.lock.z - from.z).normalize();
-        dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 2 * DOG.spread);
-        const reach = Math.hypot(e.lock.x - from.x, e.lock.z - from.z) + 6;
-        const time = reach / DOG.boltSpeed;
-        const vel = dir.multiplyScalar(DOG.boltSpeed);
-        vel.y = (tankPos.y + 0.25 - from.y) / time; // dipping down to hit the ground past the target
-        this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: DOG.damage });
-        this.combat.glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
-        this.combat.glow.light(from, 0xff4a30, 6, 0.06);
-        if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
+        if (DOG.rocketPod) {
+          // a rocket off the pod, at the lock (a little scatter), on into the ground past it
+          const from = e.model.rocketMuzzle();
+          const aim = new THREE.Vector3(e.lock.x + (Math.random() - 0.5) * 1.2, tankPos.y + 0.9, e.lock.z + (Math.random() - 0.5) * 1.2);
+          const to = aim.clone().sub(from);
+          const time = to.length() / DOG.rocketSpeed;
+          const mesh = droneRocket();
+          mesh.position.copy(from);
+          this.scene.add(mesh);
+          this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.6, damage: DOG.damage, rocket: mesh });
+          this.combat.glow.flash(from, 0xffb070, 0.12, 0.7, 0.06);
+          this.combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5), { color: 0xb8b2a6, s0: 0.12, s1: 0.4, life: 0.5, drag: 3, lift: 0.4, fadeAt: 0.3 });
+        } else {
+          const from = e.model.muzzle();
+          const dir = new THREE.Vector3(e.lock.x - from.x, 0, e.lock.z - from.z).normalize();
+          dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), (Math.random() - 0.5) * 2 * DOG.spread);
+          const reach = Math.hypot(e.lock.x - from.x, e.lock.z - from.z) + 6;
+          const time = reach / DOG.boltSpeed;
+          const vel = dir.multiplyScalar(DOG.boltSpeed);
+          vel.y = (tankPos.y + 0.25 - from.y) / time; // dipping down to hit the ground past the target
+          this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time, damage: DOG.damage });
+          this.combat.glow.flash(from, 0xff6a3a, 0.06, 0.3, 0.05);
+          this.combat.glow.light(from, 0xff4a30, 6, 0.06);
+          if (e.stats.scale > 1.5) this.combat.shake = Math.max(this.combat.shake, 0.05);
+        }
       }
       // the funnel: brightening through the wind-up, flaring on the burst
       const showing = e.windup > 0 || e.burstLeft > 0;
@@ -978,7 +1013,7 @@ export class Enemies {
         e.funnelEdge.material.opacity = e.funnelK * (e.windup > 0 ? 0.65 + 0.35 * pulse : 1);
       }
       e.pos.y = ctx.heightAt ? ctx.heightAt(e.pos.x, e.pos.z) : 0;
-      e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil });
+      e.model.update(dt, t, { speed: Math.min(1, e.speed), aimYaw, aimPitch: 0.05, recoil: e.recoil, rockets: DOG.rocketPod && (e.windup > 0 || e.burstLeft > 0) ? 1 : 0 });
     }
   }
 

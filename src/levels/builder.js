@@ -81,6 +81,8 @@ function poolTexture() {
 const CHUNK = 16;
 const chunkOf = (x) => Math.floor(x / CHUNK);
 
+const SNOW_MAT = new THREE.MeshToonMaterial({ color: 0xd0d3d8, gradientMap });
+
 export class LevelBuilder {
   constructor(scene, seed) {
     this.rand = rng(seed);
@@ -152,6 +154,37 @@ export class LevelBuilder {
   // A rounded lump (snow bank, slush heap, bin bag) batched like pieces.
   lump(x, y, z, sx, sy, sz, color, ry = 0) {
     this.lumps.push({ w: sx, h: sy, d: sz, color, x, y, z, rx: 0, ry, rz: 0 });
+  }
+  // Old snow lying on a flat top (w x d, turned yaw), at height y: one to
+  // three drifts of irregular outline, each its own size and place on it,
+  // thin and slightly raised; now and then none. (One material for all:
+  // they merge with the rest of the scenery.)
+  snowPatch(x, y, z, w, d, yaw = 0) {
+    const r = this.rand;
+    if (r() < 0.12) return;
+    const n = r() < 0.55 ? 1 : r() < 0.75 ? 2 : 3;
+    const c = Math.cos(yaw);
+    const sn = Math.sin(yaw);
+    for (let i = 0; i < n; i++) {
+      const sw = w * (n === 1 ? 0.45 + r() * 0.45 : 0.22 + r() * 0.35);
+      const sd = d * (n === 1 ? 0.45 + r() * 0.45 : 0.3 + r() * 0.45);
+      const cx = (r() - 0.5) * Math.max(0, w - sw);
+      const cz = (r() - 0.5) * Math.max(0, d - sd);
+      const pts = [];
+      const m = 9 + ((r() * 6) | 0);
+      const lean = (r() - 0.5) * 0.5; // (a drift banked to one side)
+      for (let k = 0; k < m; k++) {
+        const a = (k / m) * Math.PI * 2;
+        const rad = (0.62 + r() * 0.38) * (r() < 0.12 ? 0.7 : 1) * (1 + Math.cos(a) * lean);
+        pts.push(new THREE.Vector2(Math.cos(a) * (sw / 2) * rad, Math.sin(a) * (sd / 2) * rad));
+      }
+      const geo = new THREE.ExtrudeGeometry(new THREE.Shape(pts), { depth: 0.04 + r() * 0.05, bevelEnabled: false }).rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, SNOW_MAT);
+      mesh.position.set(x + cx * c + cz * sn, y + 0.005, z - cx * sn + cz * c);
+      mesh.rotation.y = yaw;
+      mesh.receiveShadow = true;
+      this.add(mesh);
+    }
   }
 
   line(points, mat = this.lineMat) {

@@ -1,9 +1,9 @@
 // The defence wall's turrets (level 8's boss): each a gun pod on a carriage
 // that rides a rail along the wall's face, mounted up off the floor. Built
 // facing +x, the wall behind it (-x); spawned turned to face the tank.
-// heavy: a squat armoured pod with one long cannon and a big red lens;
-// otherwise a smaller pod with twin quick-firing barrels and a camera on
-// top. The pod turns (ctx.aimYaw) and pitches down at the tank; the barrel
+// heavy: a squat armoured pod with one long cannon and a big red lens
+// (charges a beam); otherwise a smaller pod with twin machine guns and a
+// camera on top. The pod turns (ctx.aimYaw) and pitches down at the tank; the barrel
 // glows as it charges. Same interface as the other machines.
 import * as THREE from 'three';
 import { box, cyl, put, toon, glowMat } from './kit.js';
@@ -18,7 +18,7 @@ const C = {
   dead: 0x2a1614,
 };
 
-export function createWallTurret({ heavy = true, y = 2.6 } = {}) {
+export function createWallTurret({ heavy = true, rockets = false, y = 2.6 } = {}) {
   const group = new THREE.Group();
   // the carriage: clamped on the rail behind (+x, against the wall), its
   // arm reaching out to the pod
@@ -36,7 +36,27 @@ export function createWallTurret({ heavy = true, y = 2.6 } = {}) {
   carriage.add(pod);
   const lenses = [];
   const gun = new THREE.Group();
-  if (heavy) {
+  const tubes = []; // (the rocket pod's: where each rocket leaves from)
+  const podGlow = [];
+  if (rockets) {
+    // a box launcher: six tubes in two rows, angled up, a red sight on top
+    put(pod, box(0.8, 0.6, 0.9, C.steel, { r: 0.06 }), -0.1, 0, 0);
+    gun.position.set(0.25, 0.1, 0);
+    gun.rotation.z = 0.5;
+    pod.add(gun);
+    put(gun, box(0.9, 0.62, 0.95, C.plate, { r: 0.05 }), 0.2, 0, 0);
+    for (const ty of [-0.15, 0.15]) {
+      for (const tz of [-0.3, 0, 0.3]) {
+        put(gun, cyl(0.11, 0.06, C.dark, { axis: 'x', seg: 8 }), 0.66, ty, tz);
+        tubes.push(new THREE.Vector3(0.7, ty, tz));
+      }
+    }
+    const glowM = put(gun, box(0.04, 0.5, 0.8, 0xff5a2a, { glow: true }), 0.7, 0, 0);
+    glowM.visible = false;
+    podGlow.push(glowM);
+    lenses.push(put(pod, cyl(0.07, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.32, 0.38, 0.3));
+    put(pod, box(0.3, 0.16, 0.2, C.dark, { r: 0.03 }), 0.15, 0.38, 0.3);
+  } else if (heavy) {
     put(pod, box(1.2, 0.9, 1.1, C.steel, { r: 0.08 }), 0, 0, 0);
     put(pod, box(0.5, 0.7, 1.0, C.plate, { r: 0.06 }), 0.55, -0.05, 0).rotation.z = -0.35; // sloped face
     for (const s of [-1, 1]) put(pod, box(0.9, 0.6, 0.05, C.plate, { r: 0.02 }), 0, 0, s * 0.57);
@@ -61,7 +81,7 @@ export function createWallTurret({ heavy = true, y = 2.6 } = {}) {
     put(pod, box(0.4, 0.22, 0.26, C.dark, { r: 0.03 }), 0.05, 0.45, 0);
     lenses.push(put(pod, cyl(0.08, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.27, 0.45, 0));
   }
-  const tip = heavy ? 2.45 : 1.45;
+  const tip = rockets ? 0.75 : heavy ? 2.45 : 1.45;
   const muzzleGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(heavy ? 0.2 : 0.13, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
   muzzleGlow.position.set(tip, 0, 0);
   muzzleGlow.userData.outline = true;
@@ -86,8 +106,12 @@ export function createWallTurret({ heavy = true, y = 2.6 } = {}) {
     let d = (ctx.aimYaw ?? 0) - pod.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     pod.rotation.y += d * Math.min(1, dt * 6);
-    gun.rotation.z = THREE.MathUtils.clamp((ctx.aimPitch ?? 0) - 0.2, -0.45, 0.1); // (it looks down from up there)
-    gun.position.x = (heavy ? 0.6 : 0.45) - (ctx.recoil ?? 0) * 0.3;
+    if (rockets) {
+      for (const g of podGlow) g.visible = (ctx.rockets || 0) > 0.02 && Math.sin(t * 24) > -0.3;
+    } else {
+      gun.rotation.z = THREE.MathUtils.clamp((ctx.aimPitch ?? 0) - 0.2, -0.45, 0.1); // (it looks down from up there)
+      gun.position.x = (heavy ? 0.6 : 0.45) - (ctx.recoil ?? 0) * 0.3;
+    }
     muzzleGlow.material.opacity = charge * (0.6 + Math.random() * 0.4);
     muzzleGlow.scale.setScalar(0.4 + charge * 2);
     lenses.forEach((l, i) => l.scale.set(1, 0.8 + Math.max(0, Math.sin(t * 7 + i)) * 0.4 + charge, 1 + charge * 0.5));
@@ -134,15 +158,22 @@ export function createWallTurret({ heavy = true, y = 2.6 } = {}) {
     deadT = 0;
     for (const l of lenses) l.material = toon(C.dead);
     muzzleGlow.visible = false;
+    for (const g of podGlow) g.visible = false;
   }
   const tmp = new THREE.Vector3();
   function muzzle() {
     group.updateWorldMatrix(true, true);
     return gun.localToWorld(tmp.set(tip, 0, 0)).clone();
   }
+  let tubeN = 0;
+  function rocketMuzzle() {
+    group.updateWorldMatrix(true, true);
+    const v = tubes.length ? tubes[tubeN++ % tubes.length] : tmp.set(tip, 0, 0);
+    return gun.localToWorld(v.clone());
+  }
   function eyeWorld() {
     group.updateWorldMatrix(true, true);
     return lenses[0].getWorldPosition(new THREE.Vector3());
   }
-  return { group, update, hitFlash, kill, setOutline, muzzle, eyeWorld, events: [] };
+  return { group, update, hitFlash, kill, setOutline, muzzle, rocketMuzzle, eyeWorld, events: [] };
 }

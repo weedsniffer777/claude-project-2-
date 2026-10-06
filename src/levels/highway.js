@@ -340,7 +340,7 @@ function buildHighway(scene) {
     if (o.shop) for (let k = 0; k < cols; k++) if (rand() > 0.3) B.piece(cw * 0.9, 0.05, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][k % 3], x0 + (k + 0.5) * cw, 1.45 - rand() * 0.3, zf + 0.42, -0.35 - rand() * 0.5, 0, (rand() - 0.5) * 0.3);
     P.facadeClutter(B, x0, x1, zf, H);
     for (let i = 0; i < 3; i++) B.piece(0.6 + rand(), 0.5 + rand() * 0.6, 0.6 + rand(), 0x7b7a76, x0 + 1 + rand() * (w - 2), H + 0.3, zf - 2 - rand() * (depth - 4));
-    B.lump((x0 + x1) / 2, H + 0.05, zf - depth / 2, w / 2.4, 0.12, depth / 2.8, 0xd0d3d8);
+    B.snowPatch((x0 + x1) / 2, H, zf - depth / 2, w * 0.9, depth * 0.85);
     if (o.sign) {
       const sw = Math.min(w * 0.6, 8);
       const s = new THREE.Mesh(new THREE.PlaneGeometry(sw, 0.55), sign(sw, 0.55, { ink: o.sign }));
@@ -365,7 +365,7 @@ function buildHighway(scene) {
     B.block((x0 + x1) / 2, zf + depth / 2, w / 2, depth / 2);
     for (let x = x0 + 1.2; x < x1 - 1; x += 2.6) if (rand() < 0.7) B.piece(1.8, 0.06, 0.9, [0x5c6f8c, 0x6f7f6a, 0x8f8550][(rand() * 3) | 0], x, 1.45, zf - 0.42, 0.4, 0, 0);
     B.piece(w, 0.3, 0.2, 0x8d8b86, (x0 + x1) / 2, H + 0.15, zf + 0.1);
-    B.lump((x0 + x1) / 2, H + 0.05, zf + depth / 2, w / 2.2, 0.12, depth / 2.6, 0xd0d3d8);
+    B.snowPatch((x0 + x1) / 2, H, zf + depth / 2, w * 0.9, depth * 0.85);
   }
   // A works building in among the blocks, its front on the street (zf;
   // side 'n': it runs back north, 's' south). Ribbed tin or brick walls,
@@ -394,20 +394,20 @@ function buildHighway(scene) {
       for (let x = x0 + 1.5; x < x1 - 0.5; x += 3) {
         put(B.root, box(3.1, 0.12, depth, 0x6d6a64, { r: 0.02 }), x, H + 0.55, zc).rotation.z = 0.35;
         put(B.root, box(0.06, 0.9, depth - 0.2, 0x8fa4b0, { r: 0.01 }), x + 1.42, H + 0.5, zc);
-        B.lump(x - 0.3, H + 0.7, zc, 1.2, 0.08, depth / 2.6, 0xd6d9dd);
+        if (rand() < 0.75) B.lump(x - 0.3 + (rand() - 0.5) * 0.6, H + 0.7, zc + (rand() - 0.5) * depth * 0.3, 0.6 + rand() * 0.9, 0.05 + rand() * 0.05, depth / (2.2 + rand() * 2.5), 0xd6d9dd, (rand() - 0.5) * 0.3);
       }
     } else if (roof === 'gable') {
       for (const k of [-1, 1]) {
         const p = put(B.root, box(w + 0.4, 0.14, depth / 2 + 0.6, 0x7a6f62, { r: 0.02 }), (x0 + x1) / 2, H + 0.9, zc + k * depth * 0.24);
         p.rotation.x = k * 0.32;
       }
-      B.lump((x0 + x1) / 2, H + 1.4, zc, w / 2.4, 0.1, depth / 3, 0xd6d9dd);
+      for (let k = 0; k < 2 + rand() * 3; k++) B.lump(x0 + 1 + rand() * (w - 2), H + 1.35, zc + (rand() - 0.5) * depth * 0.4, 0.8 + rand() * w * 0.18, 0.05 + rand() * 0.06, depth / (3 + rand() * 3), 0xd6d9dd, (rand() - 0.5) * 0.4);
     } else {
       B.piece(w, 0.5, 0.25, 0x6d6a64, (x0 + x1) / 2, H + 0.25, zf + out * 0.1);
       for (let i = 0; i < 3; i++) put(B.root, cyl(0.35, 0.9, 0x7d8085, { seg: 8 }), x0 + 2 + rand() * (w - 4), H + 0.45, zc + (rand() - 0.5) * depth * 0.6);
       put(B.root, cyl(1.1, 1.8, 0x6b5843, { seg: 10 }), x1 - 2.5, H + 1.6, zc);
       for (const dx of [-0.7, 0.7]) put(B.root, box(0.12, 1.2, 0.12, 0x3a3c3f), x1 - 2.5 + dx, H + 0.6, zc);
-      B.lump((x0 + x1) / 2, H + 0.05, zc, w / 2.4, 0.1, depth / 2.8, 0xd6d9dd);
+      B.snowPatch((x0 + x1) / 2, H, zc, w * 0.9, depth * 0.85);
     }
     for (let x = x0 + 1.4; x < x1 - 1; x += 2.2) put(B.root, box(1.6, 0.6, 0.06, rand() < 0.25 ? 0x1d2024 : 0x8fa4b0, { r: 0.01 }), x, H - 0.8, zf + out * 0.04);
     const span = w / (doors + 1);
@@ -426,7 +426,7 @@ function buildHighway(scene) {
       B.solid(d);
       B.block((x0 + x1) / 2, dz, w * 0.4, 1);
       for (let x = x0 + w * 0.15; x < x1 - w * 0.15; x += 2) B.piece(0.4, 0.3, 0.12, 0x1d1f22, x, 0.9, dz + out * 1.0);
-      B.lump((x0 + x1) / 2, 1.12, dz, w * 0.3, 0.08, 0.7, 0xd6d9dd);
+      B.snowPatch((x0 + x1) / 2, 1.1, dz, w * 0.75, 1.8);
     }
     const bw = Math.min(w * 0.5, 8);
     const board = new THREE.Mesh(new THREE.PlaneGeometry(bw, 0.8), sign(bw, 0.8, { board: ['#3d4a58', '#58402e', '#3a4a3a'][(rand() * 3) | 0], ink: '#e6e0cc' }));
@@ -443,7 +443,7 @@ function buildHighway(scene) {
     BB.add(m);
     BB.solid(m);
     BB.block(x, z, 3, 1.25, yaw);
-    BB.lump(x, y + 2.62, z, 2.4, 0.1, 1.0, 0xd0d3d8, yaw);
+    BB.snowPatch(x, y + 2.6, z, 5.6, 2.2, yaw);
     return m;
   }
   function jersey(BB, x, z, yaw = 0, h = 0.9, w = 1.6) {

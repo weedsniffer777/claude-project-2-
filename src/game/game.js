@@ -1255,6 +1255,20 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       plume: part(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, { ...add, opacity: 0.85 }),
     });
   }
+  function splitDiving(ms) {
+    const from = ms.m.position.clone();
+    combat.glow.flash(from, 0xffffff, 0.2, 1.2, 0.06);
+    const e = ms.e?.alive ? ms.e : null;
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + Math.random();
+      const point = (e ? mslAim(e) : ms.aim.clone()).add(new THREE.Vector3(Math.cos(a) * 0.7, 0, Math.sin(a) * 0.7));
+      launchMissile(k === 0 ? e : null, k, { point, from, warhead: true, top: true, damage: ms.damage * 0.45, blast: ms.blast * 0.7 });
+      const w = missiles[missiles.length - 1];
+      w.dived = true;
+      w.t = 0.75;
+      w.vel.copy(point).sub(from).normalize().multiplyScalar(EQUIPMENT.atgm.speed * 1.3);
+    }
+  }
   function launchMissile(e, k, o = {}) {
     const E = EQUIPMENT.atgm;
     // off the turret roof, left, right, centre
@@ -1295,7 +1309,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (out) dir.lerp(out, 0.6).setY(Math.max(0.5, out.y + 0.4)).normalize();
     else dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
     if (o.top) dir.set((aim.x - from.x) * 0.04, 1, (aim.z - from.z) * 0.04).normalize(); // straight up first
-    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, equip: !!o.equip, split: !!o.split, fast: !!o.warhead, apex: from.y + 6 + Math.random() * 2.5 });
+    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, equip: !!o.equip, split: !!o.split, splitDive: !!o.splitDive, fast: !!o.warhead, apex: from.y + 6 + Math.random() * 2.5 });
     if (o.warhead) return; // (split off in flight: no launch blast)
     // the launch: a hard white flash, a back-blast of smoke, a kick
     combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
@@ -1315,7 +1329,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // the salvo: all eight at once
       sv.t -= dt;
       if (sv.t <= 0) {
-        sv.targets.forEach((g, i) => launchMissile(g.e?.alive ? g.e : null, i, { point: g.point || (g.e ? mslAim(g.e) : null), damage: sv.damage, blast: sv.blast, top: true }));
+        sv.targets.forEach((g, i) => launchMissile(g.e?.alive ? g.e : null, i, { point: g.point || (g.e ? mslAim(g.e) : null), damage: sv.damage, blast: sv.blast, top: true, splitDive: !!stats.mirv }));
         combat.shake = Math.max(combat.shake, 0.6);
         run.sal = null;
       }
@@ -1357,6 +1371,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (ms.top && !ms.dived) {
         // climbing; at the top a sharp turn and straight down at it
         ms.vel.y += dt * 20;
+        if (ms.splitDive && (ms.m.position.y >= ms.apex || ms.t > 0.7)) {
+          // MIRV on the salvo: at the top each splits into three, diving
+          // together onto its mark, a little spread
+          ms.m.removeFromParent();
+          missiles.splice(i, 1);
+          splitDiving(ms);
+          continue;
+        }
         if (ms.m.position.y >= ms.apex || ms.t > 0.7) {
           ms.dived = true;
           ms.vel.copy(to).normalize().multiplyScalar(E.speed * 1.3);
