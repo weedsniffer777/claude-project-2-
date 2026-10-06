@@ -114,6 +114,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   let lastSize = null; // the last resize, replayed when the view size changes (optics)
   let reload = 1;
   let speed = 0;
+  let vulcanOn = false; // (the light tank's Vulcan: its own whirring loop)
+  let vulcanT = 0; // seconds its loop keeps going without another round
   let hasAim = false;
   let pointer = null;
   let client = null;
@@ -298,6 +300,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     tank.setFlameStyle(stats.afterburner ? 'afterburner' : 'normal');
     // the Vulcan: thin tracers, barely a kick per round
     const vulcan = list.includes('vulcan') && tank.kind === 'light';
+    vulcanOn = vulcan;
     tank.tracerScale = vulcan ? 0.5 : 1;
     tank.apRounds = !!stats.apRounds; // armour-piercing: white tracers, a sharp hit, no fireball
     if ('kick' in tank) tank.kick = vulcan ? 0.12 : 1;
@@ -1154,12 +1157,26 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     for (const n of tank.rocketNozzles()) combat.glow.flash(n, 0xffd08a, 0.2, 1.2, 0.12);
     launch(0.45);
   }
+  // the gun going off: the main cannon, the autocannon's crack, the Vulcan's whir
+  function gunSound() {
+    if (def.gun !== 'autocannon') return void sfx.play('cannon', { gain: 0.75, rate: 0.97 + Math.random() * 0.06 });
+    if (vulcanOn) return void (vulcanT = 0.2);
+    sfx.play('autocannon', { gain: 0.5, rate: 0.95 + Math.random() * 0.1 });
+  }
   // the tank's own sounds: the treads rattling, quiet, coming up from
   // silence as it gets moving; the rockets roaring while they burn
-  function engineSounds() {
+  function engineSounds(dt) {
     const live = !run.paused && !run.over && !run.dying;
     const k = live ? Math.min(1, Math.abs(speed) / (MAX_SPEED * stats.speed)) : 0;
-    sfx.loop('treads', k * 0.16, 0.85 + 0.3 * Math.min(1.4, k), k > 0.02 ? 0.35 : 0.2);
+    sfx.listen(pos);
+    // (a faint idle rumble even standing still)
+    sfx.loop('treads', live ? 0.035 + k * 0.13 : 0, 0.75 + 0.4 * Math.min(1.4, k), k > 0.02 ? 0.35 : 0.2);
+    // the Vulcan: its whir while rounds keep coming, then its wind-down
+    vulcanT -= dt;
+    const spin = live && vulcanT > 0;
+    sfx.loop('vulcan', spin ? 0.4 : 0, 1, spin ? 0.02 : 0.03);
+    if (!spin && run.vulcanSpin) sfx.play('vulcanTail', { gain: 0.4 });
+    run.vulcanSpin = spin;
     const roar = live && (run.boost > 0 || run.dash > 0 || run.retreat > 0 || run.brk > 0);
     sfx.loop('rocket', roar ? 0.5 : 0, 1, roar ? 0.04 : 0.18);
   }
@@ -1368,6 +1385,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     const side = new THREE.Vector3(-Math.sin(tank.group.rotation.y), 0, -Math.cos(tank.group.rotation.y));
     let from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
     let out = null; // the way the tube points
+    if (!o.warhead) sfx.play('launch', { gain: 0.5, rate: 0.95 + Math.random() * 0.1 }); // (not a MIRV's split)
     if (o.from) from = o.from.clone(); // (a MIRV warhead: from where it split)
     else if (tank.missile) {
       // the missile tank: out of its pack, one canister after another
@@ -1755,6 +1773,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     run.abilityCd = stats.pierceCooldown;
     run.abilities = (run.abilities || 0) + 1;
     tank.fire(); // the recoil
+    sfx.play('cannon', { gain: 1, rate: 0.82 }); // (deeper: the big one)
     const { from, dir, len, wall } = pierceLine();
     const hit = new Set();
     const broke = new Set();
@@ -1870,7 +1889,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     run.shots++;
     letGoFrame();
     if (def.gun === 'missile') fireMissileGun();
-    else combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
+    else if (combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]) !== false) gunSound();
     if (--run.mag <= 0) run.magT = stats.magReload;
   }
   function reloadMag() {
@@ -1894,7 +1913,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     reload = 0;
     run.shots++;
     if (def.gun === 'missile') fireMissileGun();
-    else combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]);
+    else if (combat.fireCannon(tank, hasAim ? aimPoint : null, [...colliders, ...enemies.hitMeshes()]) !== false) gunSound();
   }
   // the missile tank's gun: a missile out of the pack, homing on the machine
   // under the aim (or flying to the spot aimed at)
@@ -2628,6 +2647,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   }
   function huntShot(e) {
     const m = tank.fire();
+    sfx.play('cannon', { gain: 0.7, rate: 1.08 });
     const from = m.position;
     const at = enemies.aimPoint(e);
     // the shot: a white-hot line straight in, the muzzle blast, the hit
@@ -2923,6 +2943,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     },
     exit() {
       sfx.loop('treads', 0, 1, 0.05);
+      sfx.loop('vulcan', 0, 1, 0.05);
+      run.vulcanSpin = false;
       sfx.loop('rocket', 0, 1, 0.05);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
@@ -2959,7 +2981,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     },
     frame(realDt, t) {
       if (debug?.timeScale) realDt *= debug.timeScale; // tests only
-      engineSounds();
+      engineSounds(realDt);
       if (run.paused) {
         // the world holds still under the menu
         pixel.render(scene, camera);
@@ -3371,6 +3393,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       run.reactT = Math.max(0, (run.reactT || 0) - dt);
       tryFire(dt);
       autoFire(dt);
+      if (tank.events?.some((ev) => ev.type === 'mg')) sfx.play('mg', { gain: 0.2, rate: 0.95 + Math.random() * 0.1 }); // (kept low: under the big guns)
       combat.handleTankEvents(tank);
       combat.update(dt);
       stragglers(dt);

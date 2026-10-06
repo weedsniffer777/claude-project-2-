@@ -12,8 +12,22 @@ const FILES = {
   explosion: 'explosion.mp3',
   treads: 'treads.mp3',
   lock: 'lock.mp3',
+  cannon: 'cannon.mp3',
+  autocannon: 'autocannon.mp3',
+  launch: 'launch.mp3',
+  mg: 'mg.mp3',
+  vulcan: 'vulcan.mp3',
+  vulcanTail: 'vulcan-tail.mp3',
 };
-const LOOPS = new Set(['rocket', 'treads']);
+const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
+// (no machine gun drowning out the rest: each sound has a shortest gap
+// between plays and a cap on how many ring at once)
+const GAP = { mg: 0.06, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08 };
+const VOICES = { mg: 3, launch: 4, autocannon: 4, cannon: 3, explosion: 3 };
+const lastAt = {};
+const ringing = {};
+// where the ears are (the tank): sounds out in the world fade with distance
+const ear = { x: 0, z: 0 };
 
 let ctx = null;
 let master = null;
@@ -91,14 +105,31 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListen
 export const sfx = {
   // a one-shot: gain 0..1, rate (pitch and speed together)
   play(name, { gain = 1, rate = 1 } = {}) {
-    if (!ctx || !buffers[name] || ctx.state !== 'running') return;
+    if (!ctx || !buffers[name] || ctx.state !== 'running' || gain < 0.01) return;
+    const now = ctx.currentTime;
+    if (now - (lastAt[name] ?? -1) < (GAP[name] || 0)) return;
+    if ((ringing[name] || 0) >= (VOICES[name] || 8)) return;
+    lastAt[name] = now;
+    ringing[name] = (ringing[name] || 0) + 1;
     const src = ctx.createBufferSource();
     src.buffer = buffers[name];
     src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = gain;
     src.connect(g).connect(master);
+    src.onended = () => ringing[name]--;
     src.start();
+  },
+  // a one-shot out in the world: quieter the further it is from the tank
+  // (full up to 8 units, gone past about 60)
+  at(name, pos, opts = {}) {
+    const d = Math.hypot(pos.x - ear.x, pos.z - ear.z);
+    const k = Math.max(0, Math.min(1, 1 - (d - 8) / 52));
+    sfx.play(name, { ...opts, gain: (opts.gain ?? 1) * k * k });
+  },
+  listen(pos) {
+    ear.x = pos.x;
+    ear.z = pos.z;
   },
   // a loop's level (0..1) and rate, eased there over about tau seconds
   loop(name, gain, rate = 1, tau = 0.15) {

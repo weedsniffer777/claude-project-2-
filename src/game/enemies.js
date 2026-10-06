@@ -1,6 +1,7 @@
 // Enemy machines in a level. For now: robot dogs that rush the tank, stop
 // at rifle range, strafe and fire bursts. The roof MG and cannon splash kill
 // them; their wrecks stay where they fall.
+import { sfx } from '../audio.js';
 import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
 import { createWalker } from '../models/walker.js';
@@ -1003,6 +1004,7 @@ export class Enemies {
           mesh.position.copy(from);
           this.scene.add(mesh);
           this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.6, damage: DOG.damage, rocket: mesh });
+          sfx.at('launch', from, { gain: 0.35, rate: 0.8 }); // (an enemy's: lower and quieter than ours)
           this.combat.glow.flash(from, 0xffb070, 0.12, 0.7, 0.06);
           this.combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5), { color: 0xb8b2a6, s0: 0.12, s1: 0.4, life: 0.5, drag: 3, lift: 0.4, fadeAt: 0.3 });
         } else {
@@ -1158,6 +1160,7 @@ export class Enemies {
           const to = aim.sub(from);
           const time = to.length() / S.mg.speed;
           this.bolts.push({ pos: from.clone(), origin: from.clone(), vel: to.multiplyScalar(1 / time), life: time * 1.3, damage: S.mg.damage });
+          sfx.at('mg', from, { gain: 0.16, rate: 0.85 });
           this.combat.glow.flash(from, 0xffd27a, 0.05, 0.5, 0.05);
         }
       }
@@ -1176,6 +1179,7 @@ export class Enemies {
       mesh.position.copy(from);
       this.scene.add(mesh);
       this.bolts.push({ pos: from.clone(), origin: from.clone(), vel, life: time * 1.6, damage: S.damage, rocket: mesh });
+      sfx.at('launch', from, { gain: 0.35, rate: 0.8 });
       this.combat.glow.flash(from, 0xffb070, 0.12, 0.7, 0.06);
       this.combat.puffs.spawn(from, new THREE.Vector3((Math.random() - 0.5) * 1.5, 0.6, (Math.random() - 0.5) * 1.5), { color: 0xb8b2a6, s0: 0.12, s1: 0.4, life: 0.5, drag: 3, lift: 0.4, fadeAt: 0.3 });
       // salvo done: dart off somewhere else
@@ -1232,6 +1236,8 @@ export class Enemies {
         e.fireTimer = 1.2;
       } else if (e.charge <= 0) {
         e.shotSinceDash = true;
+        // the heavy guns: our cannon, deeper (the bosses deepest)
+        sfx.at('cannon', e.pos, e.stats.scale > 1.5 || e.stats.heavy ? { gain: 0.75, rate: 0.7 } : { gain: 0.45, rate: 0.86 });
         if (S.kinetic) this.fireShell(e, ctx);
         else this.fireBeam(e, ctx);
       }
@@ -1303,6 +1309,7 @@ export class Enemies {
         const at = e.artyAt[S.artyRockets - e.artyLeft];
         e.artyLeft--;
         const from = e.model.rocketMuzzle();
+        sfx.at('launch', from, { gain: 0.3, rate: 0.72 + Math.random() * 0.08 });
         const ring = new THREE.Mesh(SHELL_RING, new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
         ring.position.set(at.x, at.y + 0.07, at.z);
         ring.scale.setScalar(S.artyBlast);
