@@ -119,7 +119,9 @@ const CSS = `
 .base-endless { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; padding: 16px 18px 18px; display: grid; gap: 14px; pointer-events: auto; }
 .base-endless .top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
 .base-endless .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
-.base-endless .maps, .base-endless .you { display: grid; gap: 8px; align-content: start; }
+.base-endless .stats, .base-endless .you { display: grid; gap: 8px; align-content: start; }
+.base-endless .srows { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; padding: 10px 12px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 3px #4a4540; font-size: 13px; color: #d8d0c0; }
+.base-endless .srows b { font: 400 13px/1.2 'Silkscreen', monospace; font-weight: 400; color: var(--amber); text-align: right; font-variant-numeric: tabular-nums; }
 .base-endless .map { display: grid; gap: 4px; padding: 10px 12px; text-align: left; border: 0; cursor: var(--cursor); color: #d8d0c0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font: inherit; }
 .base-endless .map.sel { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
 .base-endless .map b { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: var(--amber); }
@@ -1653,7 +1655,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
     endlessPanel.innerHTML = `
       <h2>Endless</h2>
       <div class="top">
-        <div class="maps"><span class="label">Map</span>${ENDLESS_MAPS.map((m) => `<button type="button" class="map${m.id === endlessMap ? ' sel' : ''}" data-id="${m.id}"><b>${esc(m.name)}</b><small>${esc(m.text)}</small><span class="rec">Best: ${fmt(e.best.t)} · ${e.best.wave} waves</span></button>`).join('')}</div>
+        <div class="stats"><span class="label">Your records</span><div class="srows">
+          <span>Best time</span><b>${fmt(e.best.t)}</b>
+          <span>Most waves</span><b>${e.best.wave}</b>
+          <span>Most kills in a run</span><b>${e.best.kills || 0}</b>
+          <span>Total kills in endless</span><b>${e.kills || 0}</b>
+        </div></div>
         <div class="you"><span class="label">Your tank</span>${loadoutCard().replace('class="tohangar"', 'class="tohangar"')}<span class="note">Drive into the base at any time to change your loadout (no repairs).</span></div>
       </div>
       <div class="trackhead"><span class="label">Reward track · tier ${tier} of ${TRACK.length}</span><b>${tier >= TRACK.length ? 'Complete' : `Next: ${rewardText(next)}`}</b></div>
@@ -1661,11 +1668,6 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <div class="ebar"><i style="width:${(tier >= TRACK.length ? 1 : k) * 100}%"></i><span>${tier >= TRACK.length ? 'Track complete' : `${Math.floor(e.xp - lo)} / ${hi - lo} XP`}</span></div>
       <span class="note">XP comes from every run: kills, waves cleared and time survived. Leaving early still pays out.</span>
       <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
-    for (const b of endlessPanel.querySelectorAll('.map'))
-      b.addEventListener('click', () => {
-        endlessMap = b.dataset.id;
-        openEndless();
-      });
     endlessPanel.querySelector('.tohangar').addEventListener('click', toHangarNow);
     endlessPanel.querySelector('.go').addEventListener('click', () => deploy(endlessMap));
     endlessPanel.querySelector('.back').addEventListener('click', closeRoom);

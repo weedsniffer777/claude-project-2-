@@ -1286,8 +1286,10 @@ export function createHud() {
           lastTier++;
           const box = el.querySelector(`.etrack .tier[data-n="${t.n}"]`);
           if (box) {
+            box.classList.remove('cur');
             box.classList.add('got', 'pop');
           }
+          el.querySelector(`.etrack .tier[data-n="${t.n + 1}"]`)?.classList.add('cur'); // (the next one's being filled now)
           const tag = document.createElement('span');
           tag.textContent = `Tier ${t.n}: ${rewardText(t)}`;
           paid.append(tag);

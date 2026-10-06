@@ -825,14 +825,51 @@ function buildEndless(scene) {
     }
     return [FIELD.minX + 3, FIELD.minZ + 3];
   };
-  const KINDS = [
-    { k: 'dog', cost: 1, from: 1 },
-    { k: 'walker', cost: 2.5, from: 2 },
-    { k: 'hound', cost: 1.5, from: 3 },
-    { k: 'drone', cost: 2.2, from: 3 },
-    { k: 'gunship', cost: 6, from: 7 },
-    { k: 'arty', cost: 8, from: 9 },
-  ];
+  // ------------------------------------------------------- the waves' mix
+  // One formula, wave n in, the list out. Fodder (robot dogs) swells over
+  // the first waves toward 20-30; AT walkers from the start; big drones
+  // from 3; large dogs from 6; light artillery drones from 8; gunships
+  // from 12. Never more than 3 artillery drones, 3 large dogs, 2 gunships,
+  // or 6 of the heavy kinds together; the more heavies, the fewer dogs.
+  // Boss waves: 5 an artillery drone, 10 a gunship, 20 the spider mech,
+  // each with a health bar and only a few dogs and walkers round it. After
+  // 20: no more bosses, the mix keeps going and everything gets tougher.
+  const BOSSES = { 5: 'arty', 10: 'gunship', 20: 'spider' };
+  function waveMix(n) {
+    const boss = BOSSES[n] || null;
+    const walkers = Math.min(6, 1 + Math.floor(n / 2));
+    if (boss) return { boss, dog: 2 + Math.floor(n / 5), walker: Math.min(4, 1 + Math.floor(n / 6)) };
+    let drone = n < 3 ? 0 : Math.min(4, 1 + Math.floor((n - 3) / 2));
+    let hound = n < 6 ? 0 : Math.min(3, 1 + Math.floor((n - 6) / 3));
+    let arty = n < 8 ? 0 : n < 9 ? 1 : Math.min(3, 2 + Math.floor(Math.max(0, n - 11) / 6));
+    const gunship = n < 12 ? 0 : Math.min(2, 1 + Math.floor((n - 12) / 6));
+    let gunships = gunship;
+    // past 20: the six big ones dealt out differently every wave
+    if (n > 20) {
+      drone = 1;
+      hound = arty = gunships = 0;
+      for (let i = 0; i < 5; i++) {
+        const r = rand();
+        if (r < 0.3 && hound < 3) hound++;
+        else if (r < 0.6 && arty < 3) arty++;
+        else if (r < 0.8 && gunships < 2) gunships++;
+        else if (drone < 3) drone++;
+        else if (hound < 3) hound++;
+      }
+    }
+    // (six of the big ones at most, the big drones counted too)
+    while (drone + hound + arty + gunships > 6) {
+      if (drone > 1) drone--;
+      else if (hound > arty) hound--;
+      else arty--;
+    }
+    const heavy = hound + arty + gunships;
+    const dog = Math.max(6, Math.min(30, Math.round(3 + 3.5 * n)) - heavy * 2 - drone);
+    return { boss: null, dog, walker: walkers, drone, hound, arty, gunship: gunships };
+  }
+  // past wave 20, everything a little tougher every wave (on top of the
+  // run's own creep with time)
+  const waveHp = (n) => 1 + Math.max(0, n - 20) * 0.04;
   function spawnOne(api, k, x, z, delay) {
     const opts = { delay };
     const e =
@@ -842,36 +879,46 @@ function buildEndless(scene) {
       : k === 'gunship' ? api.spawnGunship(x, z, opts)
       : k === 'arty' ? api.spawnArty(x, z, { ...opts, hpScale: 0.3 })
       : api.spawnDog(x, z, opts);
-    if (e) e.hp = e.maxHp = Math.round(e.maxHp * toughness().hp);
+    if (e) e.hp = e.maxHp = Math.round(e.maxHp * toughness().hp * waveHp(S.wave));
+    return e;
   }
-  // a wave: a budget that grows with the wave and the time, spent on a mix
-  // that widens as the waves go on, in groups a few seconds apart from
-  // different edges
+  // a boss: on the open ground, its health bar up
+  function spawnBoss(api, kind) {
+    const [x, z] = edgeSpot(api);
+    const e =
+      kind === 'spider' ? api.spawnSpider(x, z, { arena: (px, pz) => px > FIELD.minX + 4 && px < FIELD.maxX - 4 && pz > AVE.wn - 1 && pz < FIELD.maxZ - 4 && heightAt(px, pz) === 0 })
+      : kind === 'gunship' ? api.spawnGunship(x, z, {})
+      : api.spawnArty(x, z, {});
+    // (the campaign's boss, a little lighter here, then the run's creep)
+    e.hp = e.maxHp = Math.round(e.maxHp * ({ arty: 0.7, gunship: 0.8, spider: 0.9 }[kind]) * toughness().hp);
+    api.boss(e, { arty: 'Artillery drone', gunship: 'Gunship', spider: 'Mech' }[kind]);
+    return e;
+  }
+  // The wave as groups a few seconds apart from different edges: dogs in
+  // packs of 4-6, walkers in twos, the heavy ones spread through it
   function buildWave() {
     const n = S.wave;
-    let budget = 3 + n * 1.6 + S.time / 60;
-    const pool = KINDS.filter((d) => n >= d.from);
+    const m = waveMix(n);
     const groups = [];
-    let g = [];
-    let gCost = 0;
-    let heavy = 0;
-    while (budget > 0.9) {
-      const options = pool.filter((d) => d.cost <= budget && !(d.k === 'arty' && heavy) && !(d.k === 'gunship' && heavy > 1));
-      if (!options.length) break;
-      // dogs most of the time, the rest weighted toward the cheaper ones
-      const d = rand() < 0.45 ? options[0] : options[(rand() * options.length) | 0];
-      if (d.cost >= 6) heavy++;
-      g.push(d.k);
-      gCost += d.cost;
-      budget -= d.cost;
-      if (gCost >= 4 + n * 0.25) {
-        groups.push(g);
-        g = [];
-        gCost = 0;
-      }
+    const gap = Math.max(2.5, 5 - n * 0.12);
+    let at = 0;
+    if (m.boss) groups.push({ at: 0.5, boss: m.boss });
+    let dogs = m.dog;
+    let walkers = m.walker;
+    const heavies = [...Array(m.drone || 0).fill('drone'), ...Array(m.hound || 0).fill('hound'), ...Array(m.arty || 0).fill('arty'), ...Array(m.gunship || 0).fill('gunship')];
+    while (dogs > 0 || walkers > 0 || heavies.length) {
+      const list = [];
+      const pack = Math.min(dogs, 4 + Math.floor(rand() * 3));
+      for (let i = 0; i < pack; i++) list.push('dog');
+      dogs -= pack;
+      const w = Math.min(walkers, 2);
+      for (let i = 0; i < w; i++) list.push('walker');
+      walkers -= w;
+      if (heavies.length && (groups.length % 2 === 1 || (!dogs && !walkers))) list.push(heavies.shift());
+      if (list.length) groups.push({ at, list });
+      at += gap;
     }
-    if (g.length) groups.push(g);
-    S.queue = groups.map((list, i) => ({ at: i * Math.max(2.5, 6 - n * 0.2), list }));
+    S.queue = groups;
     S.groupT = 0;
   }
 
@@ -922,9 +969,15 @@ function buildEndless(scene) {
       S.left -= dt;
       api.objective(`${S.phase === 'intro' ? 'First wave' : `Wave ${S.wave + 1}`} in ${Math.ceil(Math.max(0, S.left))} s · ${mm}:${ss}`);
       api.waveHud({ wave: S.wave, next: Math.max(0, S.left) });
+      // the countdown: 3, 2, 1, then the wave
+      const tick = Math.ceil(S.left);
+      if (tick <= 3 && tick >= 1 && tick !== S.tick) api.banner(String(tick));
+      S.tick = tick;
       if (S.left <= 0) {
         S.wave++;
         S.phase = 'fight';
+        S.tick = null;
+        api.banner(`Wave ${S.wave}`);
         buildWave();
       }
       return;
@@ -932,17 +985,22 @@ function buildEndless(scene) {
     if (S.phase === 'fight') {
       S.groupT += dt;
       while (S.queue.length && S.queue[0].at <= S.groupT) {
-        const { list } = S.queue.shift();
+        const g = S.queue.shift();
+        if (g.boss) {
+          spawnBoss(api, g.boss);
+          continue;
+        }
         const [x, z] = edgeSpot(api);
-        list.forEach((k, i) => spawnOne(api, k, x + (rand() - 0.5) * 4, z + (rand() - 0.5) * 4, i * 0.35));
+        g.list.forEach((k, i) => spawnOne(api, k, x + (rand() - 0.5) * 4, z + (rand() - 0.5) * 4, i * 0.35));
       }
-      const left = api.enemiesAlive + S.queue.reduce((a, q) => a + q.list.length, 0);
+      const left = api.enemiesAlive + S.queue.reduce((a, q) => a + (q.boss ? 1 : q.list.length), 0);
       api.objective(`Wave ${S.wave} · ${left} left · ${mm}:${ss}`);
       api.waveHud({ wave: S.wave, left, next: null });
       if (!S.queue.length && api.enemiesAlive === 0) {
         run.endlessWaves = S.wave; // (waves cleared)
         S.phase = 'break';
         S.left = BREAK;
+        api.banner(`Wave ${S.wave} cleared`);
       }
     }
   }

@@ -42,7 +42,7 @@ export function trackPos(xp) {
 }
 // add a run's XP, pay out every tier it reaches, keep the best run;
 // returns { before, after, paid: [tiers] }
-export function bankRun({ xp, time, wave }) {
+export function bankRun({ xp, time, wave, kills = 0 }) {
   const e = save.endless();
   const before = e.xp;
   const after = before + xp;
@@ -54,8 +54,8 @@ export function bankRun({ xp, time, wave }) {
     if (t.tokens) save.addTokens(t.tokens);
     paid.push(t);
   }
-  const best = { t: Math.max(e.best.t, time), wave: Math.max(e.best.wave, wave) };
-  save.setEndless({ ...e, xp: after, claimed: Math.max(e.claimed, reached), best });
+  const best = { t: Math.max(e.best.t, time), wave: Math.max(e.best.wave, wave), kills: Math.max(e.best.kills || 0, kills) };
+  save.setEndless({ ...e, xp: after, claimed: Math.max(e.claimed, reached), best, kills: (e.kills || 0) + kills });
   return { before, after, paid, best, newBest: time > e.best.t };
 }
 // a tier's reward, in words
@@ -65,10 +65,10 @@ export const rewardText = (t) => [t.scraps && `${t.scraps} scraps`, t.tokens && 
 // xp (the end screen animates it). Styled by the hub's and the HUD's CSS
 // (.etrack).
 export function trackHtml(xp, { from = 0, count = 10 } = {}) {
-  const { tier } = trackPos(xp);
+  const { tier } = trackPos(xp); // (tier+1: the one being filled now, outlined)
   const start = Math.max(0, Math.min(TRACK.length - count, Math.max(from, tier - 3)));
   return `<div class="etrack">${TRACK.slice(start, start + count)
-    .map((t) => `<div class="tier${t.n <= tier ? ' got' : ''}${t.crate ? ' crate' : ''}" data-n="${t.n}"><b>${t.n}</b><span class="rw">${t.scraps ? `<i class="s"></i>${t.scraps}` : ''}${t.tokens ? `<i class="k"></i>${t.tokens}` : ''}</span></div>`)
+    .map((t) => `<div class="tier${t.n <= tier ? ' got' : ''}${t.n === tier + 1 ? ' cur' : ''}${t.crate ? ' crate' : ''}" data-n="${t.n}"><b>${t.n}</b><span class="rw">${t.scraps ? `<i class="s"></i>${t.scraps}` : ''}${t.tokens ? `<i class="k"></i>${t.tokens}` : ''}</span></div>`)
     .join('')}</div>`;
 }
 export const TRACK_CSS = `
@@ -82,6 +82,8 @@ export const TRACK_CSS = `
 .etrack .tier.crate { box-shadow: 0 0 0 2px #000, 0 0 0 3px #ffc24a; }
 .etrack .tier.got { background: #1f2a22; box-shadow: 0 0 0 2px #000, 0 0 0 3px #6be08a; }
 .etrack .tier.got b { color: #6be08a; }
+.etrack .tier.cur { background: #222a24; box-shadow: 0 0 0 2px #000, 0 0 0 3px #d8f5df, 0 0 8px #6be08a66; }
+.etrack .tier.cur b { color: #d8f5df; }
 .etrack .tier.got::after { content: '✓'; position: absolute; right: 3px; top: 2px; color: #6be08a; font-size: 10px; }
 .ebar { position: relative; height: 12px; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 3px #3a3540; }
 .ebar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#8ff0a6, #4fae68); }

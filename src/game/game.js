@@ -547,7 +547,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (pool) offers = offers.filter((id) => pool.includes(id));
       const already = save.levelFinds(levelDef.id); // already had from this level (as the part, or its improvement): once each, ever
       offers = [...offers.filter((id) => !have.includes(id)), ...offers.filter((id) => have.includes(id) && improveTo(id) && !already.includes(id))].slice(0, count);
-      hud.banner('Checkpoint reached');
+      if (!keepEnemies) hud.banner('Checkpoint reached'); // (not the endless base)
       run.checkpoint = shack; // where an Easy revive puts you back
       run.mode = 'depot';
       run.locked = true;
@@ -580,6 +580,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       });
     },
     prompt: (tag, html, opts) => hud.prompt(tag, html, opts),
+    banner: (text) => hud.banner(text),
     clearPrompt: () => hud.clearPrompt(),
     objective: (text) => hud.setObjective(text),
     marker: (p, label) => hud.setMarker(p, label),
@@ -936,7 +937,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const total = bank(scraps);
     save.commitRun();
     const xp = runXp({ kills, waves, time });
-    const res = bankRun({ xp, time, wave: waves });
+    const res = bankRun({ xp, time, wave: waves, kills });
     hud.showEndless(
       { title, time, waves, kills, scraps, tokens: run.tokens || 0, xp, total, ...res },
       { retry: () => (hud.hideEndless(), loadLevel(levelDef.id)), exit: onExit ? () => (hud.hideEndless(), onExit()) : null },

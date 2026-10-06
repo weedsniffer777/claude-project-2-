@@ -154,7 +154,11 @@ export const save = {
   },
   // Endless: { xp (all-time, for the reward track), claimed (track tiers
   // paid out), best: { t (seconds), wave } }
-  endless: () => ({ xp: 0, claimed: 0, best: { t: 0, wave: 0 }, ...read(K.endless, {}) }),
+  endless: () => {
+    const e = { xp: 0, claimed: 0, kills: 0, ...read(K.endless, {}) };
+    e.best = { t: 0, wave: 0, kills: 0, ...(e.best || {}) };
+    return e;
+  },
   setEndless(v) {
     write(K.endless, v);
   },
