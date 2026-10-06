@@ -909,6 +909,7 @@ function buildSlums(scene) {
           // the market: machines all over it, two artillery drones beyond the railway
           api.spawnArty(RAIL_X + 10, -10, { yaw: Math.PI, hpScale: 0.35 });
           api.spawnArty(RAIL_X + 12, 9, { yaw: Math.PI, hpScale: 0.35, delay: 1 });
+          if (api.run.hard) api.spawnArty(RAIL_X + 14, 0, { yaw: Math.PI, hpScale: 0.35, delay: 2 }); // (two at most; three on Hard)
           for (const [z, d] of [[-8, 0], [6, 0.4], [-2, 0.8]]) api.spawnDog(MARKET.x0 + 20, z, { delay: d });
           api.spawnWalker(MARKET.x0 + 28, 8, { delay: 0.6 });
           go(2);
@@ -966,7 +967,7 @@ function buildSlums(scene) {
         break;
       case 1:
         if (x > 232) {
-          api.spawnArty(258, -3, { yaw: Math.PI, hpScale: 0.35 });
+          api.spawnWalker(ahead(api, 256, 262), -3); // (the dump's artillery: only the pair at the end)
           api.spawnWalker(ahead(api, 252, 262), 4, { delay: 0.5 });
           drone(api, 250, 262, 1);
           go(2);
@@ -983,6 +984,7 @@ function buildSlums(scene) {
         if (x > 266) {
           // the pair covering the barricade
           S.final = [api.spawnArty(END_X - 10, -4, { yaw: Math.PI, hpScale: 0.5 }), api.spawnArty(END_X - 8, 4, { yaw: Math.PI, hpScale: 0.5, delay: 0.6 })];
+          if (api.run.hard) S.final.push(api.spawnArty(END_X - 6, 0, { yaw: Math.PI, hpScale: 0.5, delay: 1.2 })); // (a third on Hard)
           api.spawnWalker(END_X - 14, 3, { delay: 1 });
           drone(api, END_X - 12, END_X - 6, 1.4);
           api.objective('Destroy the artillery drones');
