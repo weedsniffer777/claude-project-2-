@@ -62,6 +62,6 @@ export function trainCrew(id) {
   save.addBank(-c.scraps);
   if (c.tokens) save.addTokens(-c.tokens);
   save.setCrewLevel(id, lvl + 1);
-  sfx.play('levelup', { gain: 0.6 });
+  sfx.play('click', { gain: 0.7 });
   return true;
 }

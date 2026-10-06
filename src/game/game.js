@@ -1803,6 +1803,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     aimBeam.visible = false;
     run.abilityCd = stats.pierceCooldown;
     run.abilities = (run.abilities || 0) + 1;
+    // level 1's boss, only the Piercing shot can finish it: the shot always
+    // goes at it, wherever it was aimed (a miss would leave it stuck at half
+    // till the ability came round again)
+    const fin = enemies.alive.find((e) => e.finisher && !(e.delay > 0));
+    if (fin) {
+      tank.turret.rotation.y = Math.atan2(-(fin.pos.z - pos.z), fin.pos.x - pos.x) - tank.group.rotation.y;
+      tank.group.updateWorldMatrix(true, true);
+    }
     tank.fire(); // the recoil
     sfx.play('cannon', { gain: 1, rate: 0.82 }); // (deeper: the big one)
     const { from, dir, len, wall } = pierceLine();

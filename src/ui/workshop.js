@@ -330,7 +330,7 @@ export function createWorkshop({ renderer, cursor }) {
       .map((r) => ({ label: r.label, from: r.now, to: r.next }));
     spend(n);
     save.setPartLevel(id, lvl + 1);
-    sfx.play('levelup', { gain: 0.6 });
+    sfx.play('click', { gain: 0.7 });
     o?.onChange?.(id);
     const redraw = () => (renderList(), renderDetail());
     if (!n.evolve) return levelPop(redraw);
@@ -425,7 +425,7 @@ export function createWorkshop({ renderer, cursor }) {
       if (max || busy || save.bank() < cost || save.tokens() < tokens) return;
       spend({ scraps: cost, tokens });
       save.setTankLevel(id, lvl + 1);
-      sfx.play('levelup', { gain: 0.6 });
+      sfx.play('click', { gain: 0.7 });
       o?.onChange?.(null);
       const redraw = () => (renderTanks(), renderTank());
       // a promotion gets the full show

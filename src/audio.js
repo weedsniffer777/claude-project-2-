@@ -23,7 +23,7 @@ const FILES = {
   crash: 'crash.mp3',
   boom: 'boom.mp3',
   clank: 'clank.mp3',
-  levelup: 'levelup.mp3',
+  click: 'click.mp3', // (level-ups and evolves)
 };
 const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
 const SEAMLESS = new Set(['vulcan']); // (loops made seamless offline: played as they are)
