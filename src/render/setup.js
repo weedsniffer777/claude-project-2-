@@ -281,3 +281,35 @@ export function addHaze(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
   sun.position.copy(offset);
   return { sun, hemi, follow: shadowFollower(sun, offset, shadowSize) };
 }
+
+// Smog (level 8): an industrial sky, sulphur-yellow low down going to a
+// dirty brown-grey, a weak orange sun low through it, thick haze.
+export const SMOG_SUN = new THREE.Vector3(-20, 11, -16);
+export function addSmog(scene, { shadowSize = 22, shadowMap = 2048 } = {}) {
+  const c = document.createElement('canvas');
+  c.width = 4;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 128);
+  grad.addColorStop(0, '#4c4a44');
+  grad.addColorStop(0.5, '#8a7f62');
+  grad.addColorStop(1, '#c9b27a');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 128);
+  const sky = new THREE.CanvasTexture(c);
+  sky.colorSpace = THREE.SRGBColorSpace;
+  scene.background = sky;
+  scene.fog = new THREE.Fog(0x9a8d6c, 52, 105);
+  const hemi = new THREE.HemisphereLight(0xc4b896, 0x4a443c, 2.0);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xffc68a, 3.2);
+  const offset = SMOG_SUN.clone().setLength(SUN_BACK);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(shadowMap, shadowMap);
+  Object.assign(sun.shadow.camera, { left: -shadowSize, right: shadowSize, top: shadowSize, bottom: -shadowSize, near: 1, far: SUN_BACK + 60 });
+  sun.shadow.bias = -0.0003;
+  sun.shadow.normalBias = 0.02;
+  scene.add(sun, sun.target);
+  sun.position.copy(offset);
+  return { sun, hemi, follow: shadowFollower(sun, offset, shadowSize) };
+}

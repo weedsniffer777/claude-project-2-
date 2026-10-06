@@ -355,6 +355,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     spawnBridgeGun: (x, z, opts) => enemies.spawnBridgeGun(x, z, opts),
     spawnSpider: (x, z, opts) => enemies.spawnSpider(x, z, opts),
     spawnArty: (x, z, opts) => enemies.spawnArty(x, z, opts),
+    spawnWallTurret: (x, z, opts) => enemies.spawnWallTurret(x, z, opts),
     spawnGunship: (x, z, opts) => enemies.spawnGunship(x, z, opts),
     escape: (e, x, z) => enemies.escape(e, x, z),
     get run() {
@@ -1220,33 +1221,39 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
   // equipment's)
-  // The MIRV (the missile tank's Legendary): a missile splits in flight into
-  // three small fast warheads: one on its own target, the others on the
-  // nearest machines round it (or round its spot), 45% of its damage each
+  // The MIRV (the missile tank's Legendary): right out of the tube the
+  // missile splits into three smaller ones that fly on together at the same
+  // target, a little spread, like a shotgun: 45% of its damage each
   function splitWarheads(ms) {
     const from = ms.m.position.clone();
-    const near = enemies.alive
-      .filter((x) => x !== ms.e && !(x.delay > 0) && Math.hypot(x.pos.x - ms.aim.x, x.pos.z - ms.aim.z) < 5)
-      .sort((a, b) => Math.hypot(a.pos.x - ms.aim.x, a.pos.z - ms.aim.z) - Math.hypot(b.pos.x - ms.aim.x, b.pos.z - ms.aim.z));
     const fwd = ms.vel.clone().normalize();
-    combat.glow.flash(from, 0xffffff, 0.25, 1.6, 0.08);
-    combat.glow.flash(from, 0xffb347, 0.4, 2.2, 0.16);
-    combat.fx.burst(from, { count: 10, speed: 6, color: 0xffe6b0, life: 0.25, size: 0.06, gravity: 2 });
+    combat.glow.flash(from, 0xffffff, 0.2, 1.2, 0.06);
+    combat.fx.burst(from, { count: 6, speed: 4, color: 0xffe6b0, life: 0.2, size: 0.05, gravity: 2 });
+    const e = ms.e?.alive ? ms.e : null;
     for (let k = 0; k < 3; k++) {
-      const e = k === 0 ? (ms.e?.alive ? ms.e : null) : near[k - 1] || null;
-      let point = null;
-      if (!e) {
-        const a = Math.random() * Math.PI * 2;
-        const r = k === 0 ? 0 : 0.9 + Math.random() * 1.2;
-        point = new THREE.Vector3(ms.aim.x + Math.cos(a) * r, 0, ms.aim.z + Math.sin(a) * r);
-        point.y = Math.max(ms.aim.y, (level.heightAt ? level.heightAt(point.x, point.z) : 0) + 0.2);
-      }
+      // (no machine: three spots a step apart round where it was going)
+      const point = e ? null : ms.aim.clone().add(new THREE.Vector3((k - 1) * 0.6, 0, (k - 1) * 0.6));
       launchMissile(e, k, { point, from, warhead: true, damage: ms.damage * 0.45, blast: ms.blast * 0.7 });
-      // fanned out from the split, already at speed
       const w = missiles[missiles.length - 1];
-      w.t = 0.25;
-      w.vel.copy(fwd).applyAxisAngle(UP, (k - 1) * 0.45).setY(fwd.y + (k === 1 ? 0.15 : 0)).multiplyScalar(EQUIPMENT.atgm.speed * 1.1);
+      w.t = 0.2;
+      w.vel.copy(fwd).applyAxisAngle(UP, (k - 1) * 0.12).multiplyScalar(ms.vel.length() * 1.1);
     }
+  }
+  // the missile's meshes: one set of geometry and materials for every
+  // missile there is (a full salvo is dozens of them)
+  let mslParts = null;
+  function mslKit() {
+    if (mslParts) return mslParts;
+    const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending };
+    const part = (geo, color, o = {}) => ({ geo, mat: new THREE.MeshBasicMaterial({ color, ...o }) });
+    return (mslParts = {
+      body: part(new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8).rotateX(Math.PI / 2), 0xd8dde2),
+      nose: part(new THREE.ConeGeometry(0.1, 0.26, 8).rotateX(Math.PI / 2), 0xff3b2f),
+      fin: part(new THREE.BoxGeometry(0.46, 0.03, 0.18), 0x5f6b48),
+      core: part(new THREE.SphereGeometry(0.13, 8, 6), 0xffffff),
+      glow: part(new THREE.SphereGeometry(0.45, 10, 8), 0xffb347, { ...add, opacity: 0.55 }),
+      plume: part(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, { ...add, opacity: 0.85 }),
+    });
   }
   function launchMissile(e, k, o = {}) {
     const E = EQUIPMENT.atgm;
@@ -1266,19 +1273,20 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       out = new THREE.Vector3(1, 0, 0).transformDirection(launcher.mouth.matrixWorld);
     }
     const m = new THREE.Group();
-    const add = (geo, color, z, o = {}) => {
-      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, ...o }));
+    const K = mslKit();
+    const add = (part, z) => {
+      const mesh = new THREE.Mesh(K[part].geo, K[part].mat);
       mesh.position.z = z;
       m.add(mesh);
       return mesh;
     };
-    add(new THREE.CylinderGeometry(0.1, 0.1, 0.8, 8).rotateX(Math.PI / 2), 0xd8dde2, 0);
-    add(new THREE.ConeGeometry(0.1, 0.26, 8).rotateX(Math.PI / 2), 0xff3b2f, 0.53);
-    for (const r of [0, Math.PI / 2]) add(new THREE.BoxGeometry(0.46, 0.03, 0.18), 0x5f6b48, -0.3).rotation.z = r;
+    add('body', 0);
+    add('nose', 0.53);
+    for (const r of [0, Math.PI / 2]) add('fin', -0.3).rotation.z = r;
     // the motor: a white-hot core and a big soft glow round it
-    add(new THREE.SphereGeometry(0.13, 8, 6), 0xffffff, -0.48);
-    const glow = add(new THREE.SphereGeometry(0.45, 10, 8), 0xffb347, -0.55, { transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
-    const plume = add(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, -0.95, { transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+    add('core', -0.48);
+    const glow = add('glow', -0.55);
+    const plume = add('plume', -0.95);
     if (o.warhead) m.scale.setScalar(0.6);
     m.position.copy(from);
     scene.add(m);
@@ -1340,7 +1348,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const d = to.length();
       const speed = ms.fast ? Math.min(E.speed * 1.6, 26 + ms.t * 90) : Math.min(E.speed, 9 + ms.t * 70);
       // MIRV: a beat out of the tube, it splits into three
-      if (ms.split && ms.t > 0.18) {
+      if (ms.split && ms.t > 0.05) {
         ms.m.removeFromParent();
         missiles.splice(i, 1);
         splitWarheads(ms);
@@ -1362,9 +1370,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       const f = 0.8 + Math.random() * 0.4;
       ms.glow.scale.setScalar(f);
       ms.plume.scale.set(1, 1, 0.7 + Math.random() * 0.6);
-      combat.glow.tracer(ms.last, ms.m.position, 0xffc070, 0.22, 0.18);
-      combat.glow.tracer(ms.last, ms.m.position, 0xffffff, 0.08, 0.08);
-      combat.puffs.spawn(ms.m.position.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4), { color: 0xd0cabe, s0: 0.16, s1: 0.6, life: 0.8, drag: 2, lift: 0.2, fadeAt: 0.2 });
+      combat.glow.tracer(ms.last, ms.m.position, 0xffc070, ms.fast ? 0.1 : 0.22, ms.fast ? 0.1 : 0.18);
+      combat.glow.tracer(ms.last, ms.m.position, 0xffffff, ms.fast ? 0.04 : 0.08, 0.08);
+      if (!ms.fast || Math.random() < 0.12) combat.puffs.spawn(ms.m.position.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.2, (Math.random() - 0.5) * 0.4), { color: 0xd0cabe, s0: 0.16, s1: 0.6, life: 0.8, drag: 2, lift: 0.2, fadeAt: 0.2 });
       ms.last = ms.m.position.clone();
       const ground = level.heightAt ? level.heightAt(ms.m.position.x, ms.m.position.z) : 0;
       if (d < 0.9 || ms.t > 4 || (ms.t > 0.3 && ms.m.position.y < ground + 0.15)) {
@@ -3049,7 +3057,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
 
       // machines
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
+      // the machines don't come into a checkpoint: each shack and the
+      // ground just before its door are walls to them (not to the tank)
+      const keepOut = (level.shacks || []).filter((k) => k.z1 != null).map((k) => ({ x: (k.x0 + k.x1) / 2 - 1.5, z: k.door.z, hx: (k.x1 - k.x0) / 2 + 3, hz: (k.z1 - k.z0) / 2 + 0.6, yaw: 0 }));
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks: keepOut.length ? blocks.concat(keepOut) : blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
       // the roof MG only takes machines it can see (not through trams and walls)
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;

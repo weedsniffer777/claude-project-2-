@@ -40,10 +40,10 @@ export function blob(g, cx, cy, rx, ry, rand, pts = 9) {
   g.fill();
 }
 
-export function speckle(g, w, h, colors, n, rand, y0 = 0) {
+export function speckle(g, w, h, colors, n, rand, y0 = 0, x0 = 0) {
   for (let i = 0; i < n; i++) {
     g.fillStyle = colors[(rand() * colors.length) | 0];
-    g.fillRect((rand() * w) | 0, (y0 + rand() * h) | 0, 1, 1);
+    g.fillRect((x0 + rand() * w) | 0, (y0 + rand() * h) | 0, 1, 1);
   }
 }
 

@@ -6,6 +6,7 @@ import { createTank } from '../models/tank.js';
 import { createLightTank } from '../models/lightTank.js';
 import { PARTS, attachPart, partModel } from '../game/parts.js';
 import { snapshotCanvas, upArrow } from './snapshot.js';
+import { mirvCanvas } from '../ui/icons.js';
 
 const cache = new Map();
 let dozerTank = null;
@@ -76,6 +77,16 @@ export function partPicture(renderer, id, W = 84, H = 56) {
     // mostly off to the side)
     const at = vulcanTank.gunPivot.localToWorld(new THREE.Vector3(1.0, 0, 0));
     pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.55, 0.5, 1), half: 1.0 });
+  } else if (id === 'mirv') {
+    // nothing on the tank to show: its pixel picture, scaled up whole
+    const art = mirvCanvas(1);
+    pic = document.createElement('canvas');
+    pic.width = W;
+    pic.height = H;
+    const g = pic.getContext('2d');
+    const k = Math.max(1, Math.floor(Math.min(W / art.width, H / art.height)));
+    g.imageSmoothingEnabled = false;
+    g.drawImage(art, Math.round((W - art.width * k) / 2), Math.round((H - art.height * k) / 2), art.width * k, art.height * k);
   } else {
     pic = snapshotCanvas(renderer, partModel(id), W, H, PARTS[id].badge === 'up' ? upArrow : null);
   }

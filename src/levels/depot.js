@@ -286,6 +286,8 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt }) {
   return {
     x0,
     x1,
+    z0,
+    z1,
     door: new THREE.Vector3(x0 - 0.5, 1.6, cz),
     // where the tank comes back out (the back door, already up)
     outside: new THREE.Vector3(x1 + 3.2, 0, cz),

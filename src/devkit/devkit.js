@@ -53,8 +53,22 @@ export function createDevKit({ tools, settings = [] }) {
     if (!menu.hidden && !menu.contains(e.target) && e.target !== button) setOpen(false);
   });
 
-  document.body.append(button, menu);
+  // the frame counter in the bottom-right corner (comes and goes with the
+  // dev kit: removing the kit for release removes it too)
+  const fpsEl = document.createElement('div');
+  fpsEl.className = 'dk-fps';
+  const meter = { t: 0, frames: 0 };
+
+  document.body.append(button, menu, fpsEl);
   return {
+    // each frame: dt (s, real); label() the rest of the line (quality, draw calls)
+    countFrame(dt, label) {
+      meter.t += dt;
+      meter.frames++;
+      if (meter.t < 0.5) return;
+      fpsEl.textContent = `${Math.round(meter.frames / meter.t)} fps · ${label()}`;
+      meter.t = meter.frames = 0;
+    },
     close: () => setOpen(false),
     get isOpen() {
       return !menu.hidden;

@@ -21,7 +21,6 @@ const DEFAULTS = {
   quality: 'auto', // 'auto' or a tier index ('0' best .. '3' Potato)
   fps: 60, // frame cap: 60, 30, or 0 (as fast as the screen goes)
   shake: 'on', // 'on' | 'reduced' | 'off'
-  showFps: false,
   keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR' },
   // touch
   aimAssist: true, // touch: a tap near an enemy locks onto it; off: tap/drag to aim
@@ -211,7 +210,6 @@ export function createSettingsMenu({ touch = () => false } = {}) {
     );
     box.append(row('Frame rate', dropdown(s.fps, [[60, '60 fps'], [30, '30 fps (saves battery)'], [0, 'Unlimited']], (v) => setSetting('fps', +v))));
     box.append(row('Screen shake', dropdown(s.shake, [['on', 'On'], ['reduced', 'Reduced'], ['off', 'Off']], (v) => setSetting('shake', v))));
-    box.append(row('Show frame rate', toggle(s.showFps, (v) => setSetting('showFps', v))));
 
     if (touch()) {
       box.append(head('Touch controls'));

@@ -711,42 +711,20 @@ export const PARTS = {
   // first clear.
   mirv: {
     type: 'weapons',
-    name: 'MIRV warheads',
+    name: 'MIRV',
     only: 'missile',
     startLevel: 21,
-    text: 'Every missile splits soon after launch into three fast warheads, each on its own target: 3 × 45% damage, smaller blasts. Missile tank only.',
-    icon: ['................', '......+.........', '.....###........', '....#####.......', '...##.#.##......', '..#+..#..+#.....', '.#....#....#....', '+.....+.....+...', '................', '................'],
+    text: 'Every missile splits right after launch into three smaller ones that fly on together at the same target, like a shotgun: 3 × 45% damage. Missile tank only.',
+    icon: ['................', '.............+..', '..........++....', '.-#####+++++..+.', '..........++....', '.............+..', '................', '................', '................', '................'],
     apply(s) {
       s.mirv = true;
     },
-    model: () => mirvRack(),
-    // a guidance bus on the cradle between the two packs, three warheads
-    // nosed forward on it
-    missile(t) {
-      const g = mirvRack();
-      g.scale.setScalar(0.8);
-      g.position.set(0.1, 0.62, 0);
-      (t.gunPivot || t.turret).add(g);
-      return g;
-    },
-    build(t) {
-      const g = mirvRack();
-      g.position.set(0, 1.35, 0);
-      t.turret.add(g);
-      return g;
-    },
+    // nothing to see on the tank: it's in the missiles themselves
+    missile: () => new THREE.Group(),
+    light: () => new THREE.Group(),
+    build: () => new THREE.Group(),
   },
 };
-// The MIRV's look: a little bus box, three warheads on it, red-tipped
-function mirvRack() {
-  const g = new THREE.Group();
-  put(g, box(0.5, 0.12, 0.3, 0x3a4030, { r: 0.02 }), 0, 0, 0);
-  for (const [z, y] of [[-0.09, 0.1], [0.09, 0.1], [0, 0.22]]) {
-    put(g, cyl(0.05, 0.36, 0xd8dde2, { axis: 'x', seg: 8 }), 0.04, y, z);
-    put(g, cyl(0.05, 0.1, 0xff3b2f, { axis: 'x', seg: 8, radiusEnd: 0.005 }), 0.27, y, z);
-  }
-  return g;
-}
 // An automatic grenade launcher (an Mk 19-like): a boxy receiver, a short
 // fat barrel with a ribbed jacket, a flash hider, a big ammo can on its
 // side, the feed tray on top. Sized to sit over a roof MG (barrel along +x).

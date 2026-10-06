@@ -207,3 +207,34 @@ export function shieldCanvas(scale = 2) {
   if (!shieldCache.has(scale)) shieldCache.set(scale, raster(32, 24, shieldAt, scale));
   return shieldCache.get(scale);
 }
+
+// ------------------------------------------------------------- the MIRV
+// the guided missile's picture shifted back, its nose fanning out into
+// three thin trails, each to its own small red lock box
+const MIRV_BOXES = [[26.5, 4.5], [28.5, 12], [26.5, 19.5]];
+function mirvAt(x, y) {
+  const c = missileBody(x + 6, y) || flame(x + 6, y);
+  if (c) return c;
+  for (const [bx, by] of MIRV_BOXES) {
+    const dx = Math.abs(x - bx);
+    const dy = Math.abs(y - by);
+    if (Math.max(dx, dy) < 2.6 && Math.max(dx, dy) > 1.6 && (dx > 1.6 ? dy < 0.9 || dy > 1.8 : dx < 0.9 || dx > 1.8)) return '#ff3b2f'; // corner brackets
+    if (Math.hypot(x - bx, y - by) < 0.8) return '#ff3b2f';
+    // the trail from the nose to it
+    const ax = 16.5;
+    const ay = MY;
+    const t = ((x - ax) * (bx - 2.6 - ax) + (y - ay) * (by - ay)) / ((bx - 2.6 - ax) ** 2 + (by - ay) ** 2);
+    if (t > 0 && t < 1) {
+      const px = ax + (bx - 2.6 - ax) * t;
+      const py = ay + (by - ay) * t;
+      if (Math.hypot(x - px, y - py) < 0.55) return t < 0.3 ? '#ffffff' : '#ffe6b0';
+    }
+  }
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (missileBody(x + 6 + dx, y + dy)) return '#000000';
+  return null;
+}
+const mirvPicCache = new Map();
+export function mirvCanvas(scale = 2) {
+  if (!mirvPicCache.has(scale)) mirvPicCache.set(scale, raster(32, 24, mirvAt, scale));
+  return mirvPicCache.get(scale);
+}

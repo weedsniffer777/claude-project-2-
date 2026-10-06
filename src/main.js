@@ -135,23 +135,7 @@ function watchFrameRate(dt) {
   }
 }
 
-// Dev-only frame counter in the bottom-right corner (with the quality tier).
-const fpsEl = document.createElement('div');
-fpsEl.className = 'dk-fps';
-document.body.append(fpsEl);
-// (shown with the dev kit, or when Settings asks for it)
-const showFps = () => (fpsEl.style.display = settings().showFps || params.has('fps') || params.has('devkit') || location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : 'none');
-showFps();
-onSettings((k) => k === 'showFps' && showFps());
-const fpsMeter = { t: 0, frames: 0 };
-function countFrame(dt) {
-  fpsMeter.t += dt;
-  fpsMeter.frames++;
-  if (fpsMeter.t < 0.5) return;
-  fpsEl.textContent = `${Math.round(fpsMeter.frames / fpsMeter.t)} fps · ${TIERS[tier].name}${autoQuality ? ' (auto)' : ''}`;
-  fpsMeter.t = fpsMeter.frames = 0;
-}
-
+renderer.info.autoReset = false;
 const devkit = createDevKit({
   tools: [
     { id: 'model-viewer', label: 'Model viewer', detail: 'Inspect models, loadout slots and weapon effects', open: () => setMode(viewer) },
@@ -328,8 +312,9 @@ function frame(now = performance.now()) {
   const raw = clock.getDelta();
   const dt = Math.min(raw, 0.05);
   watchFrameRate(raw);
-  countFrame(raw);
+  devkit.countFrame(raw, () => `${TIERS[tier].name}${autoQuality ? ' (auto)' : ''} · ${renderer.info.render.calls} draws`);
   requestAnimationFrame(frame); // (asked for first: one bad frame never stops the game)
+  renderer.info.reset(); // (counted over the whole frame, every pass: the dev kit's draw count)
   try {
     mode.frame(dt, clock.getElapsed());
   } catch (err) {

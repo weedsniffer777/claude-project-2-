@@ -70,11 +70,47 @@ function groundTexture(rand) {
   };
   rect(MAP.x0, MAP.z0, MAP.x1, MAP.z1, '#6e5f4c');
   speckle(g, W, H, ['#655744', '#77684f', '#5e5040', '#827257', '#4f4436'], W * H * 0.08, rand);
-  // patches of old snow, dirty, in the lee of things
-  for (let i = 0; i < 260; i++) {
-    g.fillStyle = rand() < 0.5 ? '#b7b5ad' : '#9c978b';
-    blob(g, rand() * W, rand() * H, (0.6 + rand() * 2.2) * GPX, (0.4 + rand() * 1.2) * GPX, rand, 9);
+  // old snow, dirty, drifted in the lee of things: along the shack fronts
+  // and fences mostly, a few out in the open; never in the road's ruts.
+  // Each drift a wobbly run of overlapping blobs, fat in the middle,
+  // tapering off, patchy, grimed, with a few bright crusts; flecks round it
+  const drift = (x, z, len, depth) => {
+    const n = 5 + ((len * 2) | 0);
+    const wob = rand() * 6;
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1);
+      const fat = Math.sin(Math.PI * u) * (0.6 + rand() * 0.5);
+      const px = x + (u - 0.5) * len;
+      const pz = z + Math.sin(u * 3 + wob) * depth * 0.35;
+      g.globalAlpha = 0.55 + rand() * 0.4;
+      g.fillStyle = rand() < 0.6 ? '#b9b7af' : '#a29d91';
+      blob(g, X(px), Z(pz), (0.4 + fat * 0.9) * GPX, (0.2 + fat * depth * 0.5) * GPX, rand, 7);
+    }
+    g.globalAlpha = 1;
+    for (let i = 0; i < len * 6; i++) {
+      const px = x + (rand() - 0.5) * len;
+      const pz = z + (rand() - 0.5) * depth * 0.7;
+      g.fillStyle = rand() < 0.7 ? '#6e665a' : '#e2e0d8'; // grime; bright crust
+      g.fillRect(X(px), Z(pz), 1 + ((rand() * 2) | 0), 1);
+    }
+    for (let i = 0; i < len * 4; i++) {
+      g.fillStyle = rand() < 0.5 ? '#c4c2ba' : '#a8a397';
+      g.fillRect(X(x + (rand() - 0.5) * len * 1.6), Z(z + (rand() - 0.5) * depth * 2.2), 1 + ((rand() * 2) | 0), 1 + ((rand() * 2) | 0));
+    }
+  };
+  for (let i = 0; i < 110; i++) {
+    const x = MAP.x0 + rand() * (MAP.x1 - MAP.x0);
+    const r = rand();
+    // in the lee of the fronts (either side), else somewhere off the road
+    let z = r < 0.4 ? FRONT.n - 0.2 - rand() * 0.8 : r < 0.75 ? FRONT.s + 0.2 + rand() * 0.8 : 0;
+    if (r >= 0.75) {
+      z = MAP.z0 + rand() * (MAP.z1 - MAP.z0);
+      if (z > ROAD.n - 0.5 && z < ROAD.s + 0.5) continue;
+    }
+    drift(x, z, 1.2 + rand() * rand() * 7, 0.5 + rand() * 1.2);
   }
+  // and a little crusted along the road's edges, broken up by the wheels
+  for (let x = MAP.x0; x < MAP.x1; x += 2 + rand() * 6) if (rand() < 0.4) drift(x, rand() < 0.5 ? ROAD.n - 0.1 : ROAD.s + 0.1, 0.8 + rand() * 2.5, 0.35);
   // the market: packed earth, lighter, worn paths across it
   rect(MARKET.x0, MARKET.n, MARKET.x1, MARKET.s, '#7a6a52');
   speckle(g, X(MARKET.x1) - X(MARKET.x0), Z(MARKET.s) - Z(MARKET.n), ['#6f604a', '#85745a', '#6a5b46'], (X(MARKET.x1) - X(MARKET.x0)) * (Z(MARKET.s) - Z(MARKET.n)) * 0.08, rand, Z(MARKET.n), X(MARKET.x0));

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
 import { createWalker } from '../models/walker.js';
 import { createBridgeGun } from '../models/bridgeGun.js';
+import { createWallTurret } from '../models/wallTurret.js';
 import { createDrone } from '../models/drone.js';
 import { createSpider } from '../models/spider.js';
 import { pushOut } from './collide.js';
@@ -106,6 +107,46 @@ const BRIDGE_GUN = {
   muzzleY: 2.4,
   hit: [4.4, 1.9, 4.4, 0.95], // the whole emplacement, sandbags and all: a shell into the bags is a hit
   scrap: 40,
+};
+
+// The defence wall's turrets (level 8's boss): gun pods riding rails on
+// the wall's face, up off the floor. They slide along while they look for
+// a shot and stop to charge it. The heavy ones: one big slow hit; the
+// quick ones: a light shot every second or so.
+// the artillery's target rings (one geometry for them all; each its own
+// material, blinking on its own)
+const SHELL_RING = new THREE.RingGeometry(0.85, 1, 28).rotateX(-Math.PI / 2);
+const SHELL_DOT = new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2);
+const WALL_HEAVY = {
+  ...BRIDGE_GUN,
+  model: () => createWallTurret({ heavy: true, y: 2.6 }),
+  hp: 700,
+  range: 46,
+  charge: 1.8,
+  track: 0.9,
+  lock: 0.5,
+  reload: 2.2,
+  damage: 20,
+  box: { hx: 1.0, hz: 0.9 },
+  scale: 1.4, // (below the 'big machine' line: ordinary drops)
+  aimY: 2.6,
+  muzzleY: 2.6,
+  hit: [2.6, 1.4, 1.6, 2.6],
+  scrap: 30,
+};
+const WALL_QUICK = {
+  ...WALL_HEAVY,
+  model: () => createWallTurret({ heavy: false, y: 5.2 }),
+  hp: 420,
+  charge: 0.7,
+  track: 1.6,
+  lock: 0.25,
+  reload: 0.9,
+  damage: 7,
+  aimY: 5.2,
+  muzzleY: 5.2,
+  hit: [2.0, 1.1, 1.2, 5.2],
+  scrap: 20,
 };
 
 // The attack drone: flies (over walls and wrecks), quick, darting from spot
@@ -380,6 +421,14 @@ export class Enemies {
     return this.spawn(WALKER, 'walker', x, z, opts);
   }
   // yaw: which way the gun faces to start with
+  // a defence wall turret: heavy or quick; slide: { mid, amp, speed, phase }
+  // (it rides its rail along z)
+  spawnWallTurret(x, z, opts = {}) {
+    const e = this.spawn(opts.heavy ? WALL_HEAVY : WALL_QUICK, 'gun', x, z, opts);
+    e.model.group.rotation.y = opts.yaw ?? Math.PI;
+    if (opts.slide) e.slide = { ...opts.slide };
+    return e;
+  }
   spawnBridgeGun(x, z, opts = {}) {
     const e = this.spawn(BRIDGE_GUN, 'gun', x, z, opts);
     e.model.group.rotation.y = opts.yaw ?? Math.PI;
@@ -719,6 +768,12 @@ export class Enemies {
         e.los = !sightBlocked(new THREE.Vector3(e.pos.x, eyeY, e.pos.z), new THREE.Vector3(tankPos.x, ty + 1.0, tankPos.z), ctx.colliders);
       }
 
+      // riding a rail (the wall turrets): along it while looking for a
+      // shot, stopped while it charges
+      if (e.slide) {
+        if (!(e.charge > 0)) e.slideT = (e.slideT ?? e.slide.phase ?? 0) + dt * e.slide.speed;
+        e.pos.z = e.slide.mid + Math.sin(e.slideT ?? 0) * e.slide.amp;
+      }
       if (DOG.flying) {
         this.droneFrame(e, dt, t, ctx, dist);
         continue;
@@ -1191,11 +1246,11 @@ export class Enemies {
         const at = e.artyAt[S.artyRockets - e.artyLeft];
         e.artyLeft--;
         const from = e.model.rocketMuzzle();
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
+        const ring = new THREE.Mesh(SHELL_RING, new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide }));
         ring.position.set(at.x, at.y + 0.07, at.z);
         ring.scale.setScalar(S.artyBlast);
         this.scene.add(ring);
-        const dot = new THREE.Mesh(new THREE.CircleGeometry(1, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.18, depthWrite: false }));
+        const dot = new THREE.Mesh(SHELL_DOT, new THREE.MeshBasicMaterial({ color: 0xff3b2f, transparent: true, opacity: 0.18, depthWrite: false }));
         dot.position.set(at.x, at.y + 0.06, at.z);
         this.scene.add(dot);
         const mesh = droneRocket();
@@ -1240,6 +1295,8 @@ export class Enemies {
       if (u >= 1) {
         sh.ring.removeFromParent();
         sh.dot.removeFromParent();
+        sh.ring.material.dispose();
+        sh.dot.material.dispose();
         sh.mesh.removeFromParent();
         e.shells.splice(i, 1);
         const at = sh.at.clone().setY(sh.at.y + 0.2);
@@ -1559,6 +1616,8 @@ export class Enemies {
     for (const sh of e.shells || []) {
       sh.ring.removeFromParent();
       sh.dot.removeFromParent();
+      sh.ring.material.dispose();
+      sh.dot.material.dispose();
       sh.mesh.removeFromParent();
     }
     e.artyLeft = 0;
