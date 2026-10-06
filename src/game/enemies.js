@@ -814,6 +814,7 @@ export class Enemies {
       let vx = 0;
       let vz = 0;
       let speed = 0;
+      let nav = null;
       if (e.via.length) {
         const w = e.via[0];
         const wx = w.x - e.pos.x;
@@ -821,6 +822,12 @@ export class Enemies {
         if (Math.hypot(wx, wz) < 1.2) e.via.shift();
         vx = wx;
         vz = wz;
+        speed = DOG.runSpeed;
+      } else if ((dist > DOG.range || !e.los) && (nav = ctx.navGoal?.(e.pos, tankPos))) {
+        // the tank's up (or down) a level: the level says which way round
+        // (up the ramp, down off the deck)
+        vx = nav.x - e.pos.x;
+        vz = nav.z - e.pos.z;
         speed = DOG.runSpeed;
       } else if (dist > DOG.range || !e.los) {
         // closing in, or something's in the way: keep moving, edging round it
@@ -846,8 +853,12 @@ export class Enemies {
         // stuck on something: slide sideways for a moment
         e.sidestep -= dt;
         const s = e.strafe;
-        vx = -tz * s + tx * 0.3;
-        vz = tx * s + tz * 0.3;
+        // (round the thing, still heading the way it was going)
+        const gl = nav ? Math.hypot(nav.x - e.pos.x, nav.z - e.pos.z) || 1 : 1;
+        const ax = nav ? (nav.x - e.pos.x) / gl : tx;
+        const az = nav ? (nav.z - e.pos.z) / gl : tz;
+        vx = -az * s + ax * 0.3;
+        vz = ax * s + az * 0.3;
         speed = DOG.runSpeed * 0.7;
       }
       if ((DOG.sniper && e.charge > 0) || DOG.static) speed = 0; // planted while it lines up a shot (a fixed gun never moves)

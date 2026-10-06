@@ -968,6 +968,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         if ((b.minX != null && p.x < b.minX + 1) || (b.maxX != null && p.x > b.maxX - 1) || (b.minZ != null && p.z < b.minZ + 1) || (b.maxZ != null && p.z > b.maxZ - 1)) continue;
         if (!offScreen(p.x, 0.8, p.z)) continue;
         if (p.x < pos.x + 2) continue; // ahead only: never brought in behind (the way on is forward)
+        if (level.heightAt && Math.abs(level.heightAt(p.x, p.z) - level.heightAt(pos.x, pos.z)) > 1.2) continue; // (on the tank's level, not under or over it)
         const q = p.clone();
         pushOut(q, () => ({ x: q.x, z: q.z, hx: 0.6, hz: 0.4, yaw: 0 }), blocks, 2);
         if (q.distanceTo(p) > 0.3) continue; // inside something
@@ -2113,8 +2114,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     const maxPx = Math.max(window.innerWidth, window.innerHeight) * 0.16;
     let best = null;
     let bestD = Infinity;
+    const myY = level.heightAt ? level.heightAt(pos.x, pos.z) : 0;
     for (const e of enemies.alive) {
       if (e.delay > 0) continue;
+      // (never one on another level with a floor between: up on the deck
+      // from the street, or down under its edge)
+      if (!e.los && !e.stats.flying && level.heightAt && Math.abs(level.heightAt(e.pos.x, e.pos.z) - myY) > 1.2) continue;
       const es = toScreen(enemies.aimPoint(e));
       const d = Math.hypot(es.x - cx, es.y - cy);
       let da = Math.atan2(es.y - tankS.y, es.x - tankS.x) - tapA;
@@ -3301,8 +3306,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // machines
       // the machines don't come into a checkpoint: each shack and the
       // ground just before its door are walls to them (not to the tank)
-      const keepOut = (level.shacks || []).filter((k) => k.z1 != null).map((k) => ({ x: (k.x0 + k.x1) / 2 - 1.5, z: k.door.z, hx: (k.x1 - k.x0) / 2 + 3, hz: (k.z1 - k.z0) / 2 + 0.6, yaw: 0 }));
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks: keepOut.length ? blocks.concat(keepOut) : blocks, colliders, heightAt: level.heightAt, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
+      const keepOut = (level.shacks || []).filter((k) => k.z1 != null).map((k) => k.keepOut || { x: (k.x0 + k.x1) / 2 - 1.5, z: k.door.z, hx: (k.x1 - k.x0) / 2 + 3, hz: (k.z1 - k.z0) / 2 + 0.6, yaw: 0 });
+      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks: keepOut.length ? blocks.concat(keepOut) : blocks, colliders, heightAt: level.heightAt, navGoal: level.navGoal, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
       // the roof MG only takes machines it can see (not through trams and walls)
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;

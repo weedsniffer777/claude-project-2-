@@ -89,6 +89,42 @@ function heightAt(x, z) {
   return rampAt(x, z) ?? 0;
 }
 
+// Ground machines and the elevated road: when the tank's up a level from
+// one (or down), where it should head instead of straight at it. Up: along
+// the slip road to the ramp's foot, up the ramp onto the deck. Down: along
+// the deck to the gap where the ramp merges, down the ramp, off its foot.
+// null: same level, go straight for it.
+const RAMP_MID_Z = DECKZ.s - 0.1 + RAMP_W / 2;
+const NAV = {
+  slip: { x: 27, z: -11 }, // on the slip road, coming off the avenue
+  foot: { x: RAMP_FOOT - 3, z: RAMP_MID_Z }, // just up onto the ramp
+  out: { x: RAMP_FOOT + 4, z: RAMP_MID_Z }, // just off its foot
+  top: { x: RAMP_TOP - 4, z: RAMP_MID_Z - 0.5 }, // at the top, in the merge
+  gate: { x: (MERGE.x0 + MERGE.x1) / 2, z: DECKZ.s - 2.5 }, // on the deck, by the gap
+};
+function navGoal(p, t) {
+  const hp = heightAt(p.x, p.z);
+  const ht = heightAt(t.x, t.z);
+  if (Math.abs(hp - ht) < 1.2) {
+    // (level with it, but on the deck vs the merge lane: through the gap)
+    const pDeck = p.z < DECKZ.s;
+    const tDeck = t.z < DECKZ.s;
+    if (hp > DECK - 0.5 && pDeck !== tDeck && (t.x < MERGE.x0 || t.x > MERGE.x1 || p.x < MERGE.x0 || p.x > MERGE.x1)) return NAV.gate;
+    return null;
+  }
+  const onRamp = rampAt(p.x, p.z) != null;
+  if (ht > hp) {
+    // up: on the ramp, climb it; on the ground, get onto its foot
+    if (onRamp) return NAV.top;
+    if (p.x > BASE.x0 - 1 && p.z < AVE.wn + 1) return { x: p.x, z: AVE.wn + 3 }; // (east of the base: out onto the avenue first)
+    if ((p.x > RAMP_FOOT - 1 && p.z < AVE.wn + 3) || Math.hypot(p.x - NAV.slip.x, p.z - NAV.slip.z) < 4) return NAV.foot;
+    return NAV.slip;
+  }
+  // down: on the deck, to the gap first; on the ramp, down it and off
+  if (!onRamp) return Math.hypot(p.x - NAV.gate.x, p.z - NAV.gate.z) < 3 ? NAV.top : NAV.gate;
+  return NAV.out;
+}
+
 // The ground: snowy paving on the sidewalks and the square, slushy asphalt
 // down the two streets (zebra crossings at the junction), the park's
 // trodden snow and gravel paths, the base's yard in hazard paint.
@@ -300,6 +336,12 @@ function buildEndless(scene) {
   }
   const K = cityKit(B, { WALK: { n: AVE.wn, s: AVE.ws }, heightAt });
   const ST = streetKit(B, { CURB: { n: AVE.n, s: AVE.s }, WALK: { n: AVE.wn, s: AVE.ws }, SW: 0, heightAt, sign });
+  // what the tank can flatten or shoot apart: wrecks, the street junk
+  // (one scrap or two each), poles (topple), jersey barriers (a boost or a
+  // shell)
+  const wreck = (BB, fn) => BB.crushable(fn, { kind: 'car', scrap: 2 });
+  const junk = (fn, scrap = 1) => B.crushable(fn, { kind: 'prop', scrap });
+  const barrier = (fn) => B.crushable(fn, { kind: 'prop', heavy: true, breakable: true, scrap: 1 });
 
   // A block turned to face any way (yaw: its facade's facing, 0 = +z):
   // panel facades, gutted windows, a snowy roof
@@ -374,12 +416,12 @@ function buildEndless(scene) {
     P.bus(B, -60.5, 1, Math.PI / 2 + 0.25);
     K.rubble(B, -61, -8, 4, 2.2, { solid: true, slabs: 3 });
     K.rubble(B, -61, 9, 3.6, 1.8, { solid: true, slabs: 3 });
-    for (const z of [-11, -5.5, 5, 11.5]) K.jersey(B, -57.4, z, Math.PI / 2 + (rand() - 0.5) * 0.4);
+    for (const z of [-11, -5.5, 5, 11.5]) barrier(() => K.jersey(B, -57.4, z, Math.PI / 2 + (rand() - 0.5) * 0.4));
     B.block(-60.5, 0, 2.5, 13);
     // the cross street, south: a slab heap and a wrecked tram nose
     K.rubble(B, -2, 41.5, 5.5, 2.4, { solid: true, slabs: 4 });
     K.rubble(B, 7, 42, 3.4, 1.6, { solid: true, slabs: 2 });
-    for (const x of [-10, -6.5, 3.5]) K.jersey(B, x, 39.2, (rand() - 0.5) * 0.4);
+    for (const x of [-10, -6.5, 3.5]) barrier(() => K.jersey(B, x, 39.2, (rand() - 0.5) * 0.4));
     B.block(0, 41.5, 12, 2.2);
     // the avenue, east (past the base's yard): a container wall
     for (const z of [-8.5, -2.6, 3.3, 9.2]) K.container(B, 62.5, 0, z, Math.PI / 2 + (rand() - 0.5) * 0.06, CONTAINERS[(rand() * 5) | 0]);
@@ -400,16 +442,16 @@ function buildEndless(scene) {
     block(19, z + 3, 12, 13, f, Math.PI / 2);
   }
   // and more junk in the road out there: wrecks, a jack-knifed tram, heaps
-  P.car(B, -72, -4, 0.6, { kind: 'sedan' });
-  P.car(B, -86, 5, 2.4, { kind: 'van' });
+  wreck(B, () => P.car(B, -72, -4, 0.6, { kind: 'sedan' }));
+  wreck(B, () => P.car(B, -86, 5, 2.4, { kind: 'van' }));
   P.tram(B, -100, 0, 0.35, { burn: 0.8 });
   K.rubble(B, -118, -2, 4, 1.8, { solid: true, slabs: 3 });
-  P.car(B, 74, 4, 2.9, { kind: 'hatch', flipped: true });
+  wreck(B, () => P.car(B, 74, 4, 2.9, { kind: 'hatch', flipped: true }));
   P.bus(B, 90, -3, 0.4);
   K.rubble(B, 106, 2, 4.5, 2, { solid: true, slabs: 3 });
-  P.car(B, 2, 52, 1.2, { kind: 'van' });
+  wreck(B, () => P.car(B, 2, 52, 1.2, { kind: 'van' }));
   K.rubble(B, -3, 62, 4, 1.6, { solid: true, slabs: 2 });
-  P.car(B, -3, -48, 0.4, { kind: 'sedan' });
+  wreck(B, () => P.car(B, -3, -48, 0.4, { kind: 'sedan' }));
   // (and behind all that, in case: a hard edge)
   B.block(FIELD.minX - 3.5, 12, 0.5, 36);
   B.block(FIELD.maxX + 3.5, 12, 0.5, 36);
@@ -480,6 +522,7 @@ function buildEndless(scene) {
         const w = new THREE.Mesh(wg, new THREE.MeshToonMaterial({ color: SIDE, gradientMap, side: THREE.DoubleSide }));
         w.castShadow = w.receiveShadow = true;
         B.add(w);
+        B.solid(w); // (nothing sees or shoots through it)
       }
       // rails and the blocks behind them, where it's high enough to fall
       // off (and not along the merge, on the north side)
@@ -552,12 +595,12 @@ function buildEndless(scene) {
       put(D.root, box(0.5, 0.16, 0.7, 0x3c3e42, { r: 0.05 }), x, 5.85, DECKZ.n + 2.7);
       D.block(x, DECKZ.n + 0.6, 0.2, 0.2);
     }
-    P.car(D, -40, -29, 0.4, { kind: 'sedan', snow: false });
-    P.car(D, -14, -32, -0.2, { kind: 'hatch', flipped: true, snow: false });
+    wreck(D, () => P.car(D, -40, -29, 0.4, { kind: 'sedan', snow: false }));
+    wreck(D, () => P.car(D, -14, -32, -0.2, { kind: 'hatch', flipped: true, snow: false }));
     P.bus(D, 4, -31, 0.25);
-    P.car(D, 52, -27, 2.9, { kind: 'van', snow: false });
-    P.car(D, -90, -30, 0.2, { kind: 'sedan', snow: false });
-    P.car(D, 96, -28, 2.6, { kind: 'hatch', snow: false });
+    wreck(D, () => P.car(D, 52, -27, 2.9, { kind: 'van', snow: false }));
+    wreck(D, () => P.car(D, -90, -30, 0.2, { kind: 'sedan', snow: false }));
+    wreck(D, () => P.car(D, 96, -28, 2.6, { kind: 'hatch', snow: false }));
     for (const x of [ARENA.minX + 1, ARENA.maxX - 1]) { // (off past the edge of the screen)
       K.rubble(D, x, (DECKZ.n + DECKZ.s) / 2, 4, 2, { solid: true, slabs: 4 });
       for (let z = DECKZ.n + 1; z < DECKZ.s; z += 1.7) K.jersey(D, x + (x < 0 ? 4.5 : -4.5), z, Math.PI / 2 + (rand() - 0.5) * 0.3);
@@ -592,8 +635,8 @@ function buildEndless(scene) {
   ST.pipes(52, 60, AVE.ws + 1.6);
   ST.pipeArch(50, AVE.ws + 1.6, AVE.wn - 1.6);
   // utility poles leaning down the cross street, one down across the road
-  for (const [x, z] of [[-9.6, 20], [-9.6, 33], [9.6, 26], [9.6, -14]]) P.bentPole(B, x, 0, z, 5.4 + rand(), rand() * 3, rand() < 0.3 ? 0.9 : 0.15, 0x5a5d61);
-  P.fallenPole(B, -50, 6.5, 0.35);
+  for (const [x, z] of [[-9.6, 20], [-9.6, 33], [9.6, 26], [9.6, -14]]) B.crushable(() => P.bentPole(B, x, 0, z, 5.4 + rand(), rand() * 3, rand() < 0.3 ? 0.9 : 0.15, 0x5a5d61), { kind: 'pole', pivot: { x, y: 0, z }, footprint: { x, z, hx: 0.3, hz: 0.3, yaw: 0 } });
+  junk(() => P.fallenPole(B, -50, 6.5, 0.35));
   // sidewalk furniture: kiosks (their tubes flicker), a shelter, a bent
   // sign, fires, bins, benches, dumpsters, junk
   ST.kiosk(-14, AVE.wn - 1.8, 1);
@@ -606,12 +649,12 @@ function buildEndless(scene) {
   ST.barrelFire(14, -14.5);
   ST.barrelFire(42, 30);
   ST.clutter(14, 40, 9);
-  for (const [x, z, yaw] of [[45, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
-  for (const [x, z] of [[47, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
-  P.dumpster(B, -54, 37, 0.3, 0x4e6355);
-  P.dumpster(B, 44, 37.5, -0.2, 0x4f5d73);
-  P.dumpster(B, 47, -21, 1.4, 0x5e5a4c);
-  for (const [x, z] of [[-52, 36], [46, 36], [48, -17], [-56, 13.5]]) P.crates(B, x, 0, z);
+  for (const [x, z, yaw] of [[45, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) junk(() => P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 }));
+  for (const [x, z] of [[47, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) junk(() => P.bin(B, x, 0, z, { tipped: rand() < 0.4 }));
+  junk(() => P.dumpster(B, -54, 37, 0.3, 0x4e6355));
+  junk(() => P.dumpster(B, 44, 37.5, -0.2, 0x4f5d73));
+  junk(() => P.dumpster(B, 47, -21, 1.4, 0x5e5a4c));
+  for (const [x, z] of [[-52, 36], [46, 36], [48, -17], [-56, 13.5]]) junk(() => P.crates(B, x, 0, z));
   P.billboard(B, 30, 38.6, 0.08, (w, h) => sign(w, h, { board: true }));
   P.billboard(B, -40, 38.8, -0.1, (w, h) => sign(w, h, { board: true }));
   // the scrub: in the park, along the building fronts, up through the
@@ -644,18 +687,18 @@ function buildEndless(scene) {
     // birches in clumps, benches round the paths, planters, lamp posts,
     // a low fence
     for (const [x, z] of [[-50, 18], [-47, 21], [-50, 33], [-45, 35], [-20, 18], [-18, 22], [-24, 35], [-17, 33], [-40, 18], [-30, 36], [-53, 24], [-36, 37]]) ST.birch(x + (rand() - 0.5), z + (rand() - 0.5), 3.6 + rand() * 1.6);
-    for (const [x, z, yaw] of [[-40, 24, 0.8], [-28, 30, -2.3], [-28, 22.5, 2.4], [-40, 30, -0.8]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.25 });
-    for (const [x, z] of [[-52, 26], [-16, 26], [-34, 16.5], [-34, 37]]) P.planter(B, x, 0, z);
+    for (const [x, z, yaw] of [[-40, 24, 0.8], [-28, 30, -2.3], [-28, 22.5, 2.4], [-40, 30, -0.8]]) junk(() => P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.25 }));
+    for (const [x, z] of [[-52, 26], [-16, 26], [-34, 16.5], [-34, 37]]) junk(() => P.planter(B, x, 0, z));
     let i = 0;
     for (const [x, z] of [[-44, 21], [-24, 32], [-44, 33]]) ST.lampPole(x, z, i % 2 ? 1 : -1, 6 + 7 * i++);
     P.fence(B, PARK.x0, PARK.x0 + 14, 0, PARK.z0 - 0.4);
     P.fence(B, PARK.x1 - 12, PARK.x1, 0, PARK.z0 - 0.4);
-    for (let k = 0; k < 3; k++) P.bin(B, -46 + k * 12, 0, PARK.z0 + 0.6, { tipped: rand() < 0.4 });
+    for (let k = 0; k < 3; k++) junk(() => P.bin(B, -46 + k * 12, 0, PARK.z0 + 0.6, { tipped: rand() < 0.4 }));
   }
   // a smaller green on the south-east corner: birches, a bench, scrub
   for (const [x, z] of [[26, 30], [30, 33], [22, 34], [38, 22]]) ST.birch(x, z, 3.4 + rand() * 1.5);
-  P.bench(B, 28, 0, 26.5, 0.3);
-  P.planter(B, 34, 0, 30);
+  junk(() => P.bench(B, 28, 0, 26.5, 0.3));
+  junk(() => P.planter(B, 34, 0, 30));
 
   // ------------------------------------------------------------- cover
   // kept out toward the edges, so the middle of the square is open ground:
@@ -671,45 +714,47 @@ function buildEndless(scene) {
     [44, 26, 0.6, 'hatch'],
     [52, -5, 1.3, 'sedan'],
     [-48, 8, 2.8, 'hatch'],
-  ]) P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 });
+  ]) wreck(B, () => P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 }));
   for (const [cx, cz, n, yaw] of [[30, 17, 3, -0.4], [48, 5, 3, 1.4], [16, 34, 3, 1.2]]) {
-    for (let k = 0; k < n; k++) K.jersey(B, cx + Math.cos(yaw) * k * 1.7, cz - Math.sin(yaw) * k * 1.7, yaw + (rand() - 0.5) * 0.2);
+    for (let k = 0; k < n; k++) barrier(() => K.jersey(B, cx + Math.cos(yaw) * k * 1.7, cz - Math.sin(yaw) * k * 1.7, yaw + (rand() - 0.5) * 0.2));
   }
   for (const [x, z, r, h] of [[40, 33, 2, 1.1]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
   for (const [x, z, yaw] of [[-37, -20, 0.1], [-31, -14.5, 1.55]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
   K.container(B, -37.2, 2.6, -20.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
-  for (let k = 0; k < 5; k++) P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 2 : AVE.ws + 2 + rand() * 6, 3);
+  for (let k = 0; k < 5; k++) junk(() => P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 2 : AVE.ws + 2 + rand() * 6, 3));
   for (const [x, z, r] of [[-12, 4, 2], [8, -4, 1.6], [30, 10, 1.8], [-50, 4, 1.4]]) P.scorch(B, x, z, r);
 
   // ------------------------------------------------- the grey corners
   // the car park (south-east): wrecks left in the bays, a barrier arm, a
   // booth, a lamp
-  for (const [x, z, yaw, kind] of [[42.5, 20, Math.PI / 2, 'sedan'], [48, 20, Math.PI / 2 + 0.2, 'hatch'], [53.6, 31.5, Math.PI / 2, 'van'], [45, 31.5, Math.PI / 2 - 0.15, 'sedan']]) P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 });
-  put(B.root, box(1.6, 2.2, 1.6, 0x58707a, { r: 0.06 }), 39.5, 1.1, 16.2).castShadow = true;
-  B.block(39.5, 16.2, 0.8, 0.8);
-  put(B.root, box(3.2, 0.12, 0.12, 0xd8c050), 41.5, 1.0, 14.6).rotation.z = 0.5;
+  for (const [x, z, yaw, kind] of [[42.5, 20, Math.PI / 2, 'sedan'], [48, 20, Math.PI / 2 + 0.2, 'hatch'], [53.6, 31.5, Math.PI / 2, 'van'], [45, 31.5, Math.PI / 2 - 0.15, 'sedan']]) wreck(B, () => P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 }));
+  junk(() => {
+    put(B.root, box(1.6, 2.2, 1.6, 0x58707a, { r: 0.06 }), 39.5, 1.1, 16.2).castShadow = true;
+    B.block(39.5, 16.2, 0.8, 0.8);
+  }, 2);
+  junk(() => (put(B.root, box(3.2, 0.12, 0.12, 0xd8c050), 41.5, 1.0, 14.6).rotation.z = 0.5));
   ST.lampPole(57.5, 25, 1, 13);
   // the junction's corners: bollards along the curbs, electrical cabinets,
   // planters, a phone box
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    P.bollards(B, sx > 0 ? CROSS.w1 + 0.4 : CROSS.w0 - 5.4, sx > 0 ? CROSS.w1 + 5.4 : CROSS.w0 - 0.4, 0, sz * (AVE.ws - 0.5));
-    P.planter(B, sx * (CROSS.w1 + 1.6), 0, sz * (AVE.ws + 1.8));
+    junk(() => P.bollards(B, sx > 0 ? CROSS.w1 + 0.4 : CROSS.w0 - 5.4, sx > 0 ? CROSS.w1 + 5.4 : CROSS.w0 - 0.4, 0, sz * (AVE.ws - 0.5)));
+    junk(() => P.planter(B, sx * (CROSS.w1 + 1.6), 0, sz * (AVE.ws + 1.8)));
   }
-  P.cabinet(B, -12.6, 0, 16, Math.PI / 2);
-  P.cabinet(B, 12.6, 0, -13.4, -Math.PI / 2);
-  P.cabinet(B, -12.6, 0, 27, Math.PI / 2);
-  {
+  junk(() => P.cabinet(B, -12.6, 0, 16, Math.PI / 2));
+  junk(() => P.cabinet(B, 12.6, 0, -13.4, -Math.PI / 2));
+  junk(() => P.cabinet(B, -12.6, 0, 27, Math.PI / 2));
+  junk(() => {
     const ph = put(B.root, box(1.0, 2.3, 1.0, 0x8a2f28, { r: 0.05 }), 12.8, 1.15, 20);
     ph.rotation.y = 0.2;
     ph.castShadow = true;
-    put(B.root, box(0.8, 1.5, 0.04, 0x9fc3d0, { glow: true }), 12.8 - 0.52, 1.25, 20).rotation.y = Math.PI / 2 + 0.2;
+    put(B.root, box(0.8, 1.5, 0.04, 0x9fc3d0), 12.8 - 0.52, 1.25, 20).rotation.y = Math.PI / 2 + 0.2;
     B.block(12.8, 20, 0.55, 0.55);
-  }
+  }, 2);
   // the strip beside the park (west of the cross street): a newsstand,
   // benches, a bin, scrub
   ST.kiosk(-12.4, 33, 1);
-  P.bench(B, -12.6, 0, 22, Math.PI / 2);
-  P.bin(B, -12.4, 0, 24.5);
+  junk(() => P.bench(B, -12.6, 0, 22, Math.PI / 2));
+  junk(() => P.bin(B, -12.4, 0, 24.5));
   // round the base: sandbag walls either side of its apron, a floodlight
   // mast, fuel drums, a guard post
   for (const s of [-1, 1]) {
@@ -727,8 +772,10 @@ function buildEndless(scene) {
     B.pool(mx - 4, mz + 7, 5, 0xfff2c8, 0.12, { sx: 1.2, sz: 0.9 });
     B.block(mx, mz, 0.25, 0.25);
   }
-  for (let i = 0; i < 5; i++) put(B.root, cyl(0.32, 0.9, [0x3f5a3a, 0x7a3a2a, 0x3a4a6a][i % 3], { seg: 10 }), BASE.x0 - 2.4 + (i % 3) * 0.7, 0.45, BASE.z0 + 1.2 + ((i / 3) | 0) * 0.7).castShadow = true;
-  B.block(BASE.x0 - 1.7, BASE.z0 + 1.6, 1.2, 0.8);
+  junk(() => {
+    for (let i = 0; i < 5; i++) put(B.root, cyl(0.32, 0.9, [0x3f5a3a, 0x7a3a2a, 0x3a4a6a][i % 3], { seg: 10 }), BASE.x0 - 2.4 + (i % 3) * 0.7, 0.45, BASE.z0 + 1.2 + ((i / 3) | 0) * 0.7).castShadow = true;
+    B.block(BASE.x0 - 1.7, BASE.z0 + 1.6, 1.2, 0.8);
+  }, 1);
 
   // the base: a shed of its own off the avenue's north side, its back to
   // the elevated road, its door facing down the square (in and out the same
@@ -924,6 +971,7 @@ function buildEndless(scene) {
     crushables: [...B.crushables, ...(D.crushables || [])],
     depotRoom: room,
     heightAt,
+    navGoal,
     spawn: { x: 30, z: 0, yaw: Math.PI }, // (by the base, facing the junction)
     bounds: { ...ARENA },
     shacks: [base],

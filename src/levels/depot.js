@@ -326,6 +326,10 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
       this.exitYaw = Math.atan2(-this.exitDir.z, this.exitDir.x);
       this.inward = new THREE.Vector3(1, 0, 0);
       turn(this.inward);
+      // the patch machines keep off (the shed and its door's apron), turned with it
+      const k = new THREE.Vector3(cx - 1.5, 0, cz);
+      move(k);
+      this.keepOut = { x: k.x, z: k.z, hx: (x1 - x0) / 2 + 3, hz: (z1 - z0) / 2 + 0.6, yaw };
     },
     // its door blocks live in this list (a level that merges several builders' lists)
     bindBlocks(list) {
