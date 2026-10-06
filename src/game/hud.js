@@ -239,7 +239,7 @@ const CSS = `
 .hud-lock span { position: absolute; left: 50%; top: -20px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--lc); white-space: nowrap; text-shadow: 2px 2px #000; }
 .hud-marker span { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); font: 400 11px/1 'Silkscreen', monospace; color: var(--amber); white-space: nowrap; text-shadow: 2px 2px #000; }
 @keyframes hudpulse { 50% { transform: scale(1.12); } }
-.hud-banner { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
+.hud-banner { position: absolute; left: 50%; top: 46%; /* (below the dialogue box) */ transform: translate(-50%, -50%); padding: 10px 22px 12px; font: 400 30px/1 'Silkscreen', monospace; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap;
   color: #111; background: var(--go, #6be08a); box-shadow: 0 0 0 3px #000, 6px 6px 0 3px #000; pointer-events: none; }
 .hud.touch .hud-banner { font-size: 20px; }
 .hud-pointers { position: absolute; inset: 0; pointer-events: none; }
