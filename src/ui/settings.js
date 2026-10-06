@@ -3,6 +3,7 @@
 // bindings; touch has the stick and buttons. Every choice is one of our own
 // dropdowns or toggles, styled like the rest of the game.
 
+import { watchPopups } from './fit.js';
 import { fitInside } from './scale.js';
 
 const KEY = 'scavenger.settings';
@@ -120,6 +121,7 @@ export function createSettingsMenu({ touch = () => false } = {}) {
   root.className = 'set';
   root.hidden = true;
   document.body.append(root);
+  watchPopups(root, '.box');
   let onClose = null;
   let waiting = null; // the action whose key is being rebound
   let openDd = null;

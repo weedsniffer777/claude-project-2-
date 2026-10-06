@@ -2,6 +2,7 @@
 // cannon's reload ring, floating damage numbers, an on-screen target marker
 // and the end-of-run panel. Pixel type, black panels, bone-white text with
 // hazard amber; red only means danger (damage taken, low hull, machines).
+import { watchPopups } from '../ui/fit.js';
 import { rebindHints, settings, keyLabel } from '../ui/settings.js';
 import * as THREE from 'three';
 import { createAmmoStrip, createPassives } from '../ui/hudBits.js';
@@ -188,6 +189,7 @@ const CSS = `
 .hud-endless .btns { display: flex; gap: 12px; justify-content: center; }
 .hud-endless .etrack .tier.pop { animation: tierPop 0.45s ease-out; }
 @keyframes tierPop { 0% { transform: scale(1.35); filter: brightness(2); } 100% { transform: none; } }
+.hud-endless > .etrack, .hud-endless > .ebar, .hud-endless > .xpline, .hud-endless > .ecols { justify-self: stretch; width: 100%; box-sizing: border-box; }
 @media (max-width: 600px) { .hud-endless .ecols { grid-template-columns: 1fr; } .hud-endless .etrack { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
 .hud-end .parts { display: grid; gap: 8px; justify-items: center; }
 .hud-end .parts > span { font-size: 12px; color: var(--dim); }
@@ -261,7 +263,7 @@ const CSS = `
   color: #111; background: var(--amber); box-shadow: 0 4px 0 #8a5a1c; }
 .hud-pause { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px 24px; display: grid; gap: 12px; justify-items: stretch; min-width: 240px; pointer-events: auto; }
 .hud-pause h2 { margin: 0 0 4px; text-align: center; font: 400 26px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
-.hud-pause button { padding: 10px 16px 11px; border: 0; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.hud-pause button { white-space: nowrap; padding: 10px 16px 11px; border: 0; font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--ink); background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .hud-pause .menu, .hud-pause .ask { display: grid; gap: 12px; justify-items: stretch; }
 .hud-pause .menu[hidden], .hud-pause .ask[hidden] { display: none; }
 .hud-pause .lost { display: grid; gap: 8px; justify-items: center; }
@@ -732,6 +734,8 @@ export function createHud() {
     mount() {
       document.body.append(root);
     },
+    // (every popup fits the screen: end screens, the pause menu)
+    fitWatch: watchPopups(root, '.hud-end, .hud-pause'),
     unmount() {
       root.remove();
     },
@@ -1220,6 +1224,8 @@ export function createHud() {
         root.append(el);
       }
       reticle.hidden = true;
+      this.clearPrompt();
+      this.setWave(null);
       const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
       el.classList.toggle('lose', r.title === 'Destroyed');
       el.hidden = false;

@@ -24,13 +24,16 @@ import { pushOut } from '../game/collide.js';
 
 const GPX = 6;
 const MAP = { x0: -140, x1: 140, z0: -72, z1: 66 };
-const ARENA = { minX: -58, maxX: 60, minZ: -35, maxZ: 38 };
+// (the tank's bounds reach out along the elevated road; on the ground the
+// buildings are the edge. FIELD: the ground inside them, where waves come in)
+const ARENA = { minX: -74, maxX: 76, minZ: -35, maxZ: 38 };
+const FIELD = { minX: -58, maxX: 60, minZ: -35, maxZ: 38 };
 // the avenue (east-west, tram tracks down it) and the cross street
 const AVE = { n: -9, s: 9, wn: -12, ws: 12, x0: -76, x1: 46 };
 const CROSS = { x0: -8, x1: 8, w0: -11, w1: 11, n: -16, s: 46 };
 // the base: a shed off the north side of the avenue, its back to the
 // elevated road, its door facing down the square (the world box it covers)
-const BASE = { x: 24, z: -19.5, x0: 18, x1: 30, z0: -23.3, z1: -15.7 };
+const BASE = { x: 36, z: -19.5, x0: 30, x1: 42, z0: -23.3, z1: -15.7 };
 // the park square on the south-west corner
 const PARK = { x0: -54, x1: -14, z0: 15, z1: 38 };
 // the elevated road along the north side, running off out of sight both
@@ -38,24 +41,28 @@ const PARK = { x0: -54, x1: -14, z0: 15, z1: 38 };
 const DECK = 4.5;
 const DECKZ = { n: -36, s: -24 };
 const DECKX = { x0: -130, x1: 130 };
-// The on-ramp: it peels off the avenue's north lane, curves up and round
-// and merges into the elevated road's south lane, the merge lane tapering
-// off into it. Sampled along its centreline: point, height, width.
+// The on-ramp: straight, alongside the elevated road and in line with the
+// streets. Its foot is just west of the base (a slip road curves up to it
+// off the avenue); it climbs west, eases level at the top, and runs on
+// beside the deck as a merge lane narrowing into its south lane.
+// Sampled from the foot up: point, height, width.
 const RAMP_W = 7;
-const MERGE = { x0: -10, x1: 14 }; // where it runs alongside the deck (no rail between)
+const RAMP_FOOT = 18;
+const RAMP_TOP = -8;
+const MERGE = { x0: -28, x1: RAMP_TOP }; // the merge lane: no rail between it and the deck
 const RAMP = (() => {
-  const curve = new THREE.CatmullRomCurve3([[-54, -5.5], [-40, -8], [-28, -14], [-16, -19.6], [-4, -20.5], [6, -21.1], [13.5, -22.9]].map(([x, z]) => new THREE.Vector3(x, 0, z)));
-  const N = 64;
-  const pts = curve.getSpacedPoints(N);
-  const top = pts.findIndex((p) => p.x >= -6); // up at the deck's height from here
-  return pts.map((p, i) => {
-    const k = Math.min(1, i / top);
+  const pts = [];
+  for (let x = RAMP_FOOT; x >= MERGE.x0 - 0.01; x -= 0.75) {
+    const k = Math.min(1, (RAMP_FOOT - x) / (RAMP_FOOT - RAMP_TOP));
     const h = DECK * k * k * (3 - 2 * k); // (eases on and off the slope)
-    const w = p.x <= 4 ? RAMP_W : RAMP_W - (RAMP_W - 1.2) * Math.min(1, (p.x - 4) / 9.5); // the merge lane narrowing
-    return { x: p.x, z: p.z, h, w };
-  });
+    const w = x >= RAMP_TOP ? RAMP_W : Math.max(0.3, (RAMP_W * (x - MERGE.x0)) / (RAMP_TOP - MERGE.x0));
+    pts.push({ x, z: DECKZ.s - 0.1 + w / 2, h, w }); // (its north edge along the deck's south edge)
+  }
+  return pts;
 })();
-const RAMP_BOX = { x0: -60, x1: 18, z0: -27, z1: -1 };
+// the slip road up to the foot, off the avenue's north lane
+const SLIP = { from: [27, -8], via: [27, DECKZ.s + RAMP_W / 2], to: [RAMP_FOOT + 0.5, DECKZ.s + RAMP_W / 2] };
+const RAMP_BOX = { x0: MERGE.x0 - 1, x1: RAMP_FOOT + 1, z0: DECKZ.s - 1, z1: DECKZ.s + RAMP_W + 1 };
 // where on the ramp (x, z) is: its height, or null when off it
 function rampAt(x, z) {
   if (x < RAMP_BOX.x0 || x > RAMP_BOX.x1 || z < RAMP_BOX.z0 || z > RAMP_BOX.z1) return null;
@@ -131,9 +138,13 @@ function groundTexture(rand) {
   g.beginPath();
   RAMP.forEach((p, i) => (i ? g.lineTo(X(p.x), Z(p.z)) : g.moveTo(X(p.x), Z(p.z))));
   g.stroke();
+  g.beginPath();
+  g.moveTo(X(SLIP.from[0]), Z(SLIP.from[1]));
+  g.quadraticCurveTo(X(SLIP.via[0]), Z(SLIP.via[1]), X(SLIP.to[0]), Z(SLIP.to[1]));
+  g.stroke();
   // curbs: a pale line along every road edge
   g.fillStyle = '#c4c2bc';
-  for (const z of [AVE.n, AVE.s]) for (let x = MAP.x0; x < MAP.x1; x += 0.5) if ((x < CROSS.x0 || x > CROSS.x1) && !(z < 0 && x > -58 && x < -46)) g.fillRect(X(x), Z(z) - 1, 0.5 * GPX + 1, 3);
+  for (const z of [AVE.n, AVE.s]) for (let x = MAP.x0; x < MAP.x1; x += 0.5) if ((x < CROSS.x0 || x > CROSS.x1) && !(z < 0 && x > SLIP.to[0] && x < SLIP.from[0] + RAMP_W / 2)) g.fillRect(X(x), Z(z) - 1, 0.5 * GPX + 1, 3);
   for (const x of [CROSS.x0, CROSS.x1]) for (let z = MAP.z0; z < MAP.z1; z += 0.5) if (z < AVE.n || z > AVE.s) g.fillRect(X(x) - 1, Z(z), 3, 0.5 * GPX + 1);
   // slush along the curbs, a broken centre line
   g.fillStyle = 'rgba(214,218,224,0.6)';
@@ -400,11 +411,11 @@ function buildEndless(scene) {
   K.rubble(B, -3, 62, 4, 1.6, { solid: true, slabs: 2 });
   P.car(B, -3, -48, 0.4, { kind: 'sedan' });
   // (and behind all that, in case: a hard edge)
-  B.block(ARENA.minX - 3.5, 8, 0.5, 40);
-  B.block(ARENA.maxX + 3.5, 8, 0.5, 40);
-  B.block(0, ARENA.maxZ + 4, 80, 0.5);
+  B.block(FIELD.minX - 3.5, 12, 0.5, 36);
+  B.block(FIELD.maxX + 3.5, 12, 0.5, 36);
+  B.block(0, FIELD.maxZ + 4, 80, 0.5);
   // a works shed out on the west edge, under the elevated road
-  K.works({ x0: 43, x1: 59, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
+  K.works({ x0: -57.5, x1: -43.5, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
 
   // ------------------------------------------------------ the elevated road
   {
@@ -480,7 +491,7 @@ function buildEndless(scene) {
           const a = edge(i, s);
           const b = edge(i + 1, s);
           if (Math.max(a.y, b.y) < 0.6) continue;
-          if (s > 0 && RAMP[i].x > MERGE.x0) continue;
+          if (s > 0 && RAMP[i].x < MERGE.x1) continue;
           const len = a.distanceTo(b);
           const mid = a.clone().add(b).multiplyScalar(0.5);
           const up = new THREE.Vector3(0, 0.62, 0);
@@ -547,7 +558,7 @@ function buildEndless(scene) {
     P.car(D, 52, -27, 2.9, { kind: 'van', snow: false });
     P.car(D, -90, -30, 0.2, { kind: 'sedan', snow: false });
     P.car(D, 96, -28, 2.6, { kind: 'hatch', snow: false });
-    for (const x of [ARENA.minX + 1, ARENA.maxX - 1]) {
+    for (const x of [ARENA.minX + 1, ARENA.maxX - 1]) { // (off past the edge of the screen)
       K.rubble(D, x, (DECKZ.n + DECKZ.s) / 2, 4, 2, { solid: true, slabs: 4 });
       for (let z = DECKZ.n + 1; z < DECKZ.s; z += 1.7) K.jersey(D, x + (x < 0 ? 4.5 : -4.5), z, Math.PI / 2 + (rand() - 0.5) * 0.3);
       D.block(x, (DECKZ.n + DECKZ.s) / 2, 3, dw / 2);
@@ -561,7 +572,7 @@ function buildEndless(scene) {
   }
 
   // ------------------------------------------------- streets: lamps, tracks
-  ST.lights({ xs: [-52, -38, -24, 20, 32, 44, 56], skip: (x, side) => Math.abs(x) < 14 || (side < 0 && (x < -14 || (x > BASE.x0 - 4 && x < BASE.x1 + 4))) });
+  ST.lights({ xs: [-52, -38, -24, 20, 32, 44, 56], skip: (x, side) => Math.abs(x) < 14 || (side < 0 && x > SLIP.to[0] - 4 && x < BASE.x1 + 4) });
   for (const [x, z, dir] of [[CROSS.w0 - 0.6, AVE.wn + 0.4, 1], [CROSS.w1 + 0.6, AVE.ws - 0.4, -1], [CROSS.w1 + 0.6, AVE.wn + 0.4, 1], [CROSS.w0 - 0.6, AVE.ws - 0.4, -1]]) ST.signal(x, z, dir, rand() < 0.5 ? 'blink' : 'dead');
   {
     const R = rails(B, rand);
@@ -578,8 +589,8 @@ function buildEndless(scene) {
   }
   // heat pipes along the south sidewalk, up and over the avenue on an arch
   ST.pipes(-44, -31, AVE.ws + 1.6);
-  ST.pipes(44, 60, AVE.ws + 1.6);
-  ST.pipeArch(39, AVE.ws + 1.6, AVE.wn - 1.6);
+  ST.pipes(52, 60, AVE.ws + 1.6);
+  ST.pipeArch(50, AVE.ws + 1.6, AVE.wn - 1.6);
   // utility poles leaning down the cross street, one down across the road
   for (const [x, z] of [[-9.6, 20], [-9.6, 33], [9.6, 26], [9.6, -14]]) P.bentPole(B, x, 0, z, 5.4 + rand(), rand() * 3, rand() < 0.3 ? 0.9 : 0.15, 0x5a5d61);
   P.fallenPole(B, -50, 6.5, 0.35);
@@ -589,25 +600,25 @@ function buildEndless(scene) {
   ST.kiosk(20, AVE.ws + 2.4, -1);
   ST.kiosk(-50, PARK.z0 + 1.6, -1);
   ST.shelter(-18, AVE.ws - 1.0, -1);
-  ST.shelter(-2, AVE.wn + 1.0, 1);
+  ST.shelter(-22, AVE.wn + 1.0, 1);
   ST.bentSign(-14, AVE.wn + 0.6);
   ST.barrelFire(12, AVE.ws + 2.2);
   ST.barrelFire(14, -14.5);
   ST.barrelFire(42, 30);
   ST.clutter(14, 40, 9);
-  for (const [x, z, yaw] of [[34.5, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
-  for (const [x, z] of [[31, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
+  for (const [x, z, yaw] of [[45, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
+  for (const [x, z] of [[47, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
   P.dumpster(B, -54, 37, 0.3, 0x4e6355);
   P.dumpster(B, 44, 37.5, -0.2, 0x4f5d73);
-  P.dumpster(B, 37, -21, 1.4, 0x5e5a4c);
-  for (const [x, z] of [[-52, 36], [46, 36], [38, -16.5], [-56, 13.5]]) P.crates(B, x, 0, z);
+  P.dumpster(B, 47, -21, 1.4, 0x5e5a4c);
+  for (const [x, z] of [[-52, 36], [46, 36], [48, -17], [-56, 13.5]]) P.crates(B, x, 0, z);
   P.billboard(B, 30, 38.6, 0.08, (w, h) => sign(w, h, { board: true }));
   P.billboard(B, -40, 38.8, -0.1, (w, h) => sign(w, h, { board: true }));
   // the scrub: in the park, along the building fronts, up through the
   // paving where nobody's swept for years
   for (const [x, z, r] of [
     [-56, 16, 1.2], [-55, 28, 1], [-48, 37, 1.3], [-22, 37, 1], [-16, 16, 0.9], [-44, 30, 0.7],
-    [-57, -14, 1], [-44, -22, 0.8], [-30, -24, 0.9], [-20, -14, 0.7], [4, -14, 0.7], [16, -22, 0.8], [33, -14.5, 0.7],
+    [-57, -14, 1], [-44, -22, 0.8], [-30, -24, 0.9], [-20, -14, 0.7], [4, -14, 0.7], [24, -23, 0.8], [52, -15, 0.7],
     [58, 24, 1.2], [57, 36, 1], [36, 37, 1.1], [20, 37, 0.9], [44, 18, 0.8], [14, 30, 0.7],
     [58, -22, 1], [-56, -23, 0.8], [-56, 10, 0.6], [-6, 37, 0.8], [12, 18, 0.6],
   ]) scrub(x, z, r);
@@ -665,8 +676,8 @@ function buildEndless(scene) {
     for (let k = 0; k < n; k++) K.jersey(B, cx + Math.cos(yaw) * k * 1.7, cz - Math.sin(yaw) * k * 1.7, yaw + (rand() - 0.5) * 0.2);
   }
   for (const [x, z, r, h] of [[40, 33, 2, 1.1]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
-  for (const [x, z, yaw] of [[-52, -20, 0.1], [-44, -21, 1.55]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
-  K.container(B, -52.2, 2.6, -20.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
+  for (const [x, z, yaw] of [[-37, -20, 0.1], [-31, -14.5, 1.55]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
+  K.container(B, -37.2, 2.6, -20.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
   for (let k = 0; k < 5; k++) P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 2 : AVE.ws + 2 + rand() * 6, 3);
   for (const [x, z, r] of [[-12, 4, 2], [8, -4, 1.6], [30, 10, 1.8], [-50, 4, 1.4]]) P.scorch(B, x, z, r);
 
@@ -756,8 +767,8 @@ function buildEndless(scene) {
       const side = (rand() * 4) | 0;
       const along = rand();
       const inset = 2 + rand() * 6;
-      const x = side === 0 ? ARENA.minX + inset : side === 1 ? ARENA.maxX - inset : ARENA.minX + 4 + along * (ARENA.maxX - ARENA.minX - 8);
-      const z = side === 2 ? ARENA.minZ + inset : side === 3 ? ARENA.maxZ - inset : ARENA.minZ + 4 + along * (ARENA.maxZ - ARENA.minZ - 8);
+      const x = side === 0 ? FIELD.minX + inset : side === 1 ? FIELD.maxX - inset : FIELD.minX + 4 + along * (FIELD.maxX - FIELD.minX - 8);
+      const z = side === 2 ? FIELD.minZ + inset : side === 3 ? FIELD.maxZ - inset : FIELD.minZ + 4 + along * (FIELD.maxZ - FIELD.minZ - 8);
       if (Math.hypot(x - api.tankPos.x, z - api.tankPos.z) < 22) continue;
       if (x > BASE.x0 - 10 && x < BASE.x1 + 10 && z < AVE.wn + 4) continue; // (not by the base)
       const q = new THREE.Vector3(x, 0, z);
@@ -765,7 +776,7 @@ function buildEndless(scene) {
       if (Math.hypot(q.x - x, q.z - z) > 0.2) continue;
       return [x, z];
     }
-    return [ARENA.minX + 3, ARENA.minZ + 3];
+    return [FIELD.minX + 3, FIELD.minZ + 3];
   };
   const KINDS = [
     { k: 'dog', cost: 1, from: 1 },

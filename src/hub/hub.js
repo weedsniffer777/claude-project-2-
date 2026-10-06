@@ -8,6 +8,7 @@
 // camera eases in and its screen opens straight away, wherever the crewman
 // is. Walking into a room opens it too. The crewman walks with WASD /
 // arrows, or click the hall floor where to go. Esc or Back closes a screen.
+import { watchPopups } from '../ui/fit.js';
 import * as THREE from 'three';
 import { LevelBuilder, canvas, tex, blob, speckle } from '../levels/builder.js';
 import { box, cyl, put, toon, gradientMap, setLowPoly, approachAngle } from '../models/kit.js';
@@ -281,7 +282,7 @@ const CSS = `
 .base-brief .node .hardtag .rw.tk { width: 84px; height: 49px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 10px #6be08a99; }
 .base-brief .node .hardtag.tanktag em { background: #6be08a; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
-.base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(360px, calc(100vw - 48px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
+.base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
 .base-news h2.warn { color: #ff4a3a; }
 .base button.go.yel { background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; }
 .base-news .newtag.leg { background: #ffc24a; }
@@ -293,7 +294,8 @@ const CSS = `
 .base-news p { margin: 0; font-size: 14px; color: #d8d0c0; }
 .base-news img.gear { width: 128px; height: 96px; }
 .base-news .hint { font-size: 12px; color: #8f877a; }
-.base-news .row { display: flex; gap: 10px; }
+.base-news .row { display: flex; gap: 10px; justify-content: center; }
+.base-news button { white-space: nowrap; }
 .base-gear { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; align-items: center; padding: 7px 12px 8px; border: 0; pointer-events: auto; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; color: #f1e9d8; }
 .base-gear i { width: 20px; height: 20px; background: var(--cog) center / contain no-repeat; image-rendering: pixelated; }
 .base-gear:hover { filter: brightness(1.2); }
@@ -1295,6 +1297,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
     <div class="base-hint panel" ${matchMedia('(pointer: coarse)').matches ? 'hidden' : ''}>Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
     <div class="base-fade"></div>
   `;
+  // (every popup fits the screen, whatever its size)
+  watchPopups(root, '.base-news, .base-endless, .base-menu, .base-crew, .base-promo');
   const tags = new Map(ROOMS.map((r) => [r.id, root.querySelector(`.base-tag[data-id="${r.id}"]`)]));
   const menu = root.querySelector('.base-menu');
   const crewPanel = root.querySelector('.base-crew');
