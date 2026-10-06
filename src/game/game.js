@@ -28,7 +28,7 @@ import { partPicture } from '../render/partPictures.js';
 import { buildLauncher } from '../models/launchers.js';
 import { EQUIPMENT, equipmentArt } from './equipment.js';
 import { createShield } from './shield.js';
-import { settings, actionFor, openSettings, onSettings } from '../ui/settings.js';
+import { settings, actionFor, openSettings, onSettings, rebindHints } from '../ui/settings.js';
 
 const VIEW_H = 13; // world units visible vertically
 const PIXEL_ROWS = 540; // the game's pixel grid, fixed on every screen
@@ -572,7 +572,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     clearPrompt: () => hud.clearPrompt(),
     objective: (text) => hud.setObjective(text),
     marker: (p, label) => hud.setMarker(p, label),
-    arrow: (target, html, big) => hud.setArrow(target, html, big),
+    arrow: (target, html, big) => hud.setArrow(target, html && rebindHints(html), big),
     // the touch FIRE button on screen (for a spotlight / an arrow)
     fireScreen: () => {
       const c = hud.fireCenter();
@@ -808,7 +808,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // a shell wrecks whatever it lands on or next to: barricades, the gate,
     // cars, junk, poles (not the container walls)
     for (const c of level.crushables || []) {
-      if (c.armored || c.done) continue;
+      if (c.armored || c.done || c.ramOnly) continue; // (ramOnly: the boost lesson's barricade)
       const f = c.footprint;
       const reach = c.breakable ? (small ? 0.9 : 1.2) : 0.7;
       if (Math.abs(at.x - f.x) < f.hx + reach && Math.abs(at.z - f.z) < f.hz + reach) {
@@ -1758,7 +1758,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
           run.dilate = Math.max(run.dilate || 0, 0.6); // and time drags for a moment
         }
         for (const c of level.crushables || []) {
-          if (c.done || c.armored || broke.has(c)) continue;
+          if (c.done || c.armored || c.ramOnly || broke.has(c)) continue;
           const f = c.footprint;
           for (let k = a0; k <= a1; k += 0.4) {
             const x = from.x + dir.x * k;

@@ -1593,7 +1593,7 @@ function buildAvenue(scene) {
 
     function start(api) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false, noCrush: false, multT: 0 });
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false, noCrush: false });
       setBounds(api, B1);
       S.api = api;
       comb = api.combat;
@@ -1748,8 +1748,7 @@ function buildAvenue(scene) {
             api.spawnDog(gx, -5.5, { delay: 0.3 });
             api.spawnDog(gx + 1, 4.5, { delay: 0.7 });
             api.spawnDog(gx + 2.5, -0.5, { delay: 1.1 });
-            if (api.seen('multiplier') && !api.cleared) api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
-            S.multT = 3.5; // the multiplier tip, once they're in the thick of it
+            if (!api.cleared) api.prompt('Contact', 'More of them!', { danger: true, seconds: 3 });
             go(6);
           }
           break;
@@ -1758,10 +1757,6 @@ function buildAvenue(scene) {
         // close in, whether or not they're all down (whatever's left behind
         // stays behind when you go in)
         case 6:
-          if (S.multT > 0 && S.t > S.multT) {
-            S.multT = 0;
-            if (api.enemiesAlive > 0 && !api.spotlit && api.lesson('multiplier')) api.prompt('Multiplier', 'Kill enemies quickly to build your <b>multiplier</b>: it increases the scraps they drop!', { go: true, seconds: 7 });
-          }
           if (api.enemiesAlive === 0 && S.t > 1.5 && S.n === 0) {
             S.n = 1;
             if (api.lesson('push')) {
@@ -1813,16 +1808,24 @@ function buildAvenue(scene) {
             S.shots = run.boosts;
             api.objective('Break through the barricade');
             const move = api.tank.moveName;
-            const verb = `<b>${move.toLowerCase()}</b> and ram`;
             const teach = api.lesson('boost');
-            if (teach) api.prompt(move, api.touch ? `Tap the <b>${move.toLowerCase()}</b> button to ram the barricade, or shoot to destroy it!` : `Press <kbd>Shift</kbd> to ${verb} the barricade, or shoot to destroy it!`, { go: true });
-            api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Break it!');
             S.n = run.shots;
-            if (teach) api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || run.shots > S.n || barricadeParts.some((c) => c.done));
+            if (teach) {
+              // the first time through: shells bounce off it, only a boost
+              // breaks it (from the next play on, a shell does too)
+              for (const c of barricadeParts) c.ramOnly = true;
+              api.prompt(move, api.touch ? `Tap the <b>${move.toLowerCase()}</b> button to ram through the barricade!` : `Press <kbd>Shift</kbd> to <b>${move.toLowerCase()}</b> through the barricade!`, { go: true });
+              api.arrow(() => {
+                const a = api.abilityScreen();
+                return { screen: [a.screen[0], a.screen[1] - 50] };
+              }, api.touch ? 'Press it!' : 'Press <kbd>Shift</kbd>!', true);
+              api.spotlight({ targets: [new THREE.Vector3(BARRICADE_X, 1.2, -0.5), api.abilityScreen()], r: 110 }, () => run.boosts > S.shots || barricadeParts.some((c) => c.done));
+            } else api.arrow(new THREE.Vector3(BARRICADE_X, 1.8, 0), 'Break it!');
             go(1);
           }
           break;
         case 1:
+          if (barricadeParts.some((c) => c.done)) for (const c of barricadeParts) c.ramOnly = false;
           if (x > BARRICADE_X + 2) {
             api.arrow(null);
             api.objective('Destroy all enemies');
