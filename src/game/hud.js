@@ -95,6 +95,7 @@ const CSS = `
 .hud.gone > :not(.hud-end):not(.hud-fade):not(.hud-pause) { opacity: 0 !important; }
 .hud-speed { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .hud-fade { position: absolute; inset: 0; background: #070609; opacity: 0; transition: opacity 0.35s steps(5); }
+.hud-vig { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(0, 0, 0, 0.55) 62%, rgba(0, 0, 0, 0.92) 100%); }
 .hud-fade.on { opacity: 1; }
 .hud-ability { position: absolute; left: 0; top: 0; width: 96px; height: 96px; margin: -48px 0 0 -48px; display: grid; place-items: center; }
 .hud-ability canvas { position: absolute; inset: 0; width: 96px; height: 96px; image-rendering: pixelated; }
@@ -491,7 +492,7 @@ export function createHud() {
     <div class="hud-arrow" hidden><span class="lbl"></span><i></i></div>
     <div class="hud-center">
       <div class="hud-obj panel" hidden><span class="px tag">Objective</span><span class="text"></span></div>
-      <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy machine</span><span class="val"></span></div><div class="bar"><i></i></div></div>
+      <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy enemy</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
     <div class="hud-fire" hidden><canvas width="26" height="26"></canvas></div>
@@ -517,6 +518,7 @@ export function createHud() {
     <div class="hud-pause panel" hidden><div class="menu"><h2>Paused</h2><button type="button" data-act="resume">Resume</button><button type="button" data-act="settings">Settings</button><button type="button" data-act="restart">Restart level</button><button type="button" data-act="exit">Exit</button></div><div class="ask" hidden><h2>Exit level?</h2><p>This run's scraps will be lost!</p><div class="lost" hidden><p>The following parts picked up will also be lost!</p><div class="lost-row"></div></div><div class="yn"><button type="button" data-ask="yes">Yes</button><button type="button" data-ask="no">No</button></div></div></div>
     <div class="hud-banner px" hidden></div>
     <div class="hud-pointers"></div>
+    <div class="hud-vig"></div>
     <div class="hud-fade"></div>
   `;
   const $ = (s) => root.querySelector(s);
@@ -944,6 +946,10 @@ export function createHud() {
     // the whole HUD fades away (the tank's been destroyed); the end panel stays
     setGone(on) {
       root.classList.toggle('gone', on);
+    },
+    // a black vignette closing in (Hunter-killer): k 0..1
+    setVignette(k) {
+      $('.hud-vig').style.opacity = k.toFixed(3);
     },
     // k: 0..1 how hard the speed lines show
     setSpeed(k) {

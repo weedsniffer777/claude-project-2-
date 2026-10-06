@@ -61,8 +61,19 @@ const SPROCKET = { x: -1.88, y: 0.47, r: 0.21 }; // at the back: the drive
 const SKIRT = { x0: -2.0, x1: 2.02, y0: 0.42, y1: 0.86, z: 1.0 };
 // the turret: boxy, set well forward, a long bustle
 const TURRET = { x: 0.05, y: DECK_Y };
-const TURRET_PROFILE = [[-1.55, 0.08], [-1.4, 0], [0.98, 0], [1.08, 0.08], [1.08, 0.46], [0.98, 0.54], [-1.55, 0.54]];
 const TURRET_HALF = { bottom: 0.86, top: 0.82 };
+// its plan (x, z): vertical sides, the face's cheeks swept slightly back
+// from the mantlet; the gunner's sight sits down in a notch cut into the
+// right cheek (NOTCH: the cut, its floor at NOTCH.y)
+const CHEEK = { x0: 1.1, z0: 0.24, x1: 0.86, z1: 0.86 };
+const cheekX = (z) => CHEEK.x0 + ((Math.abs(z) - CHEEK.z0) / (CHEEK.z1 - CHEEK.z0)) * (CHEEK.x1 - CHEEK.x0);
+const NOTCH = { x0: 0.42, z0: 0.24, z1: 0.62, y: 0.28 };
+const TURRET_PLAN = [
+  [-1.55, -0.7], [-1.42, -0.86], [CHEEK.x1, -0.86], [CHEEK.x0, -0.24], [CHEEK.x0, 0.24],
+  [NOTCH.x0, NOTCH.z0], [NOTCH.x0, NOTCH.z1], [cheekX(NOTCH.z1), NOTCH.z1],
+  [CHEEK.x1, 0.86], [-1.42, 0.86], [-1.55, 0.7],
+];
+const NOTCH_FLOOR = [[NOTCH.x0, NOTCH.z0], [CHEEK.x0, NOTCH.z0], [cheekX(NOTCH.z1), NOTCH.z1], [NOTCH.x0, NOTCH.z1]];
 const ROOF = 0.54; // turret-local
 const GUN_Y = 0.27;
 const GUN_BASE_X = 1.08;
@@ -162,6 +173,19 @@ function prism(points, hwBottom, hwTop, material) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, material);
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+
+// A plan (x, z) stood up from y0 to y1 with chamfered top and bottom
+// edges (bevel); planar world-unit UVs, so the camo keeps its size.
+function slab(plan, y0, y1, material, bevel = 0.035) {
+  const shape = new THREE.Shape(plan.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: y1 - y0 - bevel * 2, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 1, curveSegments: 1 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, y0 + bevel, 0);
   geo.computeVertexNormals();
   const m = new THREE.Mesh(geo, material);
   m.castShadow = m.receiveShadow = true;
@@ -333,14 +357,15 @@ export function createAssaultTank() {
   put(chassis, box(0.12, 0.12, 0.16, C.dark, { r: 0.02 }), REAR - 0.04, 0.38, 0); // pintle
 
   // ---------------------------------------------------------------- turret
-  turret.add(prism(TURRET_PROFILE, TURRET_HALF.bottom, TURRET_HALF.top, camo(0.45, 3)));
+  turret.add(slab(TURRET_PLAN, 0, ROOF, camo(0.45, 3)));
+  turret.add(slab(NOTCH_FLOOR, 0, NOTCH.y, camo(0.45, 3), 0.02));
   put(turret, cyl(0.62, 0.05, C.dark, { seg: 22 }), 0, 0.0, 0); // the ring, just under it
   {
-    // the face either side of the mantlet: the armour's cheeks stand
-    // slightly proud; a narrow mantlet; the coax port
-    for (const s of [-1, 1]) put(turret, camoBox(0.1, 0.46, 0.6, 15 + s, 0.015), 1.1, 0.26, s * 0.5);
-    put(turret, camoBox(0.24, 0.4, 0.3, 17, 0.03), 1.12, GUN_Y, 0);
-    put(turret, box(0.04, 0.05, 0.05, C.dark), 1.22, GUN_Y + 0.12, 0.2);
+    // the face: the swept cheeks, a narrow mantlet between them; the
+    // coax port; bolts along the cheeks' top edge
+    for (const s of [-1, 1]) for (const z of [0.4, 0.7]) if (s < 0 || z > NOTCH.z1) put(turret, box(0.03, 0.03, 0.03, C.dark), cheekX(z) + 0.01, ROOF - 0.05, s * z);
+    put(turret, camoBox(0.24, 0.42, 0.42, 17, 0.03), 1.12, GUN_Y, 0);
+    put(turret, box(0.04, 0.05, 0.05, C.dark), 1.25, GUN_Y + 0.13, -0.15);
     // the bustle: stowage baskets either side of its back, a lip round it
     for (const s of [-1, 1]) {
       put(turret, box(0.7, 0.26, 0.04, C.sandDark), -1.18, 0.62, s * 0.85);
@@ -348,6 +373,23 @@ export function createAssaultTank() {
     }
     put(turret, box(0.04, 0.26, 1.7, C.sandDark), -1.56, 0.62, 0);
     put(turret, box(0.55, 0.22, 1.4, C.grey, { r: 0.06 }), -1.25, 0.66, 0); // a tarp bundle in it
+    // the big basket across the back of the bustle: a frame of bars, a
+    // jerrycan, a rolled tarp and a crate in it
+    {
+      const bx = -1.82;
+      const bz = 0.78;
+      put(turret, box(0.5, 0.03, bz * 2, C.dark), bx, 0.12, 0); // floor
+      for (const y of [0.12, 0.3, 0.48]) {
+        put(turret, box(0.03, 0.03, bz * 2, C.sandDark), bx - 0.25, y, 0);
+        for (const s of [-1, 1]) put(turret, box(0.5, 0.03, 0.03, C.sandDark), bx, y, s * bz);
+      }
+      for (let z = -bz; z <= bz + 0.01; z += bz / 4) put(turret, box(0.025, 0.38, 0.025, C.dark), bx - 0.25, 0.3, z);
+      for (const s of [-1, 1]) for (const x of [bx - 0.05, bx + 0.15]) put(turret, box(0.025, 0.38, 0.025, C.dark), x, 0.3, s * bz);
+      for (const s of [-1, 1]) put(turret, box(0.32, 0.04, 0.05, C.dark), -1.62, 0.3, s * 0.6); // the brackets to the bustle
+      put(turret, cyl(0.13, 1.0, C.grey, { axis: 'z', seg: 10 }), bx + 0.04, 0.27, -0.2); // tarp roll
+      put(turret, box(0.26, 0.3, 0.16, 0x4f5a3a, { r: 0.02 }), bx, 0.3, 0.52); // jerrycan
+      put(turret, box(0.28, 0.2, 0.3, 0x6b5a3e, { r: 0.015 }), bx + 0.02, 0.24, 0.2); // crate
+    }
     // the smoke dischargers: two rows of four on each side, angled up and
     // forward, on the turret sides behind the cheeks
     for (const s of [-1, 1]) {
@@ -363,20 +405,50 @@ export function createAssaultTank() {
         }
       }
     }
-    // the roof: the gunner's sight box (front right), the commander's
-    // PERI on its collar (front left, behind), his hatch; the loader's
-    // hatch (back right); periscopes; a wind sensor mast at the back
-    put(turret, camoBox(0.42, 0.24, 0.32, 19, 0.03), 0.62, ROOF + 0.12, 0.42);
-    put(turret, box(0.02, 0.12, 0.22, C.glass), 0.835, ROOF + 0.13, 0.42);
-    put(turret, box(0.12, 0.04, 0.34, C.sandDark, { r: 0.01 }), 0.8, ROOF + 0.25, 0.42); // its hood
-    put(turret, cyl(0.16, 0.12, C.sandDark, { seg: 12 }), 0.12, ROOF + 0.06, -0.48);
-    const peri = put(turret, cyl(0.12, 0.3, C.sand, { seg: 12 }), 0.12, ROOF + 0.27, -0.48);
-    peri.castShadow = true;
-    put(turret, box(0.1, 0.12, 0.16, C.glass), 0.24, ROOF + 0.33, -0.48);
-    put(turret, cyl(0.13, 0.04, C.sandDark, { seg: 12 }), 0.12, ROOF + 0.44, -0.48);
+    // the gunner's sight (EMES): a tall armoured box down in the notch,
+    // its top just over the roof; armoured doors over the window, open, a
+    // sloped hood; a periscope head beside it for the gunner's back-up
+    {
+      const sx = (NOTCH.x0 + cheekX((NOTCH.z0 + NOTCH.z1) / 2)) / 2 - 0.02;
+      const sz = (NOTCH.z0 + NOTCH.z1) / 2;
+      const top = ROOF + 0.1;
+      put(turret, camoBox(0.46, top - NOTCH.y, 0.3, 19, 0.025), sx, (top + NOTCH.y) / 2, sz);
+      put(turret, box(0.03, 0.16, 0.22, C.dark), sx + 0.24, top - 0.12, sz); // the window frame
+      put(turret, box(0.02, 0.12, 0.17, C.glass), sx + 0.25, top - 0.12, sz);
+      put(turret, box(0.012, 0.03, 0.15, 0x5aa9c4, { glow: true }), sx + 0.262, top - 0.09, sz); // a glint
+      for (const s of [-1, 1]) put(turret, box(0.14, 0.17, 0.025, C.sandDark, { r: 0.01 }), sx + 0.3, top - 0.12, sz + s * 0.16).rotation.y = s * 0.5; // the doors, open
+      const hood = put(turret, box(0.22, 0.035, 0.36, C.sandDark, { r: 0.01 }), sx + 0.2, top + 0.02, sz);
+      hood.rotation.z = -0.25;
+      put(turret, box(0.4, 0.02, 0.26, C.dark), sx - 0.02, top + 0.005, sz); // top plate seam
+      put(turret, box(0.08, 0.06, 0.08, C.dark, { r: 0.01 }), NOTCH.x0 - 0.1, ROOF + 0.03, sz + 0.1); // the back-up periscope
+    }
+    // the commander's PERI: a collar on the roof, a column, the head on it
+    // (a rounded box, its window forward, a hood over it), turned slightly
+    {
+      const px = 0.14;
+      const pz = -0.46;
+      put(turret, cyl(0.2, 0.06, C.sandDark, { seg: 14 }), px, ROOF + 0.03, pz);
+      put(turret, cyl(0.15, 0.14, C.sand, { seg: 12 }), px, ROOF + 0.13, pz);
+      put(turret, cyl(0.17, 0.03, C.dark, { seg: 12 }), px, ROOF + 0.21, pz);
+      const head = new THREE.Group();
+      head.position.set(px, ROOF + 0.22, pz);
+      head.rotation.y = 0.15;
+      turret.add(head);
+      put(head, camoBox(0.3, 0.22, 0.26, 21, 0.05), 0, 0.11, 0).castShadow = true;
+      put(head, box(0.03, 0.12, 0.18, C.dark), 0.15, 0.1, 0);
+      put(head, box(0.02, 0.09, 0.14, C.glass), 0.16, 0.1, 0);
+      put(head, box(0.012, 0.025, 0.12, 0x5aa9c4, { glow: true }), 0.172, 0.125, 0);
+      put(head, box(0.2, 0.03, 0.3, C.sandDark, { r: 0.01 }), 0.08, 0.235, 0).rotation.z = -0.15; // hood
+      for (const s of [-1, 1]) put(head, box(0.18, 0.12, 0.02, C.sandDark), 0.06, 0.11, s * 0.14); // side armour
+      put(head, box(0.05, 0.05, 0.05, C.dark), -0.12, 0.25, 0.06); // sensor
+    }
     put(turret, cyl(0.24, 0.05, C.sandDark, { seg: 14 }), -0.45, ROOF + 0.02, -0.42); // commander's hatch
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * TAU; // his vision blocks round it
+      put(turret, box(0.06, 0.05, 0.07, C.dark, { r: 0.01 }), -0.45 + Math.cos(a) * 0.29, ROOF + 0.04, -0.42 + Math.sin(a) * 0.29).rotation.y = -a;
+    }
     put(turret, cyl(0.22, 0.05, C.sandDark, { seg: 14 }), LOADER.x, ROOF + 0.02, LOADER.z); // loader's hatch
-    for (const [x, z] of [[-0.18, -0.68], [-0.72, -0.68], [-0.75, -0.15], [0.38, 0.2]]) put(turret, box(0.07, 0.06, 0.08, C.dark, { r: 0.01 }), x, ROOF + 0.03, z);
+    for (const [x, z] of [[-0.72, -0.72], [-0.75, -0.1], [0.3, 0.1]]) put(turret, box(0.07, 0.06, 0.08, C.dark, { r: 0.01 }), x, ROOF + 0.03, z);
     put(turret, cyl(0.02, 0.4, C.dark, { seg: 5 }), -1.2, ROOF + 0.2, 0.55); // the wind sensor
     put(turret, box(0.1, 0.05, 0.05, C.dark), -1.2, ROOF + 0.42, 0.55);
     // the number plate on the bustle side, a little flag
@@ -448,18 +520,25 @@ export function createAssaultTank() {
     for (let i = 0; i < linkCount; i++) links.setColorAt(i, i % 2 ? a : b);
     tracks.add(links);
     trackSets.push({ links, zc: s * TRACK_Z });
-    // road wheels: twin discs with the rubber tyre, a dished hub
+    // road wheels: twin discs, each a rubber tyre round a dished steel
+    // wheel (a raised rim, a recess, a hub boss with its bolt circle), a
+    // dark gap between the pair, the red cap on the outer hub
     for (const x of ROAD_WHEELS) {
       const p = new THREE.Group();
       p.position.set(x, WHEEL_Y, s * TRACK_Z);
       p.userData.radius = WHEEL_R;
-      put(p, cyl(WHEEL_R, 0.28, C.rubber, { axis: 'z', seg: 18 }), 0, 0, 0);
-      for (const dz of [-0.08, 0.08]) put(p, cyl(WHEEL_R * 0.86, 0.1, C.sand, { axis: 'z', seg: 18 }), 0, 0, dz);
-      put(p, cyl(0.08, 0.32, C.sandDark, { axis: 'z', seg: 10 }), 0, 0, 0);
-      put(p, cyl(0.035, 0.34, C.tail, { axis: 'z', seg: 8 }), 0, 0, 0); // the red hub cap
-      for (let k = 0; k < 6; k++) {
-        const ang = (k / 6) * TAU;
-        put(p, box(0.025, 0.025, 0.02, C.dark), Math.cos(ang) * 0.13, Math.sin(ang) * 0.13, s * 0.155);
+      put(p, cyl(WHEEL_R * 0.8, 0.3, C.black, { axis: 'z', seg: 14 }), 0, 0, 0); // the gap
+      for (const dz of [-0.1, 0.1]) {
+        put(p, cyl(WHEEL_R, 0.1, C.rubber, { axis: 'z', seg: 18 }), 0, 0, dz);
+        put(p, cyl(WHEEL_R * 0.84, 0.11, C.sandDark, { axis: 'z', seg: 18 }), 0, 0, dz); // rim
+        put(p, cyl(WHEEL_R * 0.68, 0.114, C.sand, { axis: 'z', seg: 16 }), 0, 0, dz); // the dish
+      }
+      put(p, cyl(0.085, 0.3, C.sandDark, { axis: 'z', seg: 10 }), 0, 0, 0); // hub boss
+      put(p, cyl(0.04, 0.33, C.tail, { axis: 'z', seg: 8 }), 0, 0, 0); // the red hub cap
+      for (let k = 0; k < 8; k++) {
+        const ang = (k / 8) * TAU;
+        put(p, box(0.022, 0.022, 0.02, C.dark), Math.cos(ang) * 0.115, Math.sin(ang) * 0.115, s * 0.16);
+        if (k % 2 === 0) put(p, box(WHEEL_R * 0.3, 0.02, 0.012, C.sandDark), Math.cos(ang) * WHEEL_R * 0.48, Math.sin(ang) * WHEEL_R * 0.48, s * 0.16).rotation.z = ang; // the dish's ribs
       }
       tracks.add(p);
       spinners.push(p);

@@ -67,7 +67,7 @@ const AIM_TIME = 4; // seconds (real time) to aim a Piercing shot before it fire
 const AIM_SLOW = 0.25; // game speed while aiming it
 const HUNT_SLOW = 0.2; // game speed while Hunter-killer marks its targets
 const HUNT_MARK = 0.24; // real seconds between its locks
-const HUNT_GAP = 0.1; // game seconds between its shots (in slow motion: about a quarter second)
+const HUNT_DWELL = 0.22; // real seconds the gun stays on each target after its shot
 const HUNT_FIRE_SLOW = 0.4; // game speed while it fires
 
 export function createGame({ renderer, pixel, level: startLevel, onExit = null }) {
@@ -673,6 +673,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let mgActive = false;
   let hardCount = 0;
   let speedK = 0; // eased 0..1 while boosting (camera and speed lines)
+  let vigK = 0; // eased 0..1 while Hunter-killer runs (the vignette)
   let deathK = 0; // eased 0..1 while the tank goes up
   let rangeK = 0; // eased 0..1 while Ranging has the view opened out
   let salvoK = 0; // eased 0..1 while a missile salvo's out (the view pulled back)
@@ -2449,7 +2450,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let breakCanvas = null;
   // The assault tank's Hunter-killer (E): the world all but stops and its
   // fire control stamps a lock on each of up to five machines in view, one
-  // after another, nearest first (the turret swinging along); then, still
+  // after another, nearest first (the turret holding still); then, still
   // in slow motion, the gun whips from one to the next, a round into each.
   // One press: it takes the gun until it's done
   function startHunt() {
@@ -2460,7 +2461,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (!foes.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'No targets!');
     run.abilityCd = stats.hunterCooldown;
     run.abilities = (run.abilities || 0) + 1;
-    run.hunt = { targets: foes, marked: 0, t: 0, phase: 'mark', fired: 0, gap: 0, aim: null };
+    // always five shots: fewer machines, some get more than one
+    const targets = [];
+    for (let i = 0; i < stats.hunterTargets; i++) targets.push(foes[i % foes.length]);
+    run.hunt = { targets, marked: 0, t: 0, phase: 'mark', fired: 0, gap: 0, aim: null };
     trigger = false;
     queued = 0;
     combat.shake = Math.max(combat.shake, 0.15);
@@ -2476,7 +2480,6 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         const at = enemies.aimPoint(e);
         combat.glow.flash(at, 0xff4a3a, 0.2, 1.6, 0.18);
         combat.glow.ring(at.clone().setY(0.08), 0xff4a3a, 0.4, 1.8, 0.3);
-        h.aim = at;
       }
       if (h.t >= h.targets.length * HUNT_MARK + 0.35) {
         h.phase = 'fire';
@@ -2485,17 +2488,33 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       return;
     }
-    while (h.fired < h.targets.length && !h.targets[h.fired].alive) h.fired++;
+    // just fired: the gun stays on that spot a moment (steady, not
+    // flicking about), then on to the next
+    if (h.shot) {
+      h.gap -= realDt;
+      if (h.gap <= 0) {
+        h.shot = false;
+        h.fired++;
+        h.settle = 0;
+      }
+      return;
+    }
     if (h.fired >= h.targets.length) return void (run.hunt = null);
+    // its mark gone already: the shot goes to another of the marked still up
+    if (!h.targets[h.fired].alive) {
+      const other = h.targets.find((x) => x.alive);
+      if (!other) return void (run.hunt = null);
+      h.targets[h.fired] = other;
+    }
     const e = h.targets[h.fired];
     h.aim = enemies.aimPoint(e);
-    // the turret whips straight onto it
+    // the turret whips straight onto it, settles a beat, fires
     const want = wrapAngle(Math.atan2(-(h.aim.z - pos.z), h.aim.x - pos.x) - tank.group.rotation.y);
-    tank.turret.rotation.y = approachAngle(tank.turret.rotation.y, want, realDt * 14); // (whipping round at full speed, in the slowed world)
-    h.gap -= dt;
-    if (h.gap <= 0 && Math.abs(wrapAngle(want - tank.turret.rotation.y)) < 0.06) {
-      h.gap = HUNT_GAP;
-      h.fired++;
+    tank.turret.rotation.y = approachAngle(tank.turret.rotation.y, want, realDt * 14); // (at full speed, in the slowed world)
+    h.settle = Math.abs(wrapAngle(want - tank.turret.rotation.y)) < 0.04 ? (h.settle || 0) + realDt : 0;
+    if (h.settle > 0.08) {
+      h.shot = true;
+      h.gap = HUNT_DWELL;
       huntShot(e);
     }
   }
@@ -2518,6 +2537,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     combat.explode(at);
     combat.shake = Math.max(combat.shake, 0.45);
     run.hitstop = Math.max(run.hitstop, 0.05);
+    // every hit patches the hull up a little
+    if (run.hp < stats.maxHp) {
+      const was = run.hp;
+      run.hp = Math.min(stats.maxHp, run.hp + 5);
+      hud.setHull(run.hp, stats.maxHp);
+      hud.heal(Math.round(run.hp - was));
+    }
   }
   // its icon: a reticle, and lock brackets on three marks round it
   let hunterCanvas = null;
@@ -3146,7 +3172,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       // a rush at the kick, then just a few faint streaks; Breakthrough's
       // streak the whole way
-      hud.setSpeed(run.over ? 0 : Math.min(1, Math.max(speedK * 0.22, run.brk > 0 ? 0.7 : 0) + run.punch * 1.2));
+      hud.setSpeed(run.over ? 0 : Math.min(1, Math.max(speedK * 0.22, run.brk > 0 ? 0.7 : 0, def.id === 'assault' && run.dash > 0 ? 1 : 0) + run.punch * 1.2)); // (the assault tank's dash: full speed lines)
+      // Hunter-killer: a black vignette closing in while it works
+      vigK += ((run.hunt ? 1 : 0) - vigK) * (1 - Math.exp(-realDt * (run.hunt ? 6 : 3)));
+      hud.setVignette(vigK);
       camera.position.copy(camTarget).add(CAM_OFFSET);
       camera.lookAt(camTarget);
       camera.updateMatrixWorld();
@@ -3203,7 +3232,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       mgActive = !!mgTarget;
 
       if (run.hunt) huntFrame(realDt, dt);
-      tank.update(dt, t, { aimPoint: run.hunt?.aim ?? (hasAim && !run.over ? aimPoint : null), mgPoint, speed, turretRate: run.hunt ? 1 / HUNT_SLOW : run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
+      // (Hunter-killer marking: the turret holds still)
+      tank.update(dt, t, { aimPoint: run.hunt ? (run.hunt.phase === 'fire' ? run.hunt.aim : null) : hasAim && !run.over ? aimPoint : null, mgPoint, speed, turretRate: run.hunt ? 1 / HUNT_SLOW : run.aiming > 0 ? 1 / AIM_SLOW : 1, levelGun: run.aiming > 0 || run.levelT > 0 });
       run.levelT = Math.max(0, (run.levelT || 0) - realDt); // the turret keeps its real speed while time's slowed
       // roof MG rounds: most of them land on the machine it's tracking
       run.gmgT = Math.max(0, (run.gmgT || 0) - dt);

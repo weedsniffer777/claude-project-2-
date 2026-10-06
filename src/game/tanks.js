@@ -112,7 +112,7 @@ export const TANKS = {
     moveName: 'Boost',
     ability: 'hunter',
     abilityName: 'Hunter-killer',
-    blurb: 'Modern and fast, with a long 120. Its fire control marks up to five machines in slow motion, then kills them one after another.',
+    blurb: 'Modern and fast, with a long 120. Its fire control marks up to five enemies in slow motion, then kills them one after another, patching the hull with every hit.',
     unlockText: 'Beat level 8 to unlock',
     // a quicker gun than the battle tank's, a little tougher, quicker on its
     // tracks; its dash short and snappy (about a length and a half)
@@ -128,15 +128,15 @@ export const TANKS = {
       optics: [0.7, 1.9, 0.42],
       he: [2.6, 1.35, 0],
     },
-    // where each part's model sits on this hull: [x, y, z, scale, yaw]
+    // where each part's model sits: [x, y, z, scale, yaw, 'turret' if on
+    // the turret (turret-local)]; no entry: nothing to see on this tank
     mounts: {
-      dozer: [2.35, 0.25, 0, 0.95, 0],
-      autoloader: [-1.25, 1.62, 0.3, 0.55, 0],
-      era: [1.75, 0.95, 0, 0.8, 0],
-      twinmg: [-0.45, 1.62, -0.42, 0.6, 0],
-      afterburner: [-2.2, 0.55, 0, 0.75, 0],
-      optics: [0.7, 1.82, 0.42, 0.65, 0],
-      he: [-0.3, 1.62, -0.6, 0.55, 0],
+      dozer: [2.38, 0.28, 0, 0.95, 0],
+      era: [1.78, 0.93, 0, 0.8, 0],
+      he: [-1.0, 1.04, -0.62, 0.55, Math.PI / 2],
+      optics: [0.42, 0.55, -0.1, 0.6, 0, 'turret'],
+      rangefinder: [0.66, 0.66, 0.43, 0.5, 0, 'turret'],
+      autoloader: [-1.22, 0.6, -0.42, 0.5, 0, 'turret'],
     },
   },
 };

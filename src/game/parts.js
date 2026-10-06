@@ -457,6 +457,20 @@ export const PARTS = {
       t.chassis.add(all);
       return all;
     },
+    // the assault tank: by the commander's hatch, then on the bustle's
+    // corners (clear of the loader's gun)
+    assault(t, tier = 0) {
+      const all = new THREE.Group();
+      all.userData.mounts = [];
+      for (const [x, y, z] of [[-0.45, 0.66, -0.42], [-1.05, 0.86, -0.72], [-1.05, 0.86, 0.72]].slice(0, tier + 1)) {
+        const g = mgMount();
+        g.position.set(x, y, z);
+        all.add(g);
+        all.userData.mounts.push({ pivot: g.userData.pivot, muzzle: g.userData.muzzle, timer: Math.random() * 0.1 });
+      }
+      t.turret.add(all);
+      return all;
+    },
     model: () => mgMount(),
   },
   afterburner: {
@@ -852,12 +866,30 @@ export function attachPart(tank, id) {
   const tier = tierOf(id);
   let g;
   if (tank.kind === 'light' && p.light) g = p.light(tank, tier);
-  else if (tank.kind === 'missile' || tank.kind === 'assault') {
+  else if (tank.kind === 'assault') {
+    // the assault tank: the part's own fitting if it has one; else its model
+    // where it goes on this tank (tanks.js mounts: [x, y, z, scale, yaw,
+    // 'turret' for ones that turn with the turret]); a part with nothing to
+    // show here (no mount) gets nothing
+    if (p.assault) g = p.assault(tank, tier);
+    else {
+      const m = tankDef('assault').mounts?.[id];
+      if (!m) g = new THREE.Group();
+      else {
+        const [x, y, z, sc = 0.6, yaw = 0, on] = m;
+        g = partModel(id);
+        g.scale.setScalar(sc);
+        g.position.set(x, y, z);
+        g.rotation.y = yaw;
+        (on === 'turret' ? tank.turret : tank.chassis).add(g);
+      }
+    }
+  } else if (tank.kind === 'missile') {
     // the missile tank: the part's own model, bolted on where it goes on
     // this hull (tanks.js mounts), unless the part has its own fitting
     g = p.missile ? p.missile(tank, tier) : partModel(id);
     if (!p.missile) {
-      const [x, y, z, sc = 0.6, yaw = 0] = tankDef(tank.kind).mounts?.[id] || [0, 1.2, 0];
+      const [x, y, z, sc = 0.6, yaw = 0] = tankDef('missile').mounts?.[id] || [0, 1.2, 0];
       g.scale.setScalar(sc);
       g.position.set(x, y, z);
       g.rotation.y = yaw;

@@ -7,10 +7,10 @@ export const CAMPAIGN = [
   { n: 1, id: 'avenue', name: 'Ruined city street', page: 0, at: [0.3, 0.88], open: true, steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'era'], first: { easy: { equipment: 'artillery' }, hard: { scraps: 1000, tokens: 3 } } },
   { n: 2, id: 'river', name: 'River crossing', page: 0, at: [0.64, 0.75], steps: ['1', '2', 'Boss'], rewards: ['afterburner', 'twinmg', 'optics'], first: { easy: { tank: 'light' }, hard: { part: 'vulcan', tokens: 5 } } },
   { n: 3, id: 'highway', name: 'Highway', page: 0, at: [0.44, 0.57], steps: ['1', '2', '3'], rewards: ['he', 'era', 'afterburner'], first: { easy: { equipment: 'atgm' }, hard: { scraps: 2000, tokens: 6 } } },
-  { n: 4, id: 'depot', name: 'Depot', page: 0, at: [0.76, 0.41], steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'he'], first: { easy: { equipment: 'shield' }, hard: { scraps: 2500, tokens: 7 } } },
+  { n: 4, id: 'depot', name: 'Depot', page: 0, at: [0.76, 0.41], steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'he'], first: { easy: { scraps: 1300, tokens: 4 }, hard: { scraps: 2500, tokens: 7 } } },
   { n: 5, id: 'stadium', name: 'Destroyed stadium', page: 0, at: [0.46, 0.18], steps: ['1', 'Boss'], rewards: ['rangefinder', 'twinmg', 'optics'], first: { easy: { tank: 'missile' }, hard: { scraps: 3000, tokens: 8 } } },
   // beyond the city wall: the second page of the map
-  { n: 6, id: 'gates', name: 'City gates', page: 1, at: [0.66, 0.84], steps: ['1', 'Boss'], rewards: ['gmg', 'era', 'afterburner'], first: { easy: { scraps: 1500, tokens: 4 }, hard: { scraps: 3500, tokens: 9 } } },
+  { n: 6, id: 'gates', name: 'City gates', page: 1, at: [0.66, 0.84], steps: ['1', 'Boss'], rewards: ['gmg', 'era', 'afterburner'], first: { easy: { equipment: 'shield' }, hard: { scraps: 3500, tokens: 9 } } },
   { n: 7, id: 'slums', name: 'Slums', page: 1, at: [0.36, 0.7], steps: ['1', '2', '3'], rewards: ['gmg', 'twinmg', 'he'], first: { easy: { scraps: 1800, tokens: 5 }, hard: { part: 'mirv', tokens: 6 } } },
   { n: 8, id: 'industrial', name: 'Industrial district', page: 1, at: [0.72, 0.52], steps: ['1', '2', 'Boss'], rewards: ['era', 'optics', 'rangefinder'], first: { easy: { tank: 'assault' }, hard: { scraps: 4500, tokens: 11 } } },
   { n: 9, name: 'Factory', page: 1, at: [0.4, 0.32], steps: [], rewards: [] },
