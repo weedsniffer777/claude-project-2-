@@ -15,7 +15,7 @@ const FILES = {
   autocannon: 'autocannon.mp3',
   launch: 'launch.mp3',
   mg: 'mg.mp3',
-  vulcan: 'vulcan.mp3',
+  vulcan: 'vulcan.wav', // (a wav: cut to whole firing periods, already seamless)
   vulcanStart: 'vulcan-start.mp3',
   vulcanTail: 'vulcan-tail.mp3',
   beep: 'beep.mp3',
@@ -26,6 +26,7 @@ const FILES = {
   levelup: 'levelup.mp3',
 };
 const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
+const SEAMLESS = new Set(['vulcan']); // (loops made seamless offline: played as they are)
 // (no machine gun drowning out the rest: each sound has a shortest gap
 // between plays and a cap on how many ring at once)
 const GAP = { mg: 0.035, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08, boom: 0.03, crash: 0.12, beep2: 0.15 };
@@ -71,7 +72,7 @@ async function load(name) {
   try {
     const res = await fetch(new URL(`./assets/sounds/${FILES[name]}`, import.meta.url));
     const raw = await ctx.decodeAudioData(await res.arrayBuffer());
-    buffers[name] = LOOPS.has(name) ? loopify(raw) : raw;
+    buffers[name] = LOOPS.has(name) && !SEAMLESS.has(name) ? loopify(raw) : raw;
     if (LOOPS.has(name)) startLoop(name);
   } catch (err) {
     console.warn('sound', name, err);
