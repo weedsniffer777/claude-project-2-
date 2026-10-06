@@ -481,7 +481,8 @@ export class Enemies {
     // the mech doesn't just go: blasts all over it, pieces torn off, then
     // it comes apart
     // (one that's not the boss here just blows up on the spot)
-    if (e.stats.spider && !e.isBoss && e.hp - amount <= 0 && !e.dying) {
+    if (e.stats.spider && !e.isBoss && e.hp - amount <= 0 && !e.dying && !e.popping) {
+      e.popping = true; // (its own blasts hit it too: once only)
       const k = e.stats.modelScale || 1;
       for (let i = 0; i < 3; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 2 * k, (1.2 + Math.random()) * k, e.pos.z + (Math.random() - 0.5) * 2 * k));
       this.combat.shake = Math.max(this.combat.shake, 0.5);

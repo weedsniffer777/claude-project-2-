@@ -4,6 +4,7 @@
 // solid blocks the tank collides with, the colliders shells burst on, light
 // emitters that share a small fixed pool of point lights, and optionally a
 // script (tutorial prompts, enemy waves, objectives) driven through `api`.
+import { Glow } from '../render/fx.js';
 import * as THREE from 'three';
 import { createTank } from '../models/tank.js';
 import { TANKS, tankDef } from './tanks.js';
@@ -2473,8 +2474,9 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // full damage on what it lands on (about an MG's, over time), half out to
   // the blast's edge
   const grenades = [];
+  const grenadeTrail = new Glow(scene, { size: 200, lights: 0 }); // (its own pool: the trails never steal the flashes')
   // a 40 mm round: a black warhead on a pale brass base, big enough to
-  // follow by eye; it trails white smoke
+  // follow by eye; a white trail behind it
   const grenadeGeo = new THREE.CapsuleGeometry(0.1, 0.14, 3, 8).rotateX(Math.PI / 2);
   const grenadeMat = new THREE.MeshBasicMaterial({ color: 0x141416 });
   const grenadeBaseGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.1, 8).rotateX(Math.PI / 2).translate(0, 0, -0.12);
@@ -2492,11 +2494,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     m.add(new THREE.Mesh(grenadeBaseGeo, grenadeBaseMat));
     m.position.copy(from);
     scene.add(m);
-    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.75 + d * 0.075, apex: 0.9 + d * 0.11, last: from.clone(), smoke: 0 }); // (slow: you watch it arc over)
+    grenades.push({ m, from: from.clone(), to: aim, t: 0, T: 0.5 + d * 0.05, apex: 0.8 + d * 0.09, last: from.clone() }); // (slowish: you watch it arc over)
     combat.glow.flash(from, 0xffc860, 0.08, 0.5, 0.06);
     combat.puffs.spawn(from.clone(), new THREE.Vector3(0, 0.6, 0), { color: 0x8f8a80, s0: 0.1, s1: 0.35, life: 0.4, drag: 3, lift: 0.4, fadeAt: 0.3 });
   }
   function grenadeFrame(dt) {
+    grenadeTrail.update(dt);
     for (let i = grenades.length - 1; i >= 0; i--) {
       const gr = grenades[i];
       gr.t += dt;
@@ -2505,12 +2508,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       p.y += 4 * gr.apex * u * (1 - u);
       gr.m.position.copy(p);
       if (p.distanceToSquared(gr.last) > 1e-6) gr.m.lookAt(p.clone().multiplyScalar(2).sub(gr.last)); // (nose along its flight)
-      combat.glow.tracer(gr.last, p, 0xffffff, 0.05, 0.25);
-      gr.smoke += dt * 40;
-      while (gr.smoke > 1) {
-        gr.smoke -= 1;
-        combat.puffs.spawn(p.clone(), new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.15, (Math.random() - 0.5) * 0.2), { color: 0xeeece6, s0: 0.07, s1: 0.22, life: 0.6, drag: 2, lift: 0.1, fadeAt: 0.2 });
-      }
+      grenadeTrail.tracer(gr.last, p, 0xffffff, 0.2, 0.45); // a smooth white trail, the shell's width, fading
       gr.last.copy(p);
       if (u < 1) continue;
       gr.m.removeFromParent();
