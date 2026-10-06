@@ -353,5 +353,8 @@ function reportError(err) {
     document.body.append(el);
   }
   el.textContent = `Error: ${msg}\n${(err?.stack || '').split('\n').slice(1, 3).join('\n')}`;
+  el.hidden = false;
+  clearTimeout(reportError.t);
+  reportError.t = setTimeout(() => (el.hidden = true), 3000); // (gone again after a few seconds)
 }
 frame();

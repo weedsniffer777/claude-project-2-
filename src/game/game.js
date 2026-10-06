@@ -98,6 +98,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   const fitting = createFitting({ renderer, cursor: hud.cursor });
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 400);
   const camTarget = new THREE.Vector3();
+  let trailPool = null; // the grenades' trails: their own pool (per scene), so they never steal the flashes'
   let scene, level, levelDef, combat, enemies, colliders, blocks, lamps, aimLine, aimMark, aimBeam, artyRing, pickups, crushing, shield;
   const strikes = []; // artillery shells on their way: { at, t, marker }
   const run = { hp: 100, time: 0, over: false, won: false };
@@ -121,6 +122,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     enemies?.dispose();
     levelDef = LEVELS.find((l) => l.id === id) || LEVELS[0];
     scene = new THREE.Scene();
+    trailPool = null;
     level = levelDef.build(scene);
     colliders = level.colliders;
     blocks = level.blocks;
@@ -2474,7 +2476,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // full damage on what it lands on (about an MG's, over time), half out to
   // the blast's edge
   const grenades = [];
-  const grenadeTrail = new Glow(scene, { size: 200, lights: 0 }); // (its own pool: the trails never steal the flashes')
+  const grenadeTrail = () => (trailPool ??= new Glow(scene, { size: 200, lights: 0 }));
   // a 40 mm round: a black warhead on a pale brass base, big enough to
   // follow by eye; a white trail behind it
   const grenadeGeo = new THREE.CapsuleGeometry(0.1, 0.14, 3, 8).rotateX(Math.PI / 2);
@@ -2499,7 +2501,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     combat.puffs.spawn(from.clone(), new THREE.Vector3(0, 0.6, 0), { color: 0x8f8a80, s0: 0.1, s1: 0.35, life: 0.4, drag: 3, lift: 0.4, fadeAt: 0.3 });
   }
   function grenadeFrame(dt) {
-    grenadeTrail.update(dt);
+    trailPool?.update(dt);
     for (let i = grenades.length - 1; i >= 0; i--) {
       const gr = grenades[i];
       gr.t += dt;
@@ -2508,7 +2510,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       p.y += 4 * gr.apex * u * (1 - u);
       gr.m.position.copy(p);
       if (p.distanceToSquared(gr.last) > 1e-6) gr.m.lookAt(p.clone().multiplyScalar(2).sub(gr.last)); // (nose along its flight)
-      grenadeTrail.tracer(gr.last, p, 0xffffff, 0.2, 0.45); // a smooth white trail, the shell's width, fading
+      grenadeTrail().tracer(gr.last, p, 0xffffff, 0.2, 0.45); // a smooth white trail, the shell's width, fading
       gr.last.copy(p);
       if (u < 1) continue;
       gr.m.removeFromParent();
