@@ -1,6 +1,7 @@
 // Endless: Outskirts. A crossroads on the edge of the city at dusk, ringed
 // by panel blocks and stacked containers; wrecks, barricades and rubble
-// heaps for cover; a fortified base (a checkpoint shed) on the south side.
+// heaps for cover; a fortified base (a checkpoint shed) across the avenue's
+// east end; an elevated road along the north side, a ramp up to it.
 //
 // Waves come in from the edges and never stop. Between waves the base's
 // door opens: drive in to repair and change the loadout (the next wave
@@ -22,7 +23,7 @@ import { FH, glyphSign, facadeTextures, endTexture, facadeMat, mapMat } from './
 import { pushOut } from '../game/collide.js';
 
 const GPX = 6;
-const MAP = { x0: -92, x1: 92, z0: -72, z1: 66 };
+const MAP = { x0: -140, x1: 140, z0: -72, z1: 66 };
 const ARENA = { minX: -58, maxX: 60, minZ: -35, maxZ: 38 };
 // the avenue (east-west, tram tracks down it) and the cross street
 const AVE = { n: -9, s: 9, wn: -12, ws: 12, x0: -76, x1: 46 };
@@ -31,13 +32,14 @@ const CROSS = { x0: -8, x1: 8, w0: -11, w1: 11, n: -16, s: 46 };
 const BASE = { x0: 46, x1: 53.6, z0: -9, z1: 9 };
 // the park square on the south-west corner
 const PARK = { x0: -54, x1: -14, z0: 15, z1: 38 };
-// the elevated road along the north side: a ramp up from the west, a
-// landing, the deck running the arena's width, both ends choked with rubble
+// the elevated road along the north side, running off out of sight both
+// ways (rubble across it at the arena's edges); a ramp up to it close by
+// the spawn, climbing east to a landing that joins it
 const DECK = 4.5;
 const DECKZ = { n: -36, s: -24 };
-const DECKX = { x0: -66, x1: 54 };
-const RAMP = { x0: -50, x1: -24, n: -24, s: -16 };
-const LAND = { x0: -24, x1: -16, n: -24, s: -16 };
+const DECKX = { x0: -130, x1: 130 };
+const RAMP = { x0: 10, x1: 34, n: -24, s: -16 };
+const LAND = { x0: 34, x1: 42, n: -24, s: -16 };
 
 function heightAt(x, z) {
   if (x >= DECKX.x0 && x <= DECKX.x1 && z >= DECKZ.n && z < DECKZ.s) return DECK;
@@ -102,6 +104,76 @@ function groundTexture(rand) {
   g.fillStyle = 'rgba(232,230,220,0.85)';
   for (let z = AVE.n + 0.6; z < AVE.s - 0.6; z += 1.2) for (const x of [CROSS.w0 - 3.2, CROSS.w1 + 0.8]) g.fillRect(X(x), Z(z), 2.4 * GPX, 0.6 * GPX);
   for (let x = CROSS.x0 + 0.6; x < CROSS.x1 - 0.6; x += 1.2) for (const z of [AVE.wn - 3.2, AVE.ws + 0.8]) g.fillRect(X(x), Z(z), 0.6 * GPX, 2.4 * GPX);
+  // the cross street's paint: a double yellow down the middle, dashed lane
+  // lines, solid edge lines; stop lines and lane arrows at every approach;
+  // the junction box hatched yellow
+  const crossZ = [[CROSS.n - 30, AVE.wn - 3.6], [AVE.ws + 3.6, CROSS.s + 20]];
+  for (const [za, zb] of crossZ) {
+    g.fillStyle = '#d6b445';
+    for (const dx of [-0.3, 0.15]) g.fillRect(X(dx), Z(za), 0.15 * GPX + 1, Z(zb) - Z(za));
+    g.fillStyle = 'rgba(232,230,220,0.8)';
+    for (const dx of [-7.4, 7.25]) g.fillRect(X(dx), Z(za), 0.15 * GPX + 1, Z(zb) - Z(za));
+    for (let z = za; z < zb; z += 4) for (const dx of [-3.9, 3.75]) g.fillRect(X(dx), Z(z), 0.15 * GPX + 1, 2 * GPX);
+  }
+  // (the avenue: edge lines too, either side of the tracks)
+  g.fillStyle = 'rgba(232,230,220,0.7)';
+  for (const dz of [AVE.n + 0.6, AVE.s - 0.75]) for (const [xa, xb] of [[AVE.x0 - 20, CROSS.w0 - 3.6], [CROSS.w1 + 3.6, BASE.x0 - 6]]) g.fillRect(X(xa), Z(dz), X(xb) - X(xa), 0.15 * GPX + 1);
+  // stop lines (across the near half of each approach)
+  g.fillStyle = 'rgba(240,238,228,0.9)';
+  g.fillRect(X(CROSS.x0), Z(AVE.wn - 4.2), X(0) - X(CROSS.x0), 0.5 * GPX);
+  g.fillRect(X(0), Z(AVE.ws + 3.7), X(CROSS.x1) - X(0), 0.5 * GPX);
+  g.fillRect(X(CROSS.w1 + 3.7), Z(AVE.n), 0.5 * GPX, Z(0) - Z(AVE.n));
+  g.fillRect(X(CROSS.w0 - 4.2), Z(0), 0.5 * GPX, Z(AVE.s) - Z(0));
+  // lane arrows: a shaft and a head, pointing the way traffic went
+  const arrow = (x, z, dx, dz, turn = 0) => {
+    g.save();
+    g.translate(X(x), Z(z));
+    g.rotate(Math.atan2(dz, dx));
+    g.fillStyle = 'rgba(240,238,228,0.85)';
+    const u = GPX;
+    g.fillRect(-2.2 * u, -0.18 * u, 2.4 * u, 0.36 * u);
+    g.beginPath();
+    g.moveTo(0.9 * u, 0);
+    g.lineTo(0, -0.7 * u);
+    g.lineTo(0, 0.7 * u);
+    g.fill();
+    if (turn) {
+      g.fillRect(-1.2 * u, 0, 0.36 * u, turn * 1.4 * u);
+      g.beginPath();
+      g.moveTo(-1.02 * u, turn * 2.1 * u);
+      g.lineTo(-1.6 * u, turn * 1.3 * u);
+      g.lineTo(-0.44 * u, turn * 1.3 * u);
+      g.fill();
+    }
+    g.restore();
+  };
+  for (const [x, turn] of [[-5.8, -1], [-2, 0]]) arrow(x, AVE.wn - 9, 0, 1, turn);
+  for (const [x, turn] of [[5.8, 1], [2, 0]]) arrow(x, AVE.ws + 9, 0, -1, -turn);
+  for (const [z, turn] of [[-6, 1], [-2.6, 0]]) arrow(CROSS.w1 + 9, z, -1, 0, turn);
+  for (const [z, turn] of [[6, -1], [2.6, 0]]) arrow(CROSS.w0 - 9, z, 1, 0, turn);
+  // the yellow box: an edge and criss-cross hatching (worn)
+  g.strokeStyle = 'rgba(214,180,69,0.75)';
+  g.lineWidth = 0.22 * GPX;
+  g.strokeRect(X(CROSS.x0 + 0.6), Z(AVE.n + 0.6), X(CROSS.x1 - 0.6) - X(CROSS.x0 + 0.6), Z(AVE.s - 0.6) - Z(AVE.n + 0.6));
+  g.save();
+  g.beginPath();
+  g.rect(X(CROSS.x0 + 0.6), Z(AVE.n + 0.6), X(CROSS.x1 - 0.6) - X(CROSS.x0 + 0.6), Z(AVE.s - 0.6) - Z(AVE.n + 0.6));
+  g.clip();
+  g.lineWidth = 0.14 * GPX;
+  for (let k = -20; k <= 20; k += 2.6) {
+    g.beginPath();
+    g.moveTo(X(k - 10), Z(-10));
+    g.lineTo(X(k + 10), Z(10));
+    g.moveTo(X(k + 10), Z(-10));
+    g.lineTo(X(k - 10), Z(10));
+    g.stroke();
+  }
+  g.restore();
+  // worn patches over the paint, so it isn't too crisp
+  for (let i = 0; i < 40; i++) {
+    g.fillStyle = rand() < 0.5 ? 'rgba(79,82,87,0.7)' : 'rgba(214,218,224,0.5)';
+    blob(g, X(-10 + rand() * 20), Z(-26 + rand() * 60), (0.4 + rand()) * GPX, (0.3 + rand() * 0.6) * GPX, rand, 8);
+  }
   // the base's yard: concrete, hazard stripes round the doors
   rect(BASE.x0 - 6, AVE.wn, BASE.x1 + 8, AVE.ws, '#7d8186');
   g.fillStyle = '#c9a23a';
@@ -183,63 +255,127 @@ function buildEndless(scene) {
     for (let i = 0; i < 4; i++) B.lump(fx + Math.cos(yaw) * (rand() - 0.5) * w * 0.8, 0.1, fz - Math.sin(yaw) * (rand() - 0.5) * w * 0.8, 0.4 + rand() * 0.5, 0.2, 0.3, rand() < 0.5 ? 0xc9ccd1 : CONCRETE[(rand() * 5) | 0], rand() * 3);
   }
 
+  // A clump of overgrowth: dead scrub and dry weeds pushing up through the
+  // snow (no block: the tank rolls through it)
+  const SCRUB = [0x4f5a3a, 0x5d6644, 0x6b5a3e, 0x56603f, 0x7a6a48];
+  function scrub(x, z, r = 1) {
+    const y = heightAt(x, z);
+    for (let i = 0; i < 3 + r * 3; i++) B.lump(x + (rand() - 0.5) * r * 1.6, y + 0.12 * r, z + (rand() - 0.5) * r * 1.6, (0.35 + rand() * 0.45) * r, 0.3 * r, 0.35 * r, SCRUB[(rand() * 5) | 0], rand() * 3);
+    for (let i = 0; i < 6 * r; i++) B.piece(0.04, 0.4 + rand() * 0.6, 0.04, rand() < 0.5 ? 0x8a7a52 : 0x6b6040, x + (rand() - 0.5) * r * 2, y + 0.3, z + (rand() - 0.5) * r * 2, (rand() - 0.5) * 0.6, 0, (rand() - 0.5) * 0.6);
+    if (rand() < 0.6) B.lump(x, y + 0.3 * r, z, 0.5 * r, 0.1, 0.4 * r, 0xd8dce2, rand() * 3);
+  }
+  // ivy on a wall: a patch of dark leaves (a flat plane just off the face)
+  function ivy(x, y, z, w, h, yaw) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), toon(rand() < 0.5 ? 0x3f4a30 : 0x4a5236));
+    m.position.set(x, y, z);
+    m.rotation.y = yaw;
+    B.add(m);
+  }
+
   // ------------------------------------------------------------ the ring
-  // north, beyond the elevated road: tall blocks along the skyline
-  for (const [x0, x1, f] of [[-92, -62, 8], [-58, -30, 9], [-26, -4, 7], [0, 24, 8], [28, 54, 9], [58, 92, 7]]) K.building({ x0, x1, zf: -40, depth: 16, floors: f, holes: 2, broken: 0.35, shop: false });
-  // west: blocks turned in toward the square, stepping round the corner
-  block(-70, -16, 14, 12, 6, Math.PI / 2 + 0.06);
-  block(-72, 2, 14, 12, 5, Math.PI / 2, { shop: true });
-  block(-69, 22, 16, 12, 5, Math.PI / 2 - 0.22);
-  block(-60, 44, 16, 12, 4, Math.PI - 0.55, { mural: true });
-  // south, toward the camera: low blocks so the square shows over them
-  block(-38, 50, 18, 12, 3, Math.PI - 0.12, { shop: true });
-  block(-18, 52, 14, 12, 2, Math.PI + 0.05);
-  block(18, 52, 16, 12, 3, Math.PI - 0.06, { shop: true });
-  block(38, 48, 16, 12, 2, Math.PI + 0.32);
-  block(56, 36, 14, 12, 3, Math.PI + 0.75);
-  // east, behind the base
-  block(72, -14, 16, 12, 6, -Math.PI / 2 + 0.1);
-  block(74, 14, 16, 12, 5, -Math.PI / 2 - 0.12, { mural: true });
-  // a works shed on the north-east lot, by the deck's foot
-  K.works({ x0: 26, x1: 42, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
+  // north, beyond the elevated road: tall blocks along the skyline, on
+  // past both edges
+  for (const [x0, x1, f] of [[-140, -112, 7], [-108, -84, 8], [-80, -62, 8], [-58, -30, 9], [-26, -4, 7], [0, 24, 8], [28, 54, 9], [58, 80, 7], [84, 110, 8], [114, 140, 6]]) K.building({ x0, x1, zf: -40, depth: 16, floors: f, holes: 2, broken: 0.35, shop: false });
+  // The arena's edge is the buildings themselves: their fronts stand on it,
+  // turned a little this way and that and stepped in and out, so the
+  // square closes round. West (facing in, east):
+  block(-65.5, -18.5, 11, 13, 6, Math.PI / 2 + 0.04);
+  block(-65.8, 19.5, 14, 13, 5, Math.PI / 2 - 0.05, { shop: true });
+  block(-64.5, 33.5, 12, 12, 4, Math.PI / 2 - 0.35, { mural: true });
+  // south (low, toward the camera, so the square shows over them)
+  block(-50, 46.2, 17, 12, 3, Math.PI + 0.06, { shop: true });
+  block(-30, 46.8, 18, 12, 2, Math.PI - 0.04);
+  block(-15, 47.5, 8, 12, 3, Math.PI + 0.1);
+  block(16, 47.2, 9, 12, 3, Math.PI - 0.08, { shop: true });
+  block(31, 46.4, 18, 12, 2, Math.PI + 0.03);
+  block(50, 45.4, 14, 12, 3, Math.PI + 0.42, { mural: true });
+  // east, past the base's yard (facing in, west)
+  block(67.5, -19, 12, 13, 6, -Math.PI / 2 - 0.05);
+  block(67.6, 20, 14, 13, 5, -Math.PI / 2 + 0.06, { shop: true });
+  block(65.8, 33.5, 11, 12, 3, -Math.PI / 2 + 0.38);
+  // ivy up some of the faces
+  ivy(-58.9, 2.2, -16, 4, 3.5, Math.PI / 2);
+  ivy(-59.1, 1.6, 22, 5, 2.6, Math.PI / 2);
+  ivy(-36, 1.8, 40.1, 6, 2.8, Math.PI);
+  ivy(26, 1.4, 40.3, 4, 2.2, Math.PI);
+  ivy(61.1, 2.4, 17, 4, 4, -Math.PI / 2);
+  // where the streets run out of the square: blocked, wreckage and rubble
+  // heaped across from building to building
+  {
+    // the avenue, west: a burnt bus slewed across, rubble, hedgehogs of jersey
+    P.bus(B, -60.5, 1, Math.PI / 2 + 0.25);
+    K.rubble(B, -61, -8, 4, 2.2, { solid: true, slabs: 3 });
+    K.rubble(B, -61, 9, 3.6, 1.8, { solid: true, slabs: 3 });
+    for (const z of [-11, -5.5, 5, 11.5]) K.jersey(B, -57.4, z, Math.PI / 2 + (rand() - 0.5) * 0.4);
+    B.block(-60.5, 0, 2.5, 13);
+    // the cross street, south: a slab heap and a wrecked tram nose
+    K.rubble(B, -2, 41.5, 5.5, 2.4, { solid: true, slabs: 4 });
+    K.rubble(B, 7, 42, 3.4, 1.6, { solid: true, slabs: 2 });
+    for (const x of [-10, -6.5, 3.5]) K.jersey(B, x, 39.2, (rand() - 0.5) * 0.4);
+    B.block(0, 41.5, 12, 2.2);
+    // the avenue, east (past the base's yard): a container wall
+    for (const z of [-8.5, -2.6, 3.3, 9.2]) K.container(B, 62.5, 0, z, Math.PI / 2 + (rand() - 0.5) * 0.06, CONTAINERS[(rand() * 5) | 0]);
+    K.container(B, 62.6, 2.6, 0.4, Math.PI / 2 + 0.05, CONTAINERS[(rand() * 5) | 0]);
+    B.block(62.5, 0, 1.4, 13);
+  }
+  // (and behind all that, in case: a hard edge)
+  B.block(ARENA.minX - 3.5, 8, 0.5, 40);
+  B.block(ARENA.maxX + 3.5, 8, 0.5, 40);
+  B.block(0, ARENA.maxZ + 4, 80, 0.5);
+  // a works shed out on the west edge, under the elevated road
+  K.works({ x0: -57.5, x1: -43.5, zf: AVE.wn - 0.3, side: 'n', roof: 'saw', wall: 0x8a9a8e, doors: 2, H: 4.2, depth: 8 });
 
   // ------------------------------------------------------ the elevated road
   {
-    // the ramp: a wedge climbing east, a parapet on its open (south) side
-    const len = LAND.x0 - RAMP.x0;
-    const shape = new THREE.Shape();
-    shape.moveTo(0, -0.05);
-    shape.lineTo(len, 0);
-    shape.lineTo(len, DECK - 0.55);
-    shape.lineTo(0, -0.05);
-    const wedge = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: RAMP.s - RAMP.n, bevelEnabled: false }), toon(0x8d8a83));
+    const dl = DECKX.x1 - DECKX.x0;
+    const dw = DECKZ.s - DECKZ.n;
+    const SIDE = 0x8a8780;
+    const side = toon(SIDE);
+    const under = toon(0x6a675f);
+    const deckTex = deckTexture(rand, dl, dw);
+    // the ramp: a slab of the same road, the same edge beams and rails,
+    // climbing east to the landing, flush with it at the top; filled in
+    // under with the same concrete
+    const len = RAMP.x1 - RAMP.x0;
+    const ang = Math.atan2(DECK, len);
+    const L = Math.hypot(len, DECK);
+    const rw = RAMP.s - RAMP.n;
+    const fill = new THREE.Shape();
+    fill.moveTo(0, -0.05);
+    fill.lineTo(len, -0.05);
+    fill.lineTo(len, DECK - 0.5);
+    fill.lineTo(0, -0.05);
+    const wedge = new THREE.Mesh(new THREE.ExtrudeGeometry(fill, { depth: rw, bevelEnabled: false }), side);
     wedge.position.set(RAMP.x0, 0, RAMP.n);
     wedge.receiveShadow = true;
     B.add(wedge);
     B.solid(wedge);
-    const ang = Math.atan2(DECK, len);
-    const L = Math.hypot(len, DECK);
-    const pz = RAMP.s - 0.2;
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, 0.35), toon(0x9a978f));
-    wall.position.set((RAMP.x0 + LAND.x0) / 2, DECK / 2 + 0.45, pz);
-    wall.rotation.z = ang;
-    wall.castShadow = true;
-    B.add(wall);
-    B.solid(wall);
-    for (let x = RAMP.x0; x < LAND.x0; x += 2) B.block(x + 1, pz + 0.2, 1, 0.3);
-    for (let x = RAMP.x0 + 3; x < LAND.x0; x += 3) B.piece(0.06, 0.92, 0.37, 0x86837c, x, heightAt(x, -20) + 0.45, pz, 0, 0, ang);
-    // the deck's slab (and the landing at the ramp's top), worn asphalt,
-    // edge beams, guard rails, piers to the ground
-    const dl = DECKX.x1 - DECKX.x0;
-    const dw = DECKZ.s - DECKZ.n;
-    const side = toon(0x8a8780);
-    const top = new THREE.MeshToonMaterial({ map: deckTexture(rand, dl, dw), gradientMap });
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(dl, 0.9, dw), [side, side, top, toon(0x6a675f), side, side]);
+    const rampTex = deckTexture(rand, L, rw);
+    const slope = new THREE.Mesh(new THREE.BoxGeometry(L, 0.9, rw), [side, side, new THREE.MeshToonMaterial({ map: rampTex, gradientMap }), under, side, side]);
+    slope.position.set((RAMP.x0 + RAMP.x1) / 2 + Math.sin(ang) * 0.45, DECK / 2 - Math.cos(ang) * 0.45, (RAMP.n + RAMP.s) / 2);
+    slope.rotation.z = ang;
+    slope.castShadow = slope.receiveShadow = true;
+    B.add(slope);
+    B.solid(slope);
+    // its rails (south side), climbing with it; a block along the side
+    // that drops off
+    for (let x = RAMP.x0 + 1; x <= RAMP.x1; x += 2) {
+      const y = heightAt(x, -20);
+      B.piece(0.1, 0.8, 0.1, 0x6f7276, x, y + 0.4, RAMP.s - 0.25, 0, 0, 0);
+      if (x + 2 <= RAMP.x1 + 0.01) B.piece(2.05, 0.28, 0.06, 0xa9adb2, x + 1, y + 0.62 + DECK / len, RAMP.s - 0.25, 0, 0, ang);
+    }
+    B.piece(L, 0.5, 0.2, SIDE, (RAMP.x0 + RAMP.x1) / 2, DECK / 2 - 0.6, RAMP.s - 0.05, 0, 0, ang);
+    B.block((RAMP.x0 + 4 + RAMP.x1) / 2, RAMP.s, (RAMP.x1 - RAMP.x0 - 4) / 2, 0.35);
+    // the deck's slab and the landing, worn asphalt, edge beams, guard
+    // rails, piers to the ground
+    const top = new THREE.MeshToonMaterial({ map: deckTex, gradientMap });
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(dl, 0.9, dw), [side, side, top, under, side, side]);
     slab.position.set((DECKX.x0 + DECKX.x1) / 2, -0.45, (DECKZ.n + DECKZ.s) / 2);
     slab.castShadow = slab.receiveShadow = true;
     D.add(slab);
     D.solid(slab);
-    const land = new THREE.Mesh(new THREE.BoxGeometry(LAND.x1 - LAND.x0, 0.9, LAND.s - LAND.n), [side, side, toon(0x5a5d61), toon(0x6a675f), side, side]);
+    const landTex = deckTexture(rand, LAND.x1 - LAND.x0, LAND.s - LAND.n);
+    const land = new THREE.Mesh(new THREE.BoxGeometry(LAND.x1 - LAND.x0, 0.9, LAND.s - LAND.n), [side, side, new THREE.MeshToonMaterial({ map: landTex, gradientMap }), under, side, side]);
     land.position.set((LAND.x0 + LAND.x1) / 2, -0.45, (LAND.n + LAND.s) / 2);
     land.castShadow = land.receiveShadow = true;
     D.add(land);
@@ -254,43 +390,45 @@ function buildEndless(scene) {
         D.piece(0.1, 0.8, 0.1, 0x6f7276, x, 0.4, z, bent ? 0.4 : 0, 0, 0);
         if (k + 2 <= len && rand() > 0.05) D.piece(2.02, 0.28, 0.06, 0xa9adb2, x + Math.cos(yaw) * 1, bent ? 0.45 : 0.62, z - Math.sin(yaw) * 1, 0, yaw, 0);
       }
-      D.piece(len, 0.5, 0.2, 0x7a776f, (x0 + x1) / 2, -0.7, (z0 + z1) / 2, 0, yaw, 0);
+      D.piece(len, 0.5, 0.2, SIDE, (x0 + x1) / 2, -0.7, (z0 + z1) / 2, 0, yaw, 0);
     };
     rail(DECKX.x0, DECKZ.n + 0.25, DECKX.x1, DECKZ.n + 0.25);
     rail(DECKX.x0, DECKZ.s - 0.25, LAND.x0, DECKZ.s - 0.25);
     rail(LAND.x1, DECKZ.s - 0.25, DECKX.x1, DECKZ.s - 0.25);
-    rail(LAND.x0, LAND.s - 0.25, LAND.x1, LAND.s - 0.25);
+    rail(LAND.x0 + 0.5, LAND.s - 0.25, LAND.x1, LAND.s - 0.25);
     rail(LAND.x1 - 0.25, LAND.n, LAND.x1 - 0.25, LAND.s);
-    // where the deck's edges stop things: whole lengths in the block list
+    // where the deck's edges stop things
     B.block((DECKX.x0 + DECKX.x1) / 2, DECKZ.n, dl / 2, 0.35);
     B.block((DECKX.x0 + LAND.x0) / 2, DECKZ.s, (LAND.x0 - DECKX.x0) / 2, 0.35);
     B.block((LAND.x1 + DECKX.x1) / 2, DECKZ.s, (DECKX.x1 - LAND.x1) / 2, 0.35);
     B.block((LAND.x0 + LAND.x1) / 2, LAND.s, (LAND.x1 - LAND.x0) / 2, 0.35);
     B.block(LAND.x1, (LAND.n + LAND.s) / 2, 0.35, (LAND.s - LAND.n) / 2);
     // piers under it
-    for (let x = DECKX.x0 + 6; x < DECKX.x1; x += 14) {
+    for (let x = DECKX.x0 + 4; x < DECKX.x1; x += 14) {
       for (const z of [DECKZ.n + 3, DECKZ.s - 3]) put(B.root, box(1.3, DECK - 0.9, 1.3, 0x8a8780, { r: 0.04 }), x, (DECK - 0.9) / 2, z).castShadow = true;
       put(B.root, box(1.5, 0.8, dw - 1, 0x7d7a73, { r: 0.04 }), x, DECK - 1.3, (DECKZ.n + DECKZ.s) / 2);
     }
     put(B.root, box(1.2, DECK - 0.9, 1.2, 0x8a8780, { r: 0.04 }), (LAND.x0 + LAND.x1) / 2, (DECK - 0.9) / 2, (LAND.n + LAND.s) / 2);
-    // on the deck: lamp posts, wrecks, a jack-knifed bus, debris; both
-    // ends choked with rubble and barricades
-    for (let x = DECKX.x0 + 10; x < DECKX.x1 - 4; x += 18) {
+    // on the deck: lamp posts, wrecks, debris; rubble and barricades across
+    // it at the arena's edges (it runs on beyond, out of sight)
+    for (let x = DECKX.x0 + 6; x < DECKX.x1 - 4; x += 18) {
       put(D.root, cyl(0.1, 6, 0x8b8984, { seg: 8, radiusEnd: 0.14 }), x, 3, DECKZ.n + 0.6);
       put(D.root, box(0.1, 0.1, 2.2, 0x4a4c50, { r: 0.02 }), x, 5.9, DECKZ.n + 1.6);
       put(D.root, box(0.5, 0.16, 0.7, 0x3c3e42, { r: 0.05 }), x, 5.85, DECKZ.n + 2.7);
       D.block(x, DECKZ.n + 0.6, 0.2, 0.2);
     }
     P.car(D, -40, -29, 0.4, { kind: 'sedan', snow: false });
-    P.car(D, -6, -32, -0.2, { kind: 'hatch', flipped: true, snow: false });
-    P.car(D, 20, -27, 2.9, { kind: 'van', snow: false });
-    P.bus(D, 38, -31, 0.25);
-    for (const x of [DECKX.x0 + 3, DECKX.x1 - 3]) {
+    P.car(D, -14, -32, -0.2, { kind: 'hatch', flipped: true, snow: false });
+    P.bus(D, 4, -31, 0.25);
+    P.car(D, 52, -27, 2.9, { kind: 'van', snow: false });
+    P.car(D, -90, -30, 0.2, { kind: 'sedan', snow: false });
+    P.car(D, 96, -28, 2.6, { kind: 'hatch', snow: false });
+    for (const x of [ARENA.minX + 1, ARENA.maxX - 1]) {
       K.rubble(D, x, (DECKZ.n + DECKZ.s) / 2, 4, 2, { solid: true, slabs: 4 });
       for (let z = DECKZ.n + 1; z < DECKZ.s; z += 1.7) K.jersey(D, x + (x < 0 ? 4.5 : -4.5), z, Math.PI / 2 + (rand() - 0.5) * 0.3);
       D.block(x, (DECKZ.n + DECKZ.s) / 2, 3, dw / 2);
     }
-    for (let i = 0; i < 160; i++) {
+    for (let i = 0; i < 300; i++) {
       const x = DECKX.x0 + 4 + rand() * (dl - 8);
       const z = DECKZ.n + 0.8 + rand() * (dw - 1.6);
       const sz = 0.08 + rand() * 0.22;
@@ -299,7 +437,7 @@ function buildEndless(scene) {
   }
 
   // ------------------------------------------------- streets: lamps, tracks
-  ST.lights({ xs: [-64, -48, -32, -18, 18, 30, 40], skip: (x) => Math.abs(x) < 14 });
+  ST.lights({ xs: [-52, -38, -24, 20, 32], skip: (x) => Math.abs(x) < 14 });
   for (const [x, z, dir] of [[CROSS.w0 - 0.6, AVE.wn + 0.4, 1], [CROSS.w1 + 0.6, AVE.ws - 0.4, -1], [CROSS.w1 + 0.6, AVE.wn + 0.4, 1], [CROSS.w0 - 0.6, AVE.ws - 0.4, -1]]) ST.signal(x, z, dir, rand() < 0.5 ? 'blink' : 'dead');
   {
     const R = rails(B, rand);
@@ -308,76 +446,105 @@ function buildEndless(scene) {
     R.track([...R.bend({ x: -14, z: 2.4 }, { x: -2, z: 2.4 }, { x: -2, z: 14 }), ...R.straight(-2, 14, -2, CROSS.s + 10)]);
   }
   // overhead wires across the avenue: a few spans, sagging
-  for (const x of [-56, -40, -24, 24, 36]) {
+  for (const x of [-56, -40, 24, 36]) {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, AVE.ws - AVE.wn, 3), toon(0x2a2b2e));
     m.rotation.x = Math.PI / 2;
     m.position.set(x, 6.1, 0);
     B.add(m);
   }
-  // sidewalk furniture: a kiosk, a shelter, bins, benches, a bent sign
+  // heat pipes along the south sidewalk, up and over the avenue on an arch
+  ST.pipes(-44, -31, AVE.ws + 1.6);
+  ST.pipeArch(-30, AVE.ws + 1.6, AVE.wn - 1.6);
+  ST.pipes(-29, -20, AVE.wn - 1.6);
+  // utility poles leaning down the cross street, one down across the road
+  for (const [x, z] of [[-9.6, 20], [-9.6, 33], [9.6, 26], [9.6, -14]]) P.bentPole(B, x, 0, z, 5.4 + rand(), rand() * 3, rand() < 0.3 ? 0.9 : 0.15, 0x5a5d61);
+  P.fallenPole(B, -50, 6.5, 0.35);
+  // sidewalk furniture: kiosks (their tubes flicker), a shelter, a bent
+  // sign, fires, bins, benches, dumpsters, junk
   ST.kiosk(24, AVE.wn + 1.2, 1);
-  ST.shelter(-30, AVE.ws - 1.0, -1);
+  ST.kiosk(20, AVE.ws + 2.4, -1);
+  ST.kiosk(-50, PARK.z0 + 1.6, -1);
+  ST.shelter(-18, AVE.ws - 1.0, -1);
+  ST.shelter(36, AVE.wn + 1.0, 1);
   ST.bentSign(-14, AVE.wn + 0.6);
   ST.barrelFire(12, AVE.ws + 2.2);
-  ST.barrelFire(-46, AVE.wn - 2);
-  ST.clutter(-70, -14, 11);
-  ST.clutter(14, 40, 11);
+  ST.barrelFire(-40, AVE.wn - 2);
+  ST.barrelFire(42, 30);
+  ST.clutter(-56, -34, 9);
+  ST.clutter(14, 40, 9);
+  for (const [x, z, yaw] of [[-36, AVE.wn - 1.2, 0], [28, AVE.ws + 1.3, Math.PI], [-24, AVE.ws + 1.4, Math.PI + 0.2]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.3 });
+  for (const [x, z] of [[-34, AVE.wn - 1], [26, AVE.ws + 1.2], [14, -13]]) P.bin(B, x, 0, z, { tipped: rand() < 0.4 });
+  P.dumpster(B, -54, 37, 0.3, 0x4e6355);
+  P.dumpster(B, 44, 37.5, -0.2, 0x4f5d73);
+  P.dumpster(B, 58, -14, 1.4, 0x5e5a4c);
+  for (const [x, z] of [[-52, 36], [46, 36], [56, 30], [-56, -14]]) P.crates(B, x, 0, z);
+  P.billboard(B, 30, 38.6, 0.08, (w, h) => sign(w, h, { board: true }));
+  P.billboard(B, -40, 38.8, -0.1, (w, h) => sign(w, h, { board: true }));
+  // the scrub: in the park, along the building fronts, up through the
+  // paving where nobody's swept for years
+  for (const [x, z, r] of [
+    [-56, 16, 1.2], [-55, 28, 1], [-48, 37, 1.3], [-22, 37, 1], [-16, 16, 0.9], [-44, 30, 0.7],
+    [-57, -22, 1], [-50, -14, 0.8], [-30, -16, 0.9], [-14, -18, 1], [4, -14, 0.7],
+    [58, 24, 1.2], [57, 36, 1], [36, 37, 1.1], [20, 37, 0.9], [44, 18, 0.8], [14, 30, 0.7],
+    [58, -20, 1], [46, -18, 0.8], [-56, 10, 0.6], [-6, 37, 0.8], [12, 18, 0.6],
+  ]) scrub(x, z, r);
 
   // ---------------------------------------------------------- the park
   {
     const pcx = (PARK.x0 + PARK.x1) / 2;
     const pcz = (PARK.z0 + PARK.z1) / 2;
-    // the monument: a stepped plinth, a tank on it (a blocky old one), snow
-    B.chunk(6, 0.5, 6, 0x8d8b86, pcx, 0.25, pcz);
-    B.chunk(4.4, 0.9, 4.4, 0x9a978f, pcx, 0.95, pcz);
-    B.chunk(3, 1.4, 3, 0x7d7c78, pcx, 2.1, pcz);
-    const t = new THREE.Group();
-    put(t, box(3.2, 0.7, 1.9, 0x5b6248, { r: 0.08 }), 0, 0.35, 0);
-    put(t, box(1.5, 0.5, 1.3, 0x5b6248, { r: 0.12 }), -0.2, 0.95, 0);
-    put(t, cyl(0.09, 1.9, 0x4e5540, { axis: 'x', seg: 8 }), 1.4, 1.0, 0);
-    for (const s of [-1, 1]) put(t, box(3.3, 0.45, 0.4, 0x3e4234, { r: 0.06 }), 0, 0.22, s * 0.95);
-    t.position.set(pcx, 2.8, pcz);
-    t.rotation.y = 0.7;
-    t.traverse((o) => o.isMesh && (o.castShadow = true));
-    B.add(t);
-    B.snowPatch(pcx, 3.55, pcz, 2.4, 1.4, 0.7);
-    B.block(pcx, pcz, 3, 3);
-    // birches in clumps, benches along the paths, planters, a low fence
-    for (const [x, z] of [[-50, 18], [-47, 21], [-50, 33], [-45, 35], [-20, 18], [-18, 22], [-24, 35], [-17, 33], [-40, 18], [-30, 36]]) ST.birch(x + (rand() - 0.5), z + (rand() - 0.5), 3.6 + rand() * 1.6);
-    for (const [x, z, yaw] of [[-42, 24, 0.8], [-26, 30, -2.3], [-28, 21, 2.4], [-41, 31, -0.8]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.25 });
+    // the fountain: a round basin, iced over, a column and bowl in the
+    // middle with icicles hanging off it
+    put(B.root, cyl(3.4, 0.7, 0x8d8b86, { seg: 24 }), pcx, 0.35, pcz).castShadow = true;
+    put(B.root, cyl(3.0, 0.08, 0xbcd4e0, { seg: 24 }), pcx, 0.68, pcz);
+    put(B.root, cyl(3.45, 0.14, 0x9a978f, { seg: 24 }), pcx, 0.74, pcz);
+    put(B.root, cyl(0.45, 1.8, 0x9a978f, { seg: 12 }), pcx, 1.5, pcz).castShadow = true;
+    put(B.root, cyl(1.2, 0.3, 0x8d8b86, { seg: 16, radiusEnd: 0.7 }), pcx, 2.45, pcz).castShadow = true;
+    put(B.root, cyl(0.25, 0.6, 0x9a978f, { seg: 10 }), pcx, 2.9, pcz);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      put(B.root, cyl(0.05, 0.35 + rand() * 0.4, 0xdbe8ef, { seg: 4, radiusEnd: 0.01 }), pcx + Math.cos(a) * 1.1, 2.1, pcz + Math.sin(a) * 1.1).rotation.x = Math.PI;
+    }
+    B.lump(pcx + 0.6, 0.78, pcz - 0.8, 1.2, 0.08, 0.7, 0xd8dce2, 0.4);
+    B.block(pcx, pcz, 3.3, 3.3);
+    // birches in clumps, benches round the paths, planters, lamp posts,
+    // a low fence
+    for (const [x, z] of [[-50, 18], [-47, 21], [-50, 33], [-45, 35], [-20, 18], [-18, 22], [-24, 35], [-17, 33], [-40, 18], [-30, 36], [-53, 24], [-36, 37]]) ST.birch(x + (rand() - 0.5), z + (rand() - 0.5), 3.6 + rand() * 1.6);
+    for (const [x, z, yaw] of [[-40, 24, 0.8], [-28, 30, -2.3], [-28, 22.5, 2.4], [-40, 30, -0.8]]) P.bench(B, x, 0, z, yaw, { tipped: rand() < 0.25 });
     for (const [x, z] of [[-52, 26], [-16, 26], [-34, 16.5], [-34, 37]]) P.planter(B, x, 0, z);
+    let i = 0;
+    for (const [x, z] of [[-44, 21], [-24, 32], [-44, 33]]) ST.lampPole(x, z, i % 2 ? 1 : -1, 6 + 7 * i++);
     P.fence(B, PARK.x0, PARK.x0 + 14, 0, PARK.z0 - 0.4);
     P.fence(B, PARK.x1 - 12, PARK.x1, 0, PARK.z0 - 0.4);
-    for (let i = 0; i < 4; i++) P.bin(B, -52 + i * 12, 0, PARK.z0 + 0.6, { tipped: rand() < 0.4 });
+    for (let k = 0; k < 3; k++) P.bin(B, -46 + k * 12, 0, PARK.z0 + 0.6, { tipped: rand() < 0.4 });
   }
+  // a smaller green on the south-east corner: birches, a bench, scrub
+  for (const [x, z] of [[26, 30], [30, 33], [22, 34], [38, 22]]) ST.birch(x, z, 3.4 + rand() * 1.5);
+  P.bench(B, 28, 0, 26.5, 0.3);
+  P.planter(B, 34, 0, 30);
 
   // ------------------------------------------------------------- cover
-  // a stranded tram on the avenue, wrecks and a bus about the junction,
-  // barricade lines, heaps, a container lot by the works
-  P.tram(B, -40, -2.4, 0.03, { burn: 0.7 });
-  P.bus(B, 18, 6, Math.PI - 0.35);
+  // kept out toward the edges, so the middle of the square is open ground:
+  // a stranded tram, wrecks, barricade lines, heaps, a container lot
+  P.tram(B, -44, -2.4, 0.03, { burn: 0.7 });
+  P.bus(B, -20, 6.5, 0.15);
   for (const [x, z, yaw, kind] of [
-    [-58, 5, 0.3, 'sedan'],
-    [-20, -6, 2.9, 'hatch'],
-    [12, -14, 1.2, 'van'],
-    [-4, 24, 1.7, 'sedan'],
-    [6, 32, 1.4, 'hatch'],
-    [34, -6, 0.2, 'sedan'],
-    [22, 24, 2.6, 'van'],
-    [-62, 18, 1.2, 'sedan'],
-    [40, 26, 0.6, 'hatch'],
+    [-52, -6, 0.3, 'sedan'],
+    [22, -7, 2.9, 'hatch'],
+    [38, 7, 0.2, 'sedan'],
+    [24, 24, 2.6, 'van'],
+    [-6, 32, 1.4, 'hatch'],
+    [44, 26, 0.6, 'hatch'],
+    [-30, -18, 1.3, 'sedan'],
   ]) P.car(B, x, z, yaw, { kind, flipped: rand() < 0.15 });
-  for (const [cx, cz, n, yaw] of [[-8, 18, 3, 0.2], [14, 15, 3, 1.4], [-30, -14, 3, 0.1], [30, 18, 3, -0.4], [-56, -10, 3, 1.5]]) {
-    for (let i = 0; i < n; i++) K.jersey(B, cx + Math.cos(yaw) * i * 1.7, cz - Math.sin(yaw) * i * 1.7, yaw + (rand() - 0.5) * 0.2);
+  for (const [cx, cz, n, yaw] of [[30, 17, 3, -0.4], [-48, -15, 3, 0.1], [16, 34, 3, 1.2]]) {
+    for (let k = 0; k < n; k++) K.jersey(B, cx + Math.cos(yaw) * k * 1.7, cz - Math.sin(yaw) * k * 1.7, yaw + (rand() - 0.5) * 0.2);
   }
-  for (const [x, z, r, h] of [[0, CROSS.n - 2, 4, 1.8], [0, CROSS.s - 3, 4.5, 2], [AVE.x0 + 2, 0, 5, 2.2], [24, 32, 2, 1.1], [-10, -20, 1.6, 0.9]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
-  for (const [x, z, yaw] of [[36, -18, 0.1], [42, -18, 0.15], [46, 30, 1.2]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
-  K.container(B, 39, 2.6, -18.2, 0.12, CONTAINERS[(rand() * 5) | 0]);
-  for (let i = 0; i < 5; i++) P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 6 : AVE.ws + 2 + rand() * 6, 3);
+  for (const [x, z, r, h] of [[0, -20, 4, 1.8], [40, 33, 2, 1.1]]) K.rubble(B, x, z, r, h, { solid: true, slabs: 3 });
+  for (const [x, z, yaw] of [[-38, -18, 0.1], [-24, -19, 0.05]]) K.container(B, x, 0, z, yaw, CONTAINERS[(rand() * 5) | 0]);
+  K.container(B, -38.2, 2.6, -18.1, 0.12, CONTAINERS[(rand() * 5) | 0]);
+  for (let k = 0; k < 5; k++) P.tires(B, -50 + rand() * 90, 0, rand() < 0.5 ? AVE.wn - 2 - rand() * 2 : AVE.ws + 2 + rand() * 6, 3);
   for (const [x, z, r] of [[-12, 4, 2], [8, -4, 1.6], [30, 10, 1.8], [-50, -4, 1.4]]) P.scorch(B, x, z, r);
-  // a hard edge round the arena where the ring doesn't quite close
-  for (const s of [-1, 1]) B.block(s > 0 ? ARENA.maxX + 2.6 : ARENA.minX - 2.6, 0, 0.5, 50);
-  B.block(0, ARENA.maxZ + 2.6, 80, 0.5);
 
   // the base: a shed across the avenue's far end, a sandbagged yard round
   // it; it can be driven round either side
@@ -397,7 +564,8 @@ function buildEndless(scene) {
   base.bindBlocks(blocks);
 
   // ------------------------------------------------------------ the waves
-  const S = { t: 0, time: 0, wave: 0, phase: 'intro', left: 4, queue: [], groupT: 0, inBase: false, shut: 0 };
+  const BREAK = 5; // seconds between waves
+  const S = { t: 0, time: 0, wave: 0, phase: 'intro', left: BREAK, queue: [], groupT: 0, inBase: false, shut: 0 };
   const near = (api) => Math.hypot(api.tankPos.x - base.door.x, api.tankPos.z - base.door.z);
   // how tough each machine is by now: up to about Hard at five minutes,
   // creeping on after that
@@ -482,7 +650,7 @@ function buildEndless(scene) {
   }
 
   function start(api) {
-    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: 4, queue: [], groupT: 0, inBase: false, shut: 0 });
+    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: BREAK + 3, queue: [], groupT: 0, inBase: false, shut: 0 });
     api.enableGun();
     api.revealScraps(false);
     api.giveRockets();
@@ -506,6 +674,7 @@ function buildEndless(scene) {
     if (S.phase === 'intro' || S.phase === 'break') {
       S.left -= dt;
       api.objective(`${S.phase === 'intro' ? 'First wave' : `Wave ${S.wave + 1}`} in ${Math.ceil(Math.max(0, S.left))} s · ${mm}:${ss}`);
+      api.waveHud({ wave: S.wave, next: Math.max(0, S.left) });
       // into the base (open between waves)
       if (S.phase === 'break' && base.inDoor > 0.6 && near(api) < 5) {
         closeBase(api);
@@ -514,7 +683,7 @@ function buildEndless(scene) {
           offers: [],
           onLeave: () => {
             S.phase = 'break';
-            S.left = Math.max(S.left, 4);
+            S.left = Math.max(S.left, 3);
             S.shut = 2;
           },
         });
@@ -536,13 +705,15 @@ function buildEndless(scene) {
         const [x, z] = edgeSpot(api);
         list.forEach((k, i) => spawnOne(api, k, x + (rand() - 0.5) * 4, z + (rand() - 0.5) * 4, i * 0.35));
       }
-      api.objective(`Wave ${S.wave} · ${api.enemiesAlive + S.queue.reduce((a, q) => a + q.list.length, 0)} left · ${mm}:${ss}`);
+      const left = api.enemiesAlive + S.queue.reduce((a, q) => a + q.list.length, 0);
+      api.objective(`Wave ${S.wave} · ${left} left · ${mm}:${ss}`);
+      api.waveHud({ wave: S.wave, left, next: null });
       if (!S.queue.length && api.enemiesAlive === 0) {
         run.endlessWaves = S.wave; // (waves cleared)
         S.phase = 'break';
-        S.left = 12 + Math.min(6, S.wave * 0.5);
+        S.left = BREAK;
         openBase(api);
-        api.prompt(`Wave ${S.wave} cleared`, 'The <b>base</b> is open: repair and change your loadout, or hold your ground.', { go: true, seconds: 4 });
+        api.prompt(`Wave ${S.wave} cleared`, 'The <b>base</b> is open: drive in to repair and change your loadout.', { go: true, seconds: 3 });
       }
     }
   }

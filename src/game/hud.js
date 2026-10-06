@@ -37,6 +37,15 @@ const CSS = `
 .hud-obj { padding: 6px 12px 7px; font-size: 13px; display: flex; gap: 10px; align-items: baseline; max-width: 100%; box-sizing: border-box; }
 .hud-obj .tag { color: var(--amber); font-size: 11px; }
 .hud-kills { padding: 6px 12px; font-size: 12px; }
+/* endless: the wave, what's left of it, the countdown to the next */
+.hud-wave { padding: 7px 12px 8px; display: grid; gap: 4px; min-width: 210px; box-sizing: border-box; }
+.hud-wave .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+.hud-wave .row b { font-weight: 400; font-variant-numeric: tabular-nums; }
+.hud-wave .row.w b { color: var(--amber); font-size: 15px; }
+.hud-wave .row.left b { color: var(--danger); }
+.hud-wave .row.next b { color: var(--go); font-size: 18px; }
+.hud-wave .row.next.soon b { animation: hudSoon 0.5s steps(2) infinite; }
+@keyframes hudSoon { 50% { color: var(--ink); } }
 .hud-kills b { color: var(--danger); font-weight: 400; }
 .hud-center { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); display: grid; gap: 12px; justify-items: center;
   width: min(500px, calc(100vw - 32px)); }
@@ -519,6 +528,7 @@ export function createHud() {
     <div class="hud-top">
       <div class="hud-hull panel"><div class="row"><span class="px">HP</span><span class="px val">100</span></div><div class="hud-bar"></div><div class="hud-ammo" hidden><span class="px">Ammo</span></div></div>
       <div class="hud-sectors panel px" hidden></div>
+      <div class="hud-wave panel px" hidden><div class="row w"><span>Wave</span><b></b></div><div class="row left"><span>Enemies left</span><b></b></div><div class="row next"><span>Next wave</span><b></b></div></div>
     </div>
     <div class="hud-right">
       <div class="hud-kills panel px" hidden>Destroyed <b>0</b></div>
@@ -752,6 +762,23 @@ export function createHud() {
       const el = $('.hud-obj');
       el.hidden = !text;
       el.querySelector('.text').textContent = text || '';
+    },
+    // endless: { wave, left, next } (next: seconds to the next wave, or
+    // null mid-wave); null hides it
+    setWave(o) {
+      const el = $('.hud-wave');
+      el.hidden = !o;
+      if (!o) return;
+      el.querySelector('.w b').textContent = o.wave || '-';
+      const left = el.querySelector('.left');
+      left.hidden = o.next != null;
+      left.querySelector('b').textContent = o.left;
+      const next = el.querySelector('.next');
+      next.hidden = o.next == null;
+      if (o.next != null) {
+        next.querySelector('b').textContent = `0:${String(Math.ceil(o.next)).padStart(2, '0')}`;
+        next.classList.toggle('soon', o.next <= 3);
+      }
     },
     setKills(n) {
       const el = $('.hud-kills');
@@ -1356,6 +1383,7 @@ export function createHud() {
       this.showContinue(null);
       this.setBoss(null, null);
       this.setChain(0, 0);
+      this.setWave(null);
       this.setAbility(null);
       this.setAbility(null, 1);
       this.setAbility(null, 2);

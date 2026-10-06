@@ -79,7 +79,7 @@ export function partPicture(renderer, id, W = 84, H = 56) {
     pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.55, 0.5, 1), half: 1.0 });
   } else if (id === 'magnet') {
     // the horseshoe face on, a little from above
-    pic = snapshotCanvas(renderer, partModel(id), W, H, null, { target: new THREE.Vector3(0, 0.38, 0), dir: new THREE.Vector3(0.1, 0.35, 1), half: 0.5 });
+    pic = snapshotCanvas(renderer, partModel(id), W, H, null, { target: new THREE.Vector3(-0.08, 0.36, 0), dir: new THREE.Vector3(0.1, 0.35, 1), half: 0.46 });
   } else if (id === 'mirv') {
     // nothing on the tank to show: its pixel picture, scaled up whole
     const art = mirvCanvas(1);

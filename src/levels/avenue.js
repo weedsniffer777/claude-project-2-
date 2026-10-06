@@ -1593,7 +1593,7 @@ function buildAvenue(scene) {
 
     function start(api) {
       CLICK = api.touch ? '<kbd>Tap</kbd>' : '<kbd>Click</kbd>';
-      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false, noCrush: false });
+      Object.assign(S, { sector: 0, step: 0, t: 0, spawnX: api.tankPos.x, n: 0, hold: 0, boss: null, strike: null, warned: false, taught: false, noCrush: false, lone: false, lesson: 0, auto: 0, touchFire: 0 });
       setBounds(api, B1);
       S.api = api;
       comb = api.combat;
@@ -1662,34 +1662,43 @@ function buildAvenue(scene) {
             api.arrow(null);
             api.enableGun();
             const out = [[22, -9], [16, -3]];
-            api.spawnDog(22, -18.5, { via: out });
-            api.spawnDog(20.5, -19.5, { delay: 0.6, via: out });
-            api.spawnDog(23.5, -19.5, { delay: 1.2, via: out });
+            if (!api.seen('fire')) {
+              // the first time: one comes right out into the middle of the
+              // street (the other two once it's down)
+              api.spawnDog(22, -18.5, { via: [...out, [x + 9, 0.5]] });
+              S.lone = true;
+            } else {
+              api.spawnDog(22, -18.5, { via: out });
+              api.spawnDog(20.5, -19.5, { delay: 0.6, via: out });
+              api.spawnDog(23.5, -19.5, { delay: 1.2, via: out });
+            }
             go(2);
           }
           break;
         case 2: {
-          // first sight of them: slow it all down and point at them
+          // first sight of them: slow it all down (way down, the first
+          // time) and point at them
           const e = api.nearestEnemy();
-          if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < 12.5) {
+          if (e && Math.hypot(e.pos.x - x, e.pos.z - api.tankPos.z) < (S.lone ? 9 : 12.5)) {
             S.shots = run.shots;
-            const hold = api.tank.gun === 'autocannon';
-            const how = api.touch ? `${hold ? 'Hold' : 'Tap'} <b>FIRE</b>: it aims for you (or drag on the screen to aim yourself).` : `Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`;
             api.enableGun();
             if (api.lesson('fire')) {
+              S.lesson = performance.now(); // (6 s, then it's aimed and fired for you)
+              const slow = { slowK: 0.03, long: true, maxTime: 12 };
               if (api.touch) {
                 // on a phone, two steps: tap on them to aim, then FIRE
                 api.prompt('Enemies!', 'Tap where you want to aim the turret.', { danger: true });
-                api.arrow(onEnemy(api), 'Tap to aim!', true);
+                api.arrow(onEnemy(api), 'Tap!', true);
                 // (only a tap made from here on counts: a latch inside the arc, then the turret on them)
                 S.taps = api.aimTaps;
                 S.aimed = () => (api.aimTaps > S.taps && api.aimLocked) || run.shots > S.shots;
-                api.spotlight({ targets: [onEnemy(api)], r: 110 }, S.aimed, { maxTime: 30 });
+                api.spotlight({ targets: [onEnemy(api)], r: 110 }, () => S.aimed() || S.auto, slow);
                 S.touchFire = 1;
               } else {
-                api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
-                api.arrow(onEnemy(api), `${CLICK} to fire!`);
-                api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, { maxTime: 20 });
+                const hold = api.tank.gun === 'autocannon';
+                api.prompt('Contact', `Enemies! Aim and ${hold ? 'hold the mouse button' : CLICK} (or <kbd>Space</kbd>) to fire.`, { danger: true });
+                api.arrow(onEnemy(api), `${CLICK}!`, true);
+                api.spotlight({ targets: [onEnemy(api), () => api.tankPos.clone().setY(1)], r: 100 }, () => run.shots > S.shots, slow);
               }
             } else if (!api.cleared) api.prompt('Contact', 'Enemies incoming!', { danger: true, seconds: 4 });
             go(3);
@@ -1700,8 +1709,17 @@ function buildAvenue(scene) {
           break;
         }
         case 3:
+          // (the lesson) 6 s and nothing yet: it's aimed and fired for you
+          if (S.lesson && run.shots <= S.shots) {
+            const waited = (performance.now() - S.lesson) / 1000;
+            if (waited > 6 && !S.auto) {
+              S.auto = performance.now();
+              api.lockOn(api.nearestEnemy());
+            }
+            if (S.auto && (api.aimLocked || performance.now() - S.auto > 700)) api.fireNow();
+          }
           // (phone) the turret's on them: now FIRE
-          if (S.touchFire === 1 && S.aimed()) {
+          if (S.touchFire === 1 && (S.aimed() || S.auto)) {
             S.touchFire = 2;
             if (run.shots <= S.shots) {
               api.clearSpot();
@@ -1709,19 +1727,29 @@ function buildAvenue(scene) {
               api.arrow(() => {
                 const f = api.fireScreen();
                 return { screen: [f.screen[0], f.screen[1] - 50] };
-              }, 'Tap to fire!', true);
-              api.spotlight({ targets: [api.fireScreen(), onEnemy(api)], r: 90 }, () => run.shots > S.shots, { maxTime: 20 });
+              }, 'Tap!', true);
+              api.spotlight({ targets: [api.fireScreen(), onEnemy(api)], r: 90 }, () => run.shots > S.shots, { slowK: 0.03, long: true, maxTime: 12 });
             }
+          }
+          if (run.shots > S.shots && S.lesson) {
+            S.lesson = 0;
+            api.arrow(null);
+          }
+          // the lone one down: the other two come out
+          if (S.lone && api.enemiesAlive === 0 && run.shots > S.shots) {
+            S.lone = false;
+            const out = [[22, -9], [16, -3]];
+            api.spawnDog(22, -18.5, { delay: 0.8, via: out });
+            api.spawnDog(20.5, -19.5, { delay: 1.4, via: out });
           }
           if (S.touchFire === 2 && run.shots > S.shots) {
             S.touchFire = 3;
             api.arrow(null);
           }
           // after the first shot, while the cannon reloads, the MG takes over
-          if (run.shots > S.shots && (api.mgActive || S.t > 4)) {
+          if (run.shots > S.shots && !S.lone && (api.mgActive || S.t > 4)) {
             if (api.lesson('mg')) {
               api.prompt('Machine gun', `Your <b>machine gun</b> automatically attacks enemies while your ${api.tank.gun === 'autocannon' ? 'autocannon' : 'cannon'} reloads!`);
-              api.arrow(onEnemy(api), 'Auto MG');
             }
             go(4);
           }

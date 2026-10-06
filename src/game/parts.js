@@ -943,19 +943,25 @@ function mgMount() {
 // the red pole on one leg's end, the blue on the other's.
 function horseshoeMagnet() {
   const g = new THREE.Group();
-  const R = 0.32;
-  const T = 0.11;
-  const LEG = 0.34;
-  const steel = toon(0xb3b8bf);
-  const bend = new THREE.Mesh(new THREE.TorusGeometry(R, T, 10, 20, Math.PI), steel);
+  const R = 0.22;
+  const T = 0.075;
+  const LEG = 0.44;
+  // (lit and shaded properly, not flat toon bands: it should read round)
+  const mat = (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.38, metalness: 0.35 });
+  const bend = new THREE.Mesh(new THREE.TorusGeometry(R, T, 12, 24, Math.PI), mat(0xb9bec6));
   bend.position.y = LEG;
   g.add(bend);
   for (const [s, c] of [[-1, 0xe0483a], [1, 0x3a7bd5]]) {
-    put(g, cyl(T, LEG * 0.45, 0xb3b8bf, { seg: 12 }), s * R, LEG - LEG * 0.225, 0);
-    put(g, cyl(T * 1.02, LEG * 0.55, c, { seg: 12 }), s * R, LEG * 0.275, 0);
+    const steel = new THREE.Mesh(new THREE.CylinderGeometry(T, T, LEG * 0.5, 14), mat(0xb9bec6));
+    steel.position.set(s * R, LEG * 0.75, 0);
+    g.add(steel);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(T * 1.04, T * 1.04, LEG * 0.5, 14), mat(c));
+    pole.position.set(s * R, LEG * 0.25, 0);
+    g.add(pole);
   }
-  // (an arch, the poles down; turned a touch to show it's round)
-  g.rotation.y = -0.35;
+  g.traverse((o) => o.isMesh && (o.castShadow = true));
+  // (an arch, the poles down, leant over and turned to show it's round)
+  g.rotation.set(0.15, -0.65, 0.32);
   return g;
 }
 

@@ -439,8 +439,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // hideHud fades the HUD away till it's done
     // lock: the player can't let it go or act till it's done; camRate: how
     // fast the camera glides over (and back)
-    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false, lock = false, camRate = 6 } = {}) {
-      run.spot = { until, t: 0, maxTime: Math.min(maxTime, slow ? 3 : 6), frame, frameK, slow, lock }; // never holds the game up for long
+    // slowK: how slow (the game's speed under it); long: may stay up past
+    // the usual few seconds (a lesson with its own timer)
+    spotlight(spec, until, { maxTime = 3, frame = null, frameK = 0.45, slow = true, hideHud = false, lock = false, camRate = 6, slowK = SLOW_MO, long = false } = {}) {
+      run.spot = { until, t: 0, maxTime: Math.min(maxTime, long ? 12 : slow ? 3 : 6), frame, frameK, slow, lock, slowK }; // never holds the game up for long
       run.camRate = camRate;
       hud.setSpot(spec);
       if (hideHud) {
@@ -579,6 +581,16 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return { screen: [c.x, c.y], r: 72 };
     },
     // the gun's on what was tapped (locked on, or aimed by hand) and lined up
+    // the tutorial's fallback: the turret latched on for you, and a shot
+    lockOn(e) {
+      if (!e?.alive) return;
+      autoTarget = e;
+      manualAim = false;
+      aimTouch = null;
+      forcedAim = e; // (with a mouse: the turret's swung onto it till it's down)
+    },
+    fireNow: () => fire(),
+    waveHud: (o) => hud.setWave(o),
     // aim taps that took (a latch, or a tap in full manual mode): the
     // tutorial waits for one made after the enemies show up
     get aimTaps() {
@@ -1961,6 +1973,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   let manualAim = false; // touch: aimed by hand (held till the next reload)
   let aimTaps = 0;
   let autoTarget = null;
+  let forcedAim = null;
   const onMove = (e) => {
     if (e.pointerType === 'touch') {
       if (e.pointerId === fireTouch) return;
@@ -2929,7 +2942,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         run.bossSlow = Math.max(0, run.bossSlow - realDt);
         const k = 1 - run.bossSlow / FINALE_SLOW;
         dt = realDt * (0.15 + 0.85 * k * k);
-      } else if (run.spot && run.spot.hold == null && run.spot.slow !== false) dt = realDt * SLOW_MO;
+      } else if (run.spot && run.spot.hold == null && run.spot.slow !== false) dt = realDt * (run.spot.slowK ?? SLOW_MO);
       else if (run.dilate > 0) {
         run.dilate -= realDt;
         dt = realDt * 0.35; // a beat of slow motion as a boost kicks in
@@ -3371,6 +3384,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       enemies.setHover(outlined);
       hud.showReticle(!!client && !run.over && run.mode === 'field');
       if (touch) touchAim();
+      else if (forcedAim?.alive) {
+        const s2 = toScreen(enemies.aimPoint(forcedAim));
+        aimAt(s2.x, s2.y);
+      } else forcedAim = null;
       if (client) {
         const reloading = stats.mag && run.magT > 0;
         if (run.aiming > 0) hud.setReticle(client[0], client[1], Math.min(0.999, run.aiming / AIM_TIME)); // the ring counts down the aim
