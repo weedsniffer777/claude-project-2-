@@ -579,6 +579,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       return { screen: [c.x, c.y], r: 72 };
     },
     // the gun's on what was tapped (locked on, or aimed by hand) and lined up
+    // aim taps that took (a latch, or a tap in full manual mode): the
+    // tutorial waits for one made after the enemies show up
+    get aimTaps() {
+      return aimTaps;
+    },
     get aimLocked() {
       return hasAim && (!!autoTarget?.alive || manualAim) && tank.aimError() < 0.15;
     },
@@ -1954,6 +1959,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
 
   let fireTouch = null; // the finger on FIRE
   let manualAim = false; // touch: aimed by hand (held till the next reload)
+  let aimTaps = 0;
   let autoTarget = null;
   const onMove = (e) => {
     if (e.pointerType === 'touch') {
@@ -2026,7 +2032,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
         } else if (!latch(e.clientX, e.clientY)) {
           aimTouch = e.pointerId; // just aiming at the spot (FIRE fires); drag to adjust
           manualAim = true;
-        }
+          if (!settings().aimAssist) aimTaps++;
+        } else aimTaps++;
       }
       return;
     }

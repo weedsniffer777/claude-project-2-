@@ -1681,7 +1681,10 @@ function buildAvenue(scene) {
                 // on a phone, two steps: tap on them to aim, then FIRE
                 api.prompt('Enemies!', 'Tap where you want to aim the turret.', { danger: true });
                 api.arrow(onEnemy(api), 'Tap to aim!', true);
-                api.spotlight({ targets: [onEnemy(api)], r: 110 }, () => api.aimLocked || run.shots > S.shots, { maxTime: 20 });
+                // (only a tap made from here on counts: a latch inside the arc, then the turret on them)
+                S.taps = api.aimTaps;
+                S.aimed = () => (api.aimTaps > S.taps && api.aimLocked) || run.shots > S.shots;
+                api.spotlight({ targets: [onEnemy(api)], r: 110 }, S.aimed, { maxTime: 30 });
                 S.touchFire = 1;
               } else {
                 api.prompt('Contact', `Enemies incoming! Destroy them with your <b>${hold ? 'autocannon' : 'cannon'}</b>! ${how}`, { danger: true });
@@ -1698,7 +1701,7 @@ function buildAvenue(scene) {
         }
         case 3:
           // (phone) the turret's on them: now FIRE
-          if (S.touchFire === 1 && (api.aimLocked || run.shots > S.shots)) {
+          if (S.touchFire === 1 && S.aimed()) {
             S.touchFire = 2;
             if (run.shots <= S.shots) {
               api.clearSpot();

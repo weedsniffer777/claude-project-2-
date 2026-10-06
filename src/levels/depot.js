@@ -161,7 +161,7 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
       sheet.castShadow = sheet.receiveShadow = true;
       roof.add(sheet);
     }
-    put(roof, box(L + 0.9, 0.12, 0.3, 0x45484c), 0, 0.58, 0);
+    put(roof, box(L, 0.12, 0.3, 0x45484c), 0, 0.58, 0); // (stops short of the ends: clear of the sign)
     // a snow crust, and a hole where a sheet blew off
     roof.position.set(cx, H, cz);
     B.add(roof);
@@ -184,10 +184,11 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
     // a lit sign over the door: CHECKPOINT in cold tube letters
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 0.8), new THREE.MeshBasicMaterial({ map: signTexture(label), color: 0xffffff }));
     sign.rotation.y = -Math.PI / 2;
-    sign.position.set(x0 - 0.42, H + 0.7, cz); // clear of the backing board's face
+    sign.position.set(x0 - 0.62, H + 1.05, cz); // above the roof's edge, clear of the backing board's face
     B.add(sign);
     B.keep(sign);
-    put(B.root, box(0.12, 0.9, 4.0, 0x2c3034), x0 - 0.3, H + 0.7, cz);
+    put(B.root, box(0.12, 0.9, 4.0, 0x2c3034), x0 - 0.5, H + 1.05, cz);
+    for (const s of [-1, 1]) put(B.root, box(0.08, 0.9, 0.08, 0x3a3e42), x0 - 0.5, H + 0.4, cz + s * 1.6); // its posts
     signGlow = B.emit(new THREE.Vector3(x0 - 1.5, H, cz), COLD, 10, 8);
     signMesh = sign;
   }
