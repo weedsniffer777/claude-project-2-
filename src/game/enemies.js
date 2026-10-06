@@ -532,7 +532,7 @@ export class Enemies {
       this.shatter(e, new THREE.Vector3(e.pos.x, -1, e.pos.z), 1.8);
       for (let i = 0; i < 4; i++) this.combat.explode(new THREE.Vector3(e.pos.x + (Math.random() - 0.5) * 3.5, 0.6 + Math.random() * 1.6, e.pos.z + (Math.random() - 0.5) * 3.5));
       this.combat.shake = Math.max(this.combat.shake, 0.8);
-    } else if (blastFrom) this.shatter(e, blastFrom);
+    } else if (blastFrom && !e.stats.spider) this.shatter(e, blastFrom); // (the mechs keep their wreck: their legs are still rigged to it)
     this.onKill?.(e, !!blastFrom || !!e.stats.shatterOnDeath);
   }
 

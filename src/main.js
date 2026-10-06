@@ -329,8 +329,29 @@ function frame(now = performance.now()) {
   const dt = Math.min(raw, 0.05);
   watchFrameRate(raw);
   countFrame(raw);
-  mode.frame(dt, clock.getElapsed());
+  requestAnimationFrame(frame); // (asked for first: one bad frame never stops the game)
+  try {
+    mode.frame(dt, clock.getElapsed());
+  } catch (err) {
+    reportError(err);
+  }
   window.__ready = true;
-  requestAnimationFrame(frame);
+}
+// an error in a frame: logged, and shown small in a corner (once each) so
+// it can be reported, instead of the game freezing
+const seenErrors = new Set();
+function reportError(err) {
+  const msg = `${err?.message || err}`;
+  if (seenErrors.has(msg)) return;
+  seenErrors.add(msg);
+  console.error(err);
+  let el = document.querySelector('.err-note');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'err-note';
+    el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99;max-width:60vw;padding:4px 8px;font:11px monospace;color:#fff;background:rgba(160,30,20,0.85);pointer-events:none;white-space:pre-wrap';
+    document.body.append(el);
+  }
+  el.textContent = `Error: ${msg}\n${(err?.stack || '').split('\n').slice(1, 3).join('\n')}`;
 }
 frame();
