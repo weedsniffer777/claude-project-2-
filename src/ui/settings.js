@@ -89,6 +89,14 @@ const CSS = `
 .set .row small { display: block; font-size: 12px; color: #8f877a; }
 .set button { border: 0; color: #f1e9d8; font: 400 12px/1 'Silkscreen', monospace; text-transform: uppercase; }
 .set .dd { position: relative; }
+/* the volume: a chunky pixel bar of ten cells, dragged or tapped (not the browser's slider) */
+.set .vol { display: flex; align-items: center; gap: 10px; min-width: 150px; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; touch-action: none; cursor: inherit; }
+.set .vol:hover, .set .vol.drag, .set .vol:focus-visible { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); outline: none; }
+.set .vol .cells { flex: 1; display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; height: 16px; }
+.set .vol .cells i { background: #3a3530; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35); }
+.set .vol .cells i.on { background: var(--amber); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25); }
+.set .vol .cells i.part { background: linear-gradient(90deg, var(--amber) 50%, #3a3530 50%); }
+.set .vol b { min-width: 34px; text-align: right; font-weight: 400; font-variant-numeric: tabular-nums; }
 .set .ddb { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 150px; padding: 8px 10px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .set .ddb::after { content: ''; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--amber); }
 .set .ddb:hover, .set .dd.open .ddb { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
@@ -167,6 +175,59 @@ export function createSettingsMenu({ touch = () => false } = {}) {
     };
     return dd;
   };
+  // the volume bar: drag or tap along it (5% steps; arrow keys too); heard
+  // straight away, saved on letting go
+  const volumeBar = (value) => {
+    const el = document.createElement('div');
+    el.className = 'vol';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', 'Sound volume');
+    el.innerHTML = `<div class="cells">${'<i></i>'.repeat(10)}</div><b></b>`;
+    const cells = [...el.querySelectorAll('.cells i')];
+    const box = el.querySelector('.cells');
+    let v = +value || 0;
+    const show = () => {
+      cells.forEach((c, i) => {
+        const f = v * 10 - i;
+        c.className = f >= 1 ? 'on' : f >= 0.5 ? 'part' : '';
+      });
+      el.querySelector('b').textContent = v ? `${Math.round(v * 100)}%` : 'Off';
+      el.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+    };
+    const at = (x) => {
+      const r = box.getBoundingClientRect();
+      const k = Math.max(0, Math.min(1, (x - r.left) / (r.width || 1)));
+      v = Math.round(k * 20) / 20;
+      settings().volume = v; // (live, while dragging)
+      show();
+    };
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      el.setPointerCapture?.(e.pointerId);
+      el.classList.add('drag');
+      at(e.clientX);
+    });
+    el.addEventListener('pointermove', (e) => el.classList.contains('drag') && at(e.clientX));
+    const done = () => {
+      if (!el.classList.contains('drag')) return;
+      el.classList.remove('drag');
+      setSetting('volume', v);
+    };
+    el.addEventListener('pointerup', done);
+    el.addEventListener('pointercancel', done);
+    el.addEventListener('keydown', (e) => {
+      const d = e.code === 'ArrowRight' || e.code === 'ArrowUp' ? 0.05 : e.code === 'ArrowLeft' || e.code === 'ArrowDown' ? -0.05 : 0;
+      if (!d) return;
+      e.preventDefault();
+      e.stopPropagation();
+      v = Math.round(Math.max(0, Math.min(1, v + d)) * 20) / 20;
+      show();
+      setSetting('volume', v);
+    });
+    show();
+    return el;
+  };
   function closeDd() {
     if (!openDd) return;
     openDd.classList.remove('open');
@@ -229,7 +290,7 @@ export function createSettingsMenu({ touch = () => false } = {}) {
         s.quality === 'auto' ? 'Picks the best look that keeps it smooth' : '',
       ),
     );
-    c1.append(row('Sound', dropdown(s.volume, [[0, 'Off'], [0.25, '25%'], [0.5, '50%'], [0.75, '75%'], [1, '100%']], (v) => setSetting('volume', +v))));
+    c1.append(row('Sound', volumeBar(s.volume)));
     c1.append(row('Frame rate', dropdown(s.fps, [[60, '60 fps'], [30, '30 fps (saves battery)'], [0, 'Unlimited']], (v) => setSetting('fps', +v))));
     c1.append(row('Screen shake', dropdown(s.shake, [['on', 'On'], ['reduced', 'Reduced'], ['off', 'Off']], (v) => setSetting('shake', v))));
 

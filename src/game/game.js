@@ -935,6 +935,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (run.endlessDone) return;
     run.endlessDone = true;
     run.over = true;
+    fitting.hide(); // (ended from the base)
+    if (run.paused) setPaused(false);
     enemies.clearBolts();
     const time = run.endlessT || 0;
     const waves = run.endlessWaves || 0;
@@ -1163,6 +1165,26 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (vulcanOn) return void (vulcanT = 0.2);
     sfx.play('autocannon', { gain: 0.5, rate: 0.95 + Math.random() * 0.1 });
   }
+  // The warning: the enemy nearest to letting off a big shot (a cannon or
+  // beam charging, artillery winding up) counts down in tiny high beeps,
+  // closer together and higher as it comes. One countdown at a time: when
+  // that one fires, the next nearest carries straight on at its own pace.
+  function warnBeeps(dt) {
+    let best = null;
+    let left = Infinity;
+    let total = 1;
+    for (const e of enemies.alive) {
+      if (e.delay > 0) continue;
+      if (e.charge > 0 && e.charge < left) [best, left, total] = [e, e.charge, e.stats.charge || 2];
+      if (e.artyWind > 0 && e.artyWind < left) [best, left, total] = [e, e.artyWind, 0.7];
+    }
+    if (!best || !dt) return void (run.warnT = 0);
+    run.warnT = (run.warnT || 0) - dt;
+    if (run.warnT > 0) return;
+    const k = 1 - Math.min(1, left / total);
+    sfx.at('beep', best.pos, { gain: 0.3, rate: 1 + k * 0.6 });
+    run.warnT = Math.max(0.045, Math.min(0.4, left * 0.2));
+  }
   // the tank's own sounds: the treads rattling, quiet, coming up from
   // silence as it gets moving; the rockets roaring while they burn
   function engineSounds(dt) {
@@ -1177,6 +1199,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     sfx.loop('vulcan', spin ? 0.4 : 0, 1, spin ? 0.02 : 0.03);
     if (!spin && run.vulcanSpin) sfx.play('vulcanTail', { gain: 0.4 });
     run.vulcanSpin = spin;
+    warnBeeps(live ? dt : 0);
     const roar = live && (run.boost > 0 || run.dash > 0 || run.retreat > 0 || run.brk > 0);
     sfx.loop('rocket', roar ? 0.5 : 0, 1, roar ? 0.04 : 0.18);
   }
@@ -1242,6 +1265,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (id === 'atgm') return lockMissiles();
     if (id === 'shield') return raiseShield();
     // picking the spot
+    sfx.play('beep2', { gain: 0.45 });
     run.armed = id;
     run.arty = DESIGNATE[id] || 6;
     trigger = false;
@@ -1249,6 +1273,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   // The shield (Q): up at once in front of the turret, for a few seconds
   function raiseShield() {
     const E = EQUIPMENT.shield;
+    sfx.play('beep2', { gain: 0.45 });
     run.barrier = E.time;
     run.equipCd = E.cooldown * stats.cooldownMul;
     const at = pos.clone().setY(pos.y + 1.2);
@@ -1291,7 +1316,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       .slice(0, count);
     if (!inView.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'MSL no targets!');
     if (o.ability) run.abilityCd = stats.salvoCooldown;
-    else run.equipCd = E.cooldown * stats.cooldownMul;
+    else (run.equipCd = E.cooldown * stats.cooldownMul), sfx.play('beep2', { gain: 0.45 });
     const targets = [];
     for (let i = 0; i < count; i++) targets.push(inView[i % inView.length]);
     run.msl = { targets, t: E.lockTime, fired: 0, gap: 0, damage: o.damage, blast: o.blast };
@@ -2365,7 +2390,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (!st) return;
     st.step = 'edit';
     fitting.show({
-      tag: 'Checkpoint',
+      tag: levelDef.endless ? 'Base' : 'Checkpoint',
       tankId,
       loadout: run.parts,
       owned: save.owned(),
@@ -2373,7 +2398,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       teachEquip: st.teach && !st.improved && !run.parts.includes(st.found),
       teachContinue: st.teach && (st.improved || run.parts.includes(st.found)),
       improved: st.improved, // its icon glows and the new star flies on (the first time only)
-      buttons: [['Continue', () => leaveDepot(), true, true]],
+      // (Endless: the base between waves can end the run too)
+      buttons: [...(levelDef.endless ? [['End run', () => endlessEnd('Run ended')]] : []), ['Continue', () => leaveDepot(), true, true]],
       onSet(list, added) {
         const crane = added && !run.parts.includes(added) && st.room.pads.some((p) => p.offer === added);
         if (!crane) {
@@ -2821,6 +2847,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   const grenadeBaseGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.1, 8).rotateX(Math.PI / 2).translate(0, 0, -0.12);
   const grenadeBaseMat = new THREE.MeshBasicMaterial({ color: 0xc9a85a });
   function lobGrenade(from, target) {
+    sfx.play('autocannon', { gain: 0.18, rate: 0.55 + Math.random() * 0.1 }); // (a soft thump, not the MG)
     const aim = enemies.aimPoint(target).clone();
     // led: where it'll be when the round comes down (its pace, measured
     // frame to frame), refined once for the longer flight
@@ -2877,6 +2904,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       gr.m.removeFromParent();
       grenades.splice(i, 1);
       const at = gr.to;
+      sfx.at('boom', at, { gain: 0.16, rate: 1.25 + Math.random() * 0.15 }); // (a small pop)
       // a small blast wherever it lands (ground, wall, machine): a flash, a
       // ball of fire, dirt and sparks thrown up, smoke
       combat.glow.flash(at, 0xffe0a0, 0.16, 1.8, 0.1);
@@ -3162,6 +3190,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
         speed,
         onCrush(c) {
           run.crushed++;
+          sfx.play('crash', { gain: c.kind === 'car' ? 0.4 : 0.25, rate: (c.kind === 'car' ? 0.95 : 1.15) + Math.random() * 0.1 });
           speed *= c.kind === 'car' ? 0.75 : 0.9;
           if (c.scrap) pickups.spawn(new THREE.Vector3(c.footprint.x, 0.6, c.footprint.z), c.scrap, 'scrap', 1);
         },
@@ -3393,7 +3422,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       run.reactT = Math.max(0, (run.reactT || 0) - dt);
       tryFire(dt);
       autoFire(dt);
-      if (tank.events?.some((ev) => ev.type === 'mg')) sfx.play('mg', { gain: 0.2, rate: 0.95 + Math.random() * 0.1 }); // (kept low: under the big guns)
+      if (!stats.gmg && tank.events?.some((ev) => ev.type === 'mg')) sfx.play('mg', { gain: 0.2, rate: 0.95 + Math.random() * 0.1 }); // (kept low: under the big guns)
       combat.handleTankEvents(tank);
       combat.update(dt);
       stragglers(dt);

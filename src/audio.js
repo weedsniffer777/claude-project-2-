@@ -3,7 +3,7 @@
 // Nothing plays until the player's first tap or key (browsers insist), and
 // everything goes quiet in a hidden tab, while the portal mutes, or with the
 // volume setting at Off.
-import { settings } from './ui/settings.js';
+import { settings, onSettings } from './ui/settings.js';
 import { platform } from './platform.js';
 
 const FILES = {
@@ -18,12 +18,16 @@ const FILES = {
   mg: 'mg.mp3',
   vulcan: 'vulcan.mp3',
   vulcanTail: 'vulcan-tail.mp3',
+  beep: 'beep.mp3',
+  beep2: 'beep2.mp3',
+  crash: 'crash.mp3',
+  boom: 'boom.mp3',
 };
 const LOOPS = new Set(['rocket', 'treads', 'vulcan']);
 // (no machine gun drowning out the rest: each sound has a shortest gap
 // between plays and a cap on how many ring at once)
-const GAP = { mg: 0.06, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08 };
-const VOICES = { mg: 3, launch: 4, autocannon: 4, cannon: 3, explosion: 3 };
+const GAP = { mg: 0.06, lock: 0.05, launch: 0.07, autocannon: 0.05, cannon: 0.08, boom: 0.03, crash: 0.12, beep2: 0.15 };
+const VOICES = { mg: 3, launch: 4, autocannon: 4, cannon: 3, explosion: 3, boom: 5, crash: 2 };
 const lastAt = {};
 const ringing = {};
 // where the ears are (the tank): sounds out in the world fade with distance
@@ -155,6 +159,9 @@ export const sfx = {
     }
   },
 };
+
+// a click at the new level, so you hear what you picked
+onSettings((k) => k === 'volume' && sfx.play('click', { gain: 0.6 }));
 
 // UI clicks: every button, dropdown and tab
 document.addEventListener(

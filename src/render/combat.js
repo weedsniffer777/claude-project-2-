@@ -1,6 +1,7 @@
 // Combat effects shared by the game and the model viewer: the cannon's tracer
 // shell, muzzle blast and explosion, the roof MG's tracers and brass, and
 // camera shake. One instance per scene.
+import { sfx } from '../audio.js';
 import { settings } from '../ui/settings.js';
 import * as THREE from 'three';
 import { Fx, Glow, Puffs, Debris, Craters } from './fx.js';
@@ -167,6 +168,7 @@ export class CombatFx {
   // A machine blowing apart: a sharp flash, sparks, its own parts thrown,
   // a puff of dark smoke.
   machineDeath(at, color = 0x3e4247) {
+    sfx.at('boom', at, { gain: 0.35, rate: 1 + Math.random() * 0.2 });
     const { glow, fx, puffs, debris } = this;
     glow.flash(at, 0xfff0c8, 0.2, 1.1, 0.08);
     glow.flash(at, 0xff9a40, 0.3, 1.4, 0.14);
@@ -366,7 +368,9 @@ export class CombatFx {
     }
   }
 
-  explode(at, normal = null, mesh = null) {
+  // gain: its bang (quieter for a shell landing), fading with distance
+  explode(at, normal = null, mesh = null, gain = 0.3) {
+    sfx.at('boom', at, { gain, rate: 0.9 + Math.random() * 0.2 });
     this.onImpact?.(at, mesh);
     const { fx, glow, puffs, debris, craters } = this;
     const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
