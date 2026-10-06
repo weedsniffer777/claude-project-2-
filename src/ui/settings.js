@@ -23,8 +23,8 @@ const DEFAULTS = {
   shake: 'on', // 'on' | 'reduced' | 'off'
   keys: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', fire: 'Space', boost: 'ShiftLeft', ability: 'KeyE', equip: 'KeyQ', reload: 'KeyR' },
   // touch
-  aimAssist: true, // touch: a tap near an enemy locks onto it; off: tap/drag to aim
-  dragShoot: true, // touch: drag to aim, let go to fire (overrides aimAssist)
+  aimAssist: true, // touch: a tap near an enemy (within 35 degrees of the tap's direction) locks onto it; off: full manual aim
+  dragShoot: false, // (retired: drag to shoot; old saves move to the lock)
   buttons: 'normal', // 'small' | 'normal' | 'large'
   hand: 'right', // 'right': stick left, FIRE right; 'left': mirrored
   stick: 1, // stick sensitivity
@@ -40,6 +40,9 @@ function load() {
     // storage blocked: defaults
   }
   cur = { ...DEFAULTS, ...s, keys: { ...DEFAULTS.keys, ...(s.keys || {}) } };
+  // drag to shoot is gone: whoever had it gets the tap-to-lock aim
+  if (cur.dragShoot) cur.aimAssist = true;
+  cur.dragShoot = false;
 }
 export function settings() {
   if (!cur) load();
@@ -213,13 +216,9 @@ export function createSettingsMenu({ touch = () => false } = {}) {
 
     if (touch()) {
       box.append(head('Touch controls'));
-      const aimMode = s.dragShoot ? 'drag' : s.aimAssist ? 'assist' : 'manual';
-      const aimHelp = { drag: 'Drag anywhere to aim (it snaps onto a machine under your finger); let go to fire. Autocannons fire while you hold.', assist: 'Tap near an enemy to lock onto it; the turret keeps tracking it. Tap open ground to aim there.', manual: 'Tap or drag on the screen to aim; FIRE shoots there.' };
-      const setAim = (v) => {
-        setSetting('dragShoot', v === 'drag');
-        setSetting('aimAssist', v === 'assist');
-      };
-      box.append(row('Aiming', dropdown(aimMode, [['drag', 'Drag to shoot'], ['assist', 'Tap to lock'], ['manual', 'Manual aim']], setAim), aimHelp[aimMode]));
+      const aimMode = s.aimAssist ? 'assist' : 'manual';
+      const aimHelp = { assist: 'Tap near an enemy to lock onto it (the nearest one within 35° of where you tap); the turret keeps tracking it. Tap open ground to aim there.', manual: 'Full manual: tap or drag on the screen to aim; FIRE shoots there.' };
+      box.append(row('Aiming', dropdown(aimMode, [['assist', 'Aim assist (tap to lock)'], ['manual', 'Full manual']], (v) => setSetting('aimAssist', v === 'assist')), aimHelp[aimMode]));
       box.append(row('Button size', dropdown(s.buttons, [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], (v) => setSetting('buttons', v))));
       box.append(row('Layout', dropdown(s.hand, [['right', 'Stick left, fire right'], ['left', 'Stick right, fire left']], (v) => setSetting('hand', v))));
       box.append(row('Stick sensitivity', dropdown(s.stick, [[0.7, 'Low'], [1, 'Normal'], [1.35, 'High']], (v) => setSetting('stick', +v))));

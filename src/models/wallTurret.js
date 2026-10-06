@@ -21,65 +21,121 @@ const C = {
 export function createWallTurret({ heavy = true, rockets = false, y = 2.6 } = {}) {
   const group = new THREE.Group();
   // the carriage: clamped on the rail behind (+x, against the wall), its
-  // arm reaching out to the pod
+  // arm reaching out to the pod: a heavy slab with rollers top and bottom,
+  // a hazard band, cable runs, a hydraulic ram under the arm, a beacon
   const carriage = new THREE.Group();
   carriage.position.y = y;
   group.add(carriage);
-  put(carriage, box(0.5, 1.1, 1.3, C.steel, { r: 0.04 }), -0.9, 0, 0);
-  for (const s of [-1, 1]) put(carriage, cyl(0.12, 0.2, C.dark, { axis: 'x', seg: 8 }), -1.1, 0.42, s * 0.42); // rollers on the rail
-  for (const s of [-1, 1]) put(carriage, cyl(0.12, 0.2, C.dark, { axis: 'x', seg: 8 }), -1.1, -0.42, s * 0.42);
-  for (let i = 0; i < 4; i++) put(carriage, box(0.52, 0.1, 0.12, i % 2 ? C.dark : C.hazard), -0.9, -0.48, -0.45 + i * 0.3); // hazard band
-  put(carriage, box(0.7, 0.3, 0.4, C.plate, { r: 0.03 }), -0.45, 0, 0); // the arm
-  // the pod: turns on the arm's end
+  put(carriage, box(0.5, 1.2, 1.4, C.steel, { r: 0.04 }), -0.9, 0, 0);
+  put(carriage, box(0.08, 1.0, 1.2, C.plate, { r: 0.02 }), -0.62, 0, 0); // face plate
+  for (const yy of [-0.36, 0, 0.36]) for (const s of [-1, 1]) put(carriage, box(0.03, 0.05, 0.05, C.dark), -0.57, yy, s * 0.5); // its bolts
+  for (const yy of [0.47, -0.47]) for (const s of [-1, 1]) {
+    put(carriage, cyl(0.13, 0.22, C.dark, { axis: 'x', seg: 10 }), -1.1, yy, s * 0.46); // rollers on the rail
+    put(carriage, cyl(0.06, 0.24, C.plate, { axis: 'x', seg: 8 }), -1.1, yy, s * 0.46);
+  }
+  for (let i = 0; i < 5; i++) put(carriage, box(0.52, 0.1, 0.13, i % 2 ? C.dark : C.hazard), -0.9, -0.55, -0.56 + i * 0.28); // hazard band
+  for (const s of [-1, 1]) put(carriage, cyl(0.035, 1.1, C.dark, { seg: 6 }), -0.72, 0.05, s * 0.62); // cable runs down its sides
+  put(carriage, box(0.75, 0.34, 0.46, C.plate, { r: 0.04 }), -0.45, 0.05, 0); // the arm
+  for (const s of [-1, 1]) put(carriage, box(0.6, 0.06, 0.03, C.dark), -0.45, 0.05, s * 0.24); // its edge strips
+  const ram = put(carriage, cyl(0.06, 0.62, C.plate, { axis: 'x', seg: 8 }), -0.42, -0.24, 0); // hydraulic ram under it
+  ram.rotation.z = 0.25;
+  put(carriage, cyl(0.035, 0.5, 0x8a9096, { axis: 'x', seg: 6 }), -0.3, -0.21, 0).rotation.z = 0.25; // its rod
+  const beacon = put(carriage, cyl(0.07, 0.1, 0xff7a1f, { seg: 8, glow: true }), -0.9, 0.66, 0); // a warning beacon
+  put(carriage, cyl(0.09, 0.03, C.dark, { seg: 8 }), -0.9, 0.61, 0);
+  // the pod: turns on the arm's end, a slewing ring under it
   const pod = new THREE.Group();
   pod.position.set(-0.05, 0, 0);
   carriage.add(pod);
+  put(pod, cyl(0.36, 0.08, C.dark, { seg: 16 }), -0.05, -0.36, 0); // slewing ring
   const lenses = [];
   const gun = new THREE.Group();
   const tubes = []; // (the rocket pod's: where each rocket leaves from)
   const podGlow = [];
+  // vents on a side plate; a short armoured sensor with a lens
+  const vents = (parent, x, yy, z, n, w) => {
+    for (let i = 0; i < n; i++) put(parent, box(w, 0.035, 0.02, C.dark), x, yy - i * 0.07, z);
+  };
   if (rockets) {
-    // a box launcher: six tubes in two rows, angled up, a red sight on top
+    // a box launcher: six capped tubes in two rows in an armoured frame,
+    // angled up; hazard stripes; a sensor block with a red eye on top
     put(pod, box(0.8, 0.6, 0.9, C.steel, { r: 0.06 }), -0.1, 0, 0);
+    for (const s of [-1, 1]) vents(pod, -0.15, 0.15, s * 0.46, 4, 0.4);
     gun.position.set(0.25, 0.1, 0);
     gun.rotation.z = 0.5;
     pod.add(gun);
-    put(gun, box(0.9, 0.62, 0.95, C.plate, { r: 0.05 }), 0.2, 0, 0);
+    put(gun, box(0.9, 0.66, 1.0, C.plate, { r: 0.05 }), 0.2, 0, 0);
+    for (const s of [-1, 1]) put(gun, box(0.95, 0.72, 0.06, C.steel, { r: 0.02 }), 0.2, 0, s * 0.53); // cheek armour
+    put(gun, box(0.95, 0.06, 1.1, C.steel, { r: 0.02 }), 0.2, 0.36, 0); // top plate
+    for (let i = 0; i < 5; i++) put(gun, box(0.12, 0.062, 0.18, i % 2 ? C.dark : C.hazard), -0.05 + i * 0.12, 0.38, 0.38).rotation.y = 0.6;
     for (const ty of [-0.15, 0.15]) {
       for (const tz of [-0.3, 0, 0.3]) {
-        put(gun, cyl(0.11, 0.06, C.dark, { axis: 'x', seg: 8 }), 0.66, ty, tz);
+        put(gun, cyl(0.12, 0.08, C.steel, { axis: 'x', seg: 10 }), 0.63, ty, tz); // the tube's lip
+        put(gun, cyl(0.09, 0.05, C.dark, { axis: 'x', seg: 10 }), 0.67, ty, tz); // its mouth
+        put(gun, cyl(0.04, 0.04, 0xb03a2a, { axis: 'x', seg: 8 }), 0.66, ty, tz); // the rocket's red nose inside
         tubes.push(new THREE.Vector3(0.7, ty, tz));
       }
     }
     const glowM = put(gun, box(0.04, 0.5, 0.8, 0xff5a2a, { glow: true }), 0.7, 0, 0);
     glowM.visible = false;
     podGlow.push(glowM);
-    lenses.push(put(pod, cyl(0.07, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.32, 0.38, 0.3));
-    put(pod, box(0.3, 0.16, 0.2, C.dark, { r: 0.03 }), 0.15, 0.38, 0.3);
+    put(pod, box(0.34, 0.2, 0.24, C.dark, { r: 0.03 }), 0.12, 0.4, 0.3);
+    put(pod, box(0.08, 0.04, 0.26, C.plate), 0.3, 0.52, 0.3); // its hood
+    lenses.push(put(pod, cyl(0.07, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.31, 0.4, 0.3));
   } else if (heavy) {
+    // a squat armoured pod: a sloped glacis, spaced side plates bolted on,
+    // vents, the big red eye in its housing; the long beam cannon out of
+    // a heavy mantlet: a ribbed cooling jacket, field coils, a slotted brake
     put(pod, box(1.2, 0.9, 1.1, C.steel, { r: 0.08 }), 0, 0, 0);
-    put(pod, box(0.5, 0.7, 1.0, C.plate, { r: 0.06 }), 0.55, -0.05, 0).rotation.z = -0.35; // sloped face
-    for (const s of [-1, 1]) put(pod, box(0.9, 0.6, 0.05, C.plate, { r: 0.02 }), 0, 0, s * 0.57);
-    lenses.push(put(pod, cyl(0.16, 0.06, C.eye, { axis: 'x', seg: 12, glow: true }), 0.62, 0.3, 0.32));
-    put(pod, cyl(0.2, 0.05, C.dark, { axis: 'x', seg: 12 }), 0.6, 0.3, 0.32);
+    put(pod, box(0.5, 0.74, 1.04, C.plate, { r: 0.06 }), 0.55, -0.05, 0).rotation.z = -0.35; // sloped face
+    put(pod, box(1.0, 0.08, 1.0, C.plate, { r: 0.03 }), -0.1, 0.48, 0); // roof plate
+    for (const s of [-1, 1]) {
+      put(pod, box(0.95, 0.64, 0.05, C.plate, { r: 0.02 }), 0, 0, s * 0.6); // spaced side plates
+      for (const xx of [-0.35, 0, 0.35]) for (const yy of [-0.22, 0.22]) put(pod, box(0.04, 0.04, 0.03, C.dark), xx, yy, s * 0.63);
+      vents(pod, -0.45, 0.2, s * 0.56, 4, 0.18);
+      for (let i = 0; i < 4; i++) put(pod, box(0.14, 0.06, 0.04, i % 2 ? C.dark : C.hazard), -0.35 + i * 0.14, -0.38, s * 0.63);
+    }
+    put(pod, box(0.3, 0.26, 0.3, C.dark, { r: 0.04 }), 0.5, 0.32, 0.32); // the eye's housing
+    put(pod, box(0.08, 0.04, 0.34, C.plate), 0.66, 0.46, 0.32); // its brow
+    lenses.push(put(pod, cyl(0.15, 0.06, C.eye, { axis: 'x', seg: 12, glow: true }), 0.66, 0.31, 0.32));
+    put(pod, cyl(0.2, 0.05, C.dark, { axis: 'x', seg: 12 }), 0.64, 0.31, 0.32);
+    for (const s of [-1, 1]) put(pod, cyl(0.025, 0.5, C.dark, { seg: 5 }), -0.4, 0.7, s * 0.3); // antennas
     gun.position.set(0.6, -0.05, -0.12);
     pod.add(gun);
-    put(gun, cyl(0.14, 0.4, C.gun, { axis: 'x', seg: 10 }), 0.15, 0, 0);
-    put(gun, cyl(0.09, 2.2, C.gun, { axis: 'x', seg: 10 }), 1.2, 0, 0);
-    put(gun, box(0.26, 0.2, 0.26, C.dark, { r: 0.03 }), 2.3, 0, 0); // muzzle brake
+    put(gun, box(0.4, 0.5, 0.5, C.plate, { r: 0.05 }), 0.05, 0, 0); // the mantlet
+    put(gun, cyl(0.16, 0.42, C.gun, { axis: 'x', seg: 12 }), 0.4, 0, 0);
+    put(gun, cyl(0.13, 0.9, C.steel, { axis: 'x', seg: 12 }), 1.0, 0, 0); // the cooling jacket
+    for (let i = 0; i < 6; i++) put(gun, cyl(0.155, 0.04, C.dark, { axis: 'x', seg: 12 }), 0.62 + i * 0.15, 0, 0); // its ribs
+    put(gun, cyl(0.09, 1.1, C.gun, { axis: 'x', seg: 10 }), 1.95, 0, 0);
+    for (const xx of [1.55, 1.85, 2.15]) put(gun, cyl(0.12, 0.06, 0xb04a2a, { axis: 'x', seg: 10, glow: true }), xx, 0, 0); // field coils
+    put(gun, box(0.3, 0.22, 0.28, C.dark, { r: 0.03 }), 2.32, 0, 0); // muzzle brake
+    for (const s of [-1, 1]) put(gun, box(0.2, 0.08, 0.04, C.steel), 2.32, 0, s * 0.15); // its slots
+    put(gun, cyl(0.03, 1.2, C.dark, { axis: 'x', seg: 5 }), 0.9, 0.17, 0); // a cable along it
   } else {
+    // the quick turret: a compact pod, twin guns in a shroud, ammo boxes
+    // either side feeding them, the camera up top in a hooded box
     put(pod, box(0.85, 0.65, 0.85, C.steel, { r: 0.07 }), 0, 0, 0);
-    put(pod, box(0.3, 0.5, 0.75, C.plate, { r: 0.05 }), 0.42, 0, 0).rotation.z = -0.3;
+    put(pod, box(0.3, 0.55, 0.8, C.plate, { r: 0.05 }), 0.42, 0, 0).rotation.z = -0.3;
+    for (const s of [-1, 1]) {
+      put(pod, box(0.5, 0.36, 0.18, 0x4f5a3a, { r: 0.03 }), -0.1, -0.05, s * 0.52); // ammo boxes
+      put(pod, box(0.5, 0.05, 0.19, C.dark), -0.1, 0.13, s * 0.52);
+      for (let i = 0; i < 4; i++) put(pod, box(0.04, 0.05, 0.08, 0xc9a24a), 0.2, 0.1 - i * 0.02, s * (0.42 - i * 0.07)); // the belts in
+    }
+    vents(pod, -0.3, 0.2, 0.43, 3, 0.25);
     gun.position.set(0.45, -0.05, 0);
     pod.add(gun);
+    put(gun, box(0.36, 0.32, 0.56, C.plate, { r: 0.03 }), 0, 0, 0); // the breech block
+    put(gun, box(0.7, 0.14, 0.5, C.steel, { r: 0.03 }), 0.5, 0, 0); // the shroud
     for (const z of [-0.14, 0.14]) {
-      put(gun, cyl(0.05, 1.3, C.gun, { axis: 'x', seg: 8 }), 0.7, 0, z);
-      put(gun, cyl(0.07, 0.18, C.dark, { axis: 'x', seg: 8 }), 1.32, 0, z); // flash hiders
+      put(gun, cyl(0.06, 0.55, C.gun, { axis: 'x', seg: 8 }), 0.9, 0, z); // perforated jacket
+      for (let i = 0; i < 3; i++) put(gun, cyl(0.065, 0.03, C.dark, { axis: 'x', seg: 8 }), 0.72 + i * 0.15, 0, z);
+      put(gun, cyl(0.04, 0.3, C.gun, { axis: 'x', seg: 8 }), 1.25, 0, z);
+      put(gun, cyl(0.07, 0.16, C.dark, { axis: 'x', seg: 8 }), 1.38, 0, z); // flash hiders
     }
-    put(gun, box(0.3, 0.3, 0.5, C.plate, { r: 0.03 }), 0, 0, 0); // the breech block
-    // the camera on top
-    put(pod, box(0.4, 0.22, 0.26, C.dark, { r: 0.03 }), 0.05, 0.45, 0);
-    lenses.push(put(pod, cyl(0.08, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.27, 0.45, 0));
+    // the camera on top, hooded, on a little mast
+    put(pod, cyl(0.04, 0.12, C.dark, { seg: 6 }), 0.05, 0.39, 0);
+    put(pod, box(0.42, 0.22, 0.28, C.dark, { r: 0.03 }), 0.05, 0.52, 0);
+    put(pod, box(0.12, 0.04, 0.3, C.plate), 0.24, 0.65, 0); // its hood
+    lenses.push(put(pod, cyl(0.08, 0.05, C.eye, { axis: 'x', seg: 10, glow: true }), 0.28, 0.52, 0));
   }
   const tip = rockets ? 0.75 : heavy ? 2.45 : 1.45;
   const muzzleGlow = new THREE.Mesh(new THREE.IcosahedronGeometry(heavy ? 0.2 : 0.13, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
@@ -103,6 +159,7 @@ export function createWallTurret({ heavy = true, rockets = false, y = 2.6 } = {}
       return;
     }
     const charge = ctx.charge ?? 0;
+    beacon.visible = Math.sin(t * 7) > -0.2; // (the beacon blinks)
     let d = (ctx.aimYaw ?? 0) - pod.rotation.y;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     pod.rotation.y += d * Math.min(1, dt * 6);
@@ -159,6 +216,7 @@ export function createWallTurret({ heavy = true, rockets = false, y = 2.6 } = {}
     for (const l of lenses) l.material = toon(C.dead);
     muzzleGlow.visible = false;
     for (const g of podGlow) g.visible = false;
+    beacon.visible = false;
   }
   const tmp = new THREE.Vector3();
   function muzzle() {
