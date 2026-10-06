@@ -140,16 +140,14 @@ function dress(bone, role) {
       at(h, mesh(new THREE.SphereGeometry(14, 8, 6), 0x2a2826), -24, -96, 92); // the mic
     }
   }
-  // the gunner carries a round for the gun, shouldered: gripped low in his
-  // right hand, which is raised to the front of his shoulder, the round
-  // standing upright against it (kept upright in update)
+  // the gunner carries a round for the gun: hugged upright against the
+  // front of his shoulder and chest, his arm wrapped round it (placed and
+  // kept upright in update)
   if (role === 'gunner') {
     const r = new THREE.Group();
-    bone.arms[1].hand.add(r);
+    bone.chest.add(r);
     bone.carry = r;
-    const k = new THREE.Group();
-    r.add(k);
-    bone.carryInner = k;
+    const k = r;
     at(k, mesh(new THREE.CylinderGeometry(24, 26, 170, 10), C.brass), 0, 40, 0);
     at(k, mesh(new THREE.CylinderGeometry(28, 28, 10, 10), 0x8a6a2e), 0, -45, 0); // the rim
     at(k, mesh(new THREE.CylinderGeometry(16, 24, 90, 10), 0x4f5a3a), 0, 170, 0); // the shell
@@ -174,7 +172,10 @@ function dress(bone, role) {
 
 // the gunner's carrying arm, and where the round sits against his hand
 // (holder frame: x to his left/right, y up, z forward, model units)
-export const CARRY = { down: 1.0, swing: 0.35, out: 0.4, bend: 1.75, twist: 0, x: -6, y: -40, z: -26 };
+export const CARRY = { down: 1.3, swing: 0, out: 0, bend: 1.6, twist: 0, x: 90, y: -115, z: -20, tilt: 0, roll: 1.3, ra: 2 };
+const cv = new THREE.Vector3();
+const cw = new THREE.Vector3();
+const qc = new THREE.Quaternion();
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 const Z = new THREE.Vector3(0, 0, 1);
@@ -311,6 +312,7 @@ export function createCrew({ layer = null, role = null } = {}) {
         // (the gunner's carrying arm: raised, elbow bent, the hand at his
         // shoulder; it doesn't swing)
         armTo(arm, CARRY.down, CARRY.swing, CARRY.out);
+        arm.upper.quaternion.multiply(qa.setFromAxisAngle([X, Y, Z][CARRY.ra], -arm.side * CARRY.roll)); // turned in, so the forearm comes across the front
         pose(arm.fore, [Y, -arm.side * CARRY.bend], [X, CARRY.twist]);
         pose(arm.hand, [Y, -arm.side * 0.2]);
         continue;
@@ -322,11 +324,15 @@ export function createCrew({ layer = null, role = null } = {}) {
     }
     // the round stays upright whatever the hand's turn
     if (bone.carry) {
-      bone.carry.parent.updateWorldMatrix(true, false);
-      bone.carry.parent.getWorldQuaternion(qa).invert();
+      const chest = bone.carry.parent;
+      chest.updateWorldMatrix(true, false);
       group.getWorldQuaternion(qb);
-      bone.carry.quaternion.copy(qa).multiply(qb);
-      bone.carryInner.position.set(CARRY.x, CARRY.y, CARRY.z);
+      // where it sits: off the chest, in his own upright frame (forward,
+      // up, to the side), in model units
+      const at = chest.getWorldPosition(cv).add(cw.set(CARRY.x, CARRY.y, CARRY.z).multiplyScalar(HEIGHT / MODEL_H).applyQuaternion(qb));
+      bone.carry.position.copy(chest.worldToLocal(at));
+      chest.getWorldQuaternion(qa).invert();
+      bone.carry.quaternion.copy(qa).multiply(qb).multiply(qc.setFromAxisAngle(X, CARRY.tilt));
     }
   }
   return { group, update, ready };
