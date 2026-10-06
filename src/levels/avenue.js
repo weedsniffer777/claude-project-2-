@@ -1860,7 +1860,7 @@ function buildAvenue(scene) {
           if (atDoor(api, shackB)) {
             go(7);
             if (api.enemiesAlive) api.clearEnemies(); // left behind
-            api.depot(shackB, { offers: ['dozer', 'autoloader', 'era'], onLeave: () => startSector3(api) }); // (the two not taken at the first; the stars make a second of one an improvement)
+            api.depot(shackB, { offers: ['dozer', 'autoloader', 'era', 'magnet'], onLeave: () => startSector3(api) }); // (the two not taken at the first, and the Magnet; the stars make a second of one an improvement)
           }
           break;
       }

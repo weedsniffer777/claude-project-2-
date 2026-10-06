@@ -77,6 +77,16 @@ export function partPicture(renderer, id, W = 84, H = 56) {
     // mostly off to the side)
     const at = vulcanTank.gunPivot.localToWorld(new THREE.Vector3(1.0, 0, 0));
     pic = snapshotCanvas(renderer, vulcanTank.group, W, H, null, { target: at, dir: new THREE.Vector3(0.55, 0.5, 1), half: 1.0 });
+  } else if (id === 'magnet') {
+    // a horseshoe magnet, red and blue tips, pulling: drawn, not the model
+    const art = magnetArt();
+    pic = document.createElement('canvas');
+    pic.width = W;
+    pic.height = H;
+    const g = pic.getContext('2d');
+    const k = Math.max(1, Math.floor(Math.min(W / art.width, H / art.height)));
+    g.imageSmoothingEnabled = false;
+    g.drawImage(art, Math.round((W - art.width * k) / 2), Math.round((H - art.height * k) / 2), art.width * k, art.height * k);
   } else if (id === 'mirv') {
     // nothing on the tank to show: its pixel picture, scaled up whole
     const art = mirvCanvas(1);
@@ -93,4 +103,55 @@ export function partPicture(renderer, id, W = 84, H = 56) {
   const url = pic.toDataURL();
   cache.set(key, url);
   return url;
+}
+
+// A horseshoe magnet in pixels (32x24): a grey U, lit on one side, shaded on
+// the other, a black edge; the left tip red, the right blue; little pull
+// lines under the tips.
+let magnetCache = null;
+function magnetArt() {
+  if (magnetCache) return magnetCache;
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 24;
+  const g = c.getContext('2d');
+  const cx = 15.5;
+  const cy = 9.5;
+  const R = 8.5;
+  const r = 3.5;
+  const BOT = 19;
+  const inside = (x, y) => {
+    const dx = x - cx;
+    if (y <= cy) {
+      const d = Math.hypot(dx, y - cy);
+      return d <= R && d >= r;
+    }
+    return y <= BOT && Math.abs(dx) <= R && Math.abs(dx) >= r;
+  };
+  for (let y = 0; y < 24; y++) {
+    for (let x = 0; x < 32; x++) {
+      const px = x + 0.5;
+      const py = y + 0.5;
+      if (inside(px, py)) {
+        let col = px < cx ? '#a7adb4' : '#7c838b';
+        if (Math.hypot(px - cx, py - cy) > R - 1.5 && py < cy && px < cx + 2) col = '#d2d6db'; // lit rim
+        if (py > BOT - 4) col = px < cx ? '#e0483a' : '#3a7bd5';
+        if (py > BOT - 4 && Math.abs(px - cx) > R - 1.5) col = px < cx ? '#a3281d' : '#24519a';
+        g.fillStyle = col;
+        g.fillRect(x, y, 1, 1);
+      } else if (inside(px + 1, py) || inside(px - 1, py) || inside(px, py + 1) || inside(px, py - 1)) {
+        g.fillStyle = '#111';
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  // the pull: little dashes under the tips
+  g.fillStyle = '#f1e9d8';
+  for (const x of [9, 22]) {
+    g.fillRect(x, 21, 2, 1);
+    g.fillRect(x - 1, 23, 1, 1);
+    g.fillRect(x + 2, 23, 1, 1);
+  }
+  magnetCache = c;
+  return c;
 }

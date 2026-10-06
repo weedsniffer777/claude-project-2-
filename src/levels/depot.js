@@ -163,7 +163,6 @@ export function buildShack(B, { x0, x1, z0, z1, fill, heightAt, label = 'CHECKPO
     }
     put(roof, box(L + 0.9, 0.12, 0.3, 0x45484c), 0, 0.58, 0);
     // a snow crust, and a hole where a sheet blew off
-    put(roof, box(L * 0.6, 0.05, 1.6, 0xd3d6db), -L * 0.15, 0.48, -Wd * 0.22).rotation.x = -0.12;
     roof.position.set(cx, H, cz);
     B.add(roof);
   }

@@ -140,7 +140,7 @@ const CSS = `
 .base-endless .note { font-size: 12px; color: #8f877a; }
 .base-endless .row { display: flex; gap: 10px; }
 @media (max-width: 640px) { .base-endless .top { grid-template-columns: 1fr; } .base-endless .etrack { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
-.base-tag.locked::after { content: 'Locked'; margin-left: 6px; padding: 1px 4px; font-size: 9px; color: #b9b0a0; background: #2a262c; box-shadow: 0 0 0 2px #000; }
+.base-tag.locked::after { content: 'Locked · Lvl 3'; margin-left: 6px; padding: 1px 4px; font-size: 9px; color: #b9b0a0; background: #2a262c; box-shadow: 0 0 0 2px #000; }
 .base-tag.newroom::after { content: 'New!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 .base-crew .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .base-crew .card { display: grid; gap: 8px; align-content: start; justify-items: center; padding: 12px 10px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }

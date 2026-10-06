@@ -368,33 +368,40 @@ function drawSwapButton(c) {
   px(18, 6, 1, 2, '#b9b0a0');
   px(17, 5, 1, 4, '#b9b0a0');
 }
+// The touch FIRE button: a round yellow button (a true circle, worked out
+// pixel by pixel, 22 px so it scales by exactly 4 into its 88 px box), a black rim, a lit top edge; on it a reticle, round too:
+// a dark ring, four ticks in toward the middle, a red dot.
 function drawFireButton(c) {
   const g = c.getContext('2d');
-  const px = (x, y, w, h, col) => {
-    g.fillStyle = col;
-    g.fillRect(x, y, w, h);
-  };
-  g.clearRect(0, 0, 26, 26);
-  // body: an octagon of yellow on black
-  px(4, 0, 18, 26, '#111');
-  px(0, 4, 26, 18, '#111');
-  px(2, 2, 22, 22, '#111');
-  px(5, 1, 16, 24, '#c98a1c');
-  px(1, 5, 24, 16, '#c98a1c');
-  px(3, 3, 20, 20, '#c98a1c');
-  px(5, 2, 16, 21, '#ffc24a');
-  px(2, 5, 22, 15, '#ffc24a');
-  px(4, 3, 18, 19, '#ffc24a');
-  px(5, 2, 16, 2, '#ffe29a'); // lit top edge
-  px(2, 5, 2, 8, '#ffe29a');
-  // a reticle: a dark ring, four ticks with a gap at the middle, a dot
-  const ring = [[10, 5, 6, 1], [8, 6, 2, 1], [16, 6, 2, 1], [7, 7, 1, 2], [18, 7, 1, 2], [6, 9, 1, 8], [19, 9, 1, 8], [7, 17, 1, 2], [18, 17, 1, 2], [8, 19, 2, 1], [16, 19, 2, 1], [10, 20, 6, 1]];
-  for (const [x, y, w, h] of ring) px(x, y, w, h, '#111');
-  px(12, 3, 2, 6, '#111'); // ticks, in past the ring
-  px(12, 17, 2, 6, '#111');
-  px(3, 12, 6, 2, '#111');
-  px(17, 12, 6, 2, '#111');
-  px(12, 12, 2, 2, '#b3261e'); // the dot
+  const N = c.width;
+  const m = (N - 1) / 2;
+  g.clearRect(0, 0, N, N);
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      const d = Math.hypot(x - m, y - m);
+      let col = null;
+      if (d <= m + 0.5) col = '#111';
+      if (d <= m - 1) col = '#c98a1c';
+      if (d <= m - 2) col = y - m < -(m - 5) * 0.55 && d > m - 4 ? '#ffe29a' : '#ffc24a';
+      // the reticle's ring
+      if (Math.abs(d - m * 0.5) < 0.75) col = '#111';
+      if (col) {
+        g.fillStyle = col;
+        g.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  // ticks, crossing the ring in toward the middle (gap at the centre)
+  g.fillStyle = '#111';
+  const t = Math.round(m * 0.5);
+  const L = Math.round(m * 0.42);
+  const c0 = Math.floor(m);
+  g.fillRect(c0, c0 - t - L / 2, 2, L);
+  g.fillRect(c0, c0 + 2 + t - L / 2, 2, L);
+  g.fillRect(c0 - t - L / 2, c0, L, 2);
+  g.fillRect(c0 + 2 + t - L / 2, c0, L, 2);
+  g.fillStyle = '#b3261e';
+  g.fillRect(c0, c0, 2, 2);
 }
 function drawAbility(c, k, lit, art, active = null) {
   const g = c.getContext('2d');
@@ -430,7 +437,7 @@ let artNext = 0;
 const artId = (o) => artIds.get(o) ?? (artIds.set(o, ++artNext), artNext);
 
 // A part's pixel icon (rows of characters, one per pixel).
-const ICON_INK = { '#': '#f1e9d8', '+': '#ffb347', '-': '#8a9097', '*': '#5fe6ff', '%': '#ff6fd8' };
+const ICON_INK = { '#': '#f1e9d8', '+': '#ffb347', '-': '#8a9097', '*': '#5fe6ff', '%': '#ff6fd8', r: '#e0483a', b: '#3a7bd5' };
 function drawIcon(c, rows) {
   const g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height);
@@ -517,7 +524,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy enemy</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-fire" hidden><canvas width="26" height="26"></canvas></div>
+    <div class="hud-fire" hidden><canvas width="22" height="22"></canvas></div>
     <div class="hud-swap" hidden><canvas width="22" height="14"></canvas></div>
     <button type="button" class="hud-pausebtn" hidden aria-label="Pause"><i></i><i></i></button>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
