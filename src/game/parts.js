@@ -724,36 +724,12 @@ export const PARTS = {
       { text: 'Pulls from further still.', apply: (s) => (s.magnet *= 1.25) },
       { text: 'Pulls from further still.', apply: (s) => (s.magnet *= 1.2) },
     ],
-    // on the turret roof, at the back
-    build(t) {
-      const g = magnetHead();
-      g.position.set(-0.55, 0.5, 0.28);
-      g.scale.setScalar(0.5);
-      t.turret.add(g);
-      return g;
-    },
-    light(t) {
-      const g = magnetHead();
-      g.position.set(-0.55, 0.45, -0.35);
-      g.scale.setScalar(0.42);
-      t.turret.add(g);
-      return g;
-    },
-    missile(t) {
-      const g = magnetHead();
-      g.position.set(-0.3, 1.0, 0.55);
-      g.scale.setScalar(0.45);
-      t.chassis.add(g);
-      return g;
-    },
-    assault(t) {
-      const g = magnetHead();
-      g.position.set(-1.1, 0.77, -0.3);
-      g.scale.setScalar(0.42);
-      t.turret.add(g);
-      return g;
-    },
-    model: () => magnetHead(),
+    // (nothing shows on the tank)
+    build: () => new THREE.Group(),
+    light: () => new THREE.Group(),
+    missile: () => new THREE.Group(),
+    assault: () => new THREE.Group(),
+    model: () => horseshoeMagnet(),
   },
   // A laser rangefinder: sees further, and lays the gun true, so what the
   // shell (or missile) strikes takes more. Legendary: after every reload the
@@ -963,26 +939,23 @@ function mgMount() {
   return g;
 }
 
-// A crane electromagnet on a short post: a dark steel disc with a hazard-
-// striped rim, the copper coil housing on top, a blue glow under it, its
-// cable down the post.
-function magnetHead() {
+// A horseshoe magnet (its picture; nothing shows on the tank): a steel U,
+// the red pole on one leg's end, the blue on the other's.
+function horseshoeMagnet() {
   const g = new THREE.Group();
-  put(g, cyl(0.16, 0.06, DARK, { seg: 10 }), 0, 0.03, 0); // foot
-  put(g, cyl(0.05, 0.36, STEEL, { seg: 8 }), 0, 0.22, 0); // post
-  put(g, box(0.5, 0.05, 0.08, STEEL, { r: 0.01 }), 0.12, 0.42, 0); // the arm out
-  const head = new THREE.Group();
-  head.position.set(0.32, 0.32, 0);
-  g.add(head);
-  put(head, cyl(0.36, 0.13, 0x3a3d42, { seg: 18 }), 0, 0, 0); // the disc
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    put(head, box(0.12, 0.135, 0.05, i % 2 ? 0x1d1f22 : 0xd9b23a), Math.cos(a) * 0.355, 0, Math.sin(a) * 0.355).rotation.y = -a + Math.PI / 2;
+  const R = 0.32;
+  const T = 0.11;
+  const LEG = 0.34;
+  const steel = toon(0xb3b8bf);
+  const bend = new THREE.Mesh(new THREE.TorusGeometry(R, T, 10, 20, Math.PI), steel);
+  bend.position.y = LEG;
+  g.add(bend);
+  for (const [s, c] of [[-1, 0xe0483a], [1, 0x3a7bd5]]) {
+    put(g, cyl(T, LEG * 0.45, 0xb3b8bf, { seg: 12 }), s * R, LEG - LEG * 0.225, 0);
+    put(g, cyl(T * 1.02, LEG * 0.55, c, { seg: 12 }), s * R, LEG * 0.275, 0);
   }
-  put(head, cyl(0.2, 0.1, 0xb06a3a, { seg: 14 }), 0, 0.11, 0); // the coil housing
-  put(head, cyl(0.06, 0.08, DARK, { seg: 8 }), 0, 0.19, 0);
-  put(head, cyl(0.3, 0.02, 0x5fe6ff, { seg: 18, glow: true }), 0, -0.075, 0); // its face, live
-  put(g, cyl(0.02, 0.32, DARK, { seg: 5 }), 0.06, 0.2, 0.06); // the cable
+  // (an arch, the poles down; turned a touch to show it's round)
+  g.rotation.y = -0.35;
   return g;
 }
 

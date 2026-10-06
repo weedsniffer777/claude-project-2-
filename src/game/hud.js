@@ -372,36 +372,46 @@ function drawSwapButton(c) {
 // pixel by pixel, 22 px so it scales by exactly 4 into its 88 px box), a black rim, a lit top edge; on it a reticle, round too:
 // a dark ring, four ticks in toward the middle, a red dot.
 function drawFireButton(c) {
+  // (44px, shown at exactly 2x): a round brass button, lit from the top
+  // left, a dark rim and bevel; on it a two-ring reticle, ticks reaching in
+  // from the outer ring to the inner, a red dot in the middle
   const g = c.getContext('2d');
   const N = c.width;
-  const m = (N - 1) / 2;
+  const m = N / 2;
+  const R = m - 0.5;
   g.clearRect(0, 0, N, N);
+  const ink = '#1a1410';
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
-      const d = Math.hypot(x - m, y - m);
+      const px = x + 0.5 - m;
+      const py = y + 0.5 - m;
+      const d = Math.hypot(px, py);
       let col = null;
-      if (d <= m + 0.5) col = '#111';
-      if (d <= m - 1) col = '#c98a1c';
-      if (d <= m - 2) col = y - m < -(m - 5) * 0.55 && d > m - 4 ? '#ffe29a' : '#ffc24a';
-      // the reticle's ring
-      if (Math.abs(d - m * 0.5) < 0.75) col = '#111';
+      if (d <= R) col = ink;
+      if (d <= R - 1.5) col = '#9a6414'; // bevel, dark
+      if (d <= R - 1.5 && (px + py) / Math.max(d, 1e-3) < -0.35) col = '#e0a43a'; // bevel, lit
+      if (d <= R - 3.5) {
+        // the face: a lit top-left, shading to the bottom right
+        const k = (px + py) / (2 * R);
+        col = k < -0.28 ? '#ffd877' : k < 0.12 ? '#ffc24a' : k < 0.36 ? '#f1ad33' : '#e39c26';
+      }
+      // the rings
+      const outer = R * 0.66;
+      const inner = R * 0.3;
+      if (d <= R - 3.5 && Math.abs(d - outer) < 1.0) col = ink;
+      if (Math.abs(d - inner) < 0.8) col = ink;
+      // ticks: from just outside the outer ring in to the inner one
+      const ax = Math.abs(px);
+      const ay = Math.abs(py);
+      if ((ax < 1 && ay > inner + 2 && ay < outer + 4) || (ay < 1 && ax > inner + 2 && ax < outer + 4)) col = ink;
+      // the dot
+      if (d < 1.6) col = '#c8261c';
       if (col) {
         g.fillStyle = col;
         g.fillRect(x, y, 1, 1);
       }
     }
   }
-  // ticks, crossing the ring in toward the middle (gap at the centre)
-  g.fillStyle = '#111';
-  const t = Math.round(m * 0.5);
-  const L = Math.round(m * 0.42);
-  const c0 = Math.floor(m);
-  g.fillRect(c0, c0 - t - L / 2, 2, L);
-  g.fillRect(c0, c0 + 2 + t - L / 2, 2, L);
-  g.fillRect(c0 - t - L / 2, c0, L, 2);
-  g.fillRect(c0 + 2 + t - L / 2, c0, L, 2);
-  g.fillStyle = '#b3261e';
-  g.fillRect(c0, c0, 2, 2);
 }
 function drawAbility(c, k, lit, art, active = null) {
   const g = c.getContext('2d');
@@ -524,7 +534,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy enemy</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-fire" hidden><canvas width="22" height="22"></canvas></div>
+    <div class="hud-fire" hidden><canvas width="44" height="44"></canvas></div>
     <div class="hud-swap" hidden><canvas width="22" height="14"></canvas></div>
     <button type="button" class="hud-pausebtn" hidden aria-label="Pause"><i></i><i></i></button>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
