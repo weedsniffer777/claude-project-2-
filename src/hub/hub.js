@@ -223,6 +223,10 @@ const CSS = `
 .base-brief .node .hardtag.tanktag { background: #2f8a4a; animation-duration: 1.4s; }
 .base-brief .node .hardtag.tanktag::after { background: #2f8a4a; }
 .base-brief .node .hardtag.tanktag small { color: #c9f5d4; }
+.base-brief .node .hardtag.equiptag { background: #1f7a8c; animation-duration: 1.3s; }
+.base-brief .node .hardtag.equiptag::after { background: #1f7a8c; }
+.base-brief .node .hardtag.equiptag small { color: #c8f6ff; }
+.base-brief .node .hardtag .rw.eq { width: 64px; height: 48px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff, 0 0 10px #5fe6ff99; }
 .base-brief .node .hardtag .rw.tk { width: 84px; height: 49px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 10px #6be08a99; }
 .base-brief .node .hardtag.tanktag em { background: #6be08a; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
@@ -1283,7 +1287,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const label = dir > 0 ? 'Next area' : 'Previous area';
       return `<button type="button" class="pageturn ${dir > 0 ? 'up' : 'down'}${glow ? ' glow' : ''}" data-to="${to}"><i></i><span>${label}</span>${glow ? '<em>New</em>' : ''}</button>`;
     };
-    map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;
+    map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : newEquip(z) ? equipTag(z) : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;
     map.prepend(mapCanvases[mapPage]);
     for (const b of map.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
     for (const b of map.querySelectorAll('.pageturn'))
@@ -1302,6 +1306,12 @@ export function createHub({ renderer, pixel, onDeploy }) {
   // with that tank's picture
   const newTank = (z) => z.id && z.first?.easy?.tank && TANKS[z.first.easy.tank] && !save.cleared().includes(clearKey(z.id, 'easy'));
   const tankTag = (z) => `<span class="hardtag rich tanktag">New tank<small>First clear:</small><span class="rw tk"><img alt="" src="${tankPicture(renderer, z.first.easy.tank, 120, 70)}"></span><em>${esc(TANKS[z.first.easy.tank].name)}</em></span>`;
+  // ... or new equipment: a cyan box with its icon, what it does on hover
+  const newEquip = (z) => z.id && z.first?.easy?.equipment && EQUIPMENT[z.first.easy.equipment] && !save.cleared().includes(clearKey(z.id, 'easy')) && !save.ownedEquipment().includes(z.first.easy.equipment);
+  const equipTag = (z) => {
+    const id = z.first.easy.equipment;
+    return `<span class="hardtag rich equiptag">New equipment<small>First clear:</small><span class="rw eq"><img alt="" src="${equipmentIcon(id)}"><div class="tip"><div class="fx-head">${esc(EQUIPMENT[id].name)}</div>${equipmentHtml(id)}</div></span><em>${esc(EQUIPMENT[id].name)}</em></span>`;
+  };
   const hardTag = (z) => {
     const id = z.first?.hard?.part;
     if (!id || !PARTS[id]) return '<span class="hardtag">Hard mode</span>';

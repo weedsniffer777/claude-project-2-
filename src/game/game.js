@@ -1196,9 +1196,11 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // the whole zoomed-out view: what's on screen once it pulls back
     const reach = ((camera.top - camera.bottom) / 2) * (stats.salvoZoom || 1) * 1.35;
     const foes = enemies.alive
-      .filter((e) => Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach)
+      .filter((e) => !(e.delay > 0) && Math.hypot(e.pos.x - pos.x, e.pos.z - pos.z) < reach)
       .sort((a, b) => b.hp - a.hp)
       .slice(0, N);
+    // nothing on screen (the view as it'll be once zoomed right out): no salvo
+    if (!foes.length) return void hud.damage(pos.clone().setY(pos.y + 2.4), 0, 'chain', 'MSL no targets!');
     const targets = foes.map((e) => ({ e }));
     const center = hasAim ? aimPoint.clone() : foes[0] ? foes[0].pos.clone() : pos.clone().add(new THREE.Vector3(Math.cos(tank.group.rotation.y) * 10, 0, -Math.sin(tank.group.rotation.y) * 10));
     for (let i = 0; targets.length < N; i++) {
@@ -1218,13 +1220,42 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
   // equipment's)
+  // The MIRV (the missile tank's Legendary): a missile splits in flight into
+  // three small fast warheads: one on its own target, the others on the
+  // nearest machines round it (or round its spot), 45% of its damage each
+  function splitWarheads(ms) {
+    const from = ms.m.position.clone();
+    const near = enemies.alive
+      .filter((x) => x !== ms.e && !(x.delay > 0) && Math.hypot(x.pos.x - ms.aim.x, x.pos.z - ms.aim.z) < 5)
+      .sort((a, b) => Math.hypot(a.pos.x - ms.aim.x, a.pos.z - ms.aim.z) - Math.hypot(b.pos.x - ms.aim.x, b.pos.z - ms.aim.z));
+    const fwd = ms.vel.clone().normalize();
+    combat.glow.flash(from, 0xffffff, 0.25, 1.6, 0.08);
+    combat.glow.flash(from, 0xffb347, 0.4, 2.2, 0.16);
+    combat.fx.burst(from, { count: 10, speed: 6, color: 0xffe6b0, life: 0.25, size: 0.06, gravity: 2 });
+    for (let k = 0; k < 3; k++) {
+      const e = k === 0 ? (ms.e?.alive ? ms.e : null) : near[k - 1] || null;
+      let point = null;
+      if (!e) {
+        const a = Math.random() * Math.PI * 2;
+        const r = k === 0 ? 0 : 0.9 + Math.random() * 1.2;
+        point = new THREE.Vector3(ms.aim.x + Math.cos(a) * r, 0, ms.aim.z + Math.sin(a) * r);
+        point.y = Math.max(ms.aim.y, (level.heightAt ? level.heightAt(point.x, point.z) : 0) + 0.2);
+      }
+      launchMissile(e, k, { point, from, warhead: true, damage: ms.damage * 0.45, blast: ms.blast * 0.7 });
+      // fanned out from the split, already at speed
+      const w = missiles[missiles.length - 1];
+      w.t = 0.25;
+      w.vel.copy(fwd).applyAxisAngle(UP, (k - 1) * 0.45).setY(fwd.y + (k === 1 ? 0.15 : 0)).multiplyScalar(EQUIPMENT.atgm.speed * 1.1);
+    }
+  }
   function launchMissile(e, k, o = {}) {
     const E = EQUIPMENT.atgm;
     // off the turret roof, left, right, centre
     const side = new THREE.Vector3(-Math.sin(tank.group.rotation.y), 0, -Math.cos(tank.group.rotation.y));
     let from = pos.clone().add(new THREE.Vector3(0, 2.0, 0)).addScaledVector(side, [-0.5, 0.5, 0][k % 3]);
     let out = null; // the way the tube points
-    if (tank.missile) {
+    if (o.from) from = o.from.clone(); // (a MIRV warhead: from where it split)
+    else if (tank.missile) {
       // the missile tank: out of its pack, one canister after another
       const f = tank.fire();
       from = f.position;
@@ -1248,6 +1279,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     add(new THREE.SphereGeometry(0.13, 8, 6), 0xffffff, -0.48);
     const glow = add(new THREE.SphereGeometry(0.45, 10, 8), 0xffb347, -0.55, { transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending });
     const plume = add(new THREE.ConeGeometry(0.16, 0.9, 8).rotateX(-Math.PI / 2), 0xffe066, -0.95, { transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
+    if (o.warhead) m.scale.setScalar(0.6);
     m.position.copy(from);
     scene.add(m);
     const aim = e ? mslAim(e) : o.point.clone();
@@ -1255,7 +1287,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     if (out) dir.lerp(out, 0.6).setY(Math.max(0.5, out.y + 0.4)).normalize();
     else dir.addScaledVector(side, [-0.6, 0.6, 0][k % 3]).setY(1.1).normalize();
     if (o.top) dir.set((aim.x - from.x) * 0.04, 1, (aim.z - from.z) * 0.04).normalize(); // straight up first
-    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, equip: !!o.equip, apex: from.y + 6 + Math.random() * 2.5 });
+    missiles.push({ m, glow, plume, e, vel: dir.multiplyScalar(o.top ? 16 : 9), t: 0, last: from.clone(), aim, damage: o.damage ?? E.damage, blast: o.blast ?? E.blast, top: !!o.top, equip: !!o.equip, split: !!o.split, fast: !!o.warhead, apex: from.y + 6 + Math.random() * 2.5 });
+    if (o.warhead) return; // (split off in flight: no launch blast)
     // the launch: a hard white flash, a back-blast of smoke, a kick
     combat.glow.flash(from, 0xffffff, 0.3, 1.8, 0.1);
     combat.glow.flash(from, 0xffb347, 0.5, 2.6, 0.22);
@@ -1305,7 +1338,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       if (ms.e?.alive) ms.aim = mslAim(ms.e);
       const to = ms.aim.clone().sub(ms.m.position);
       const d = to.length();
-      const speed = Math.min(E.speed, 9 + ms.t * 70);
+      const speed = ms.fast ? Math.min(E.speed * 1.6, 26 + ms.t * 90) : Math.min(E.speed, 9 + ms.t * 70);
+      // MIRV: a beat out of the tube, it splits into three
+      if (ms.split && ms.t > 0.18) {
+        ms.m.removeFromParent();
+        missiles.splice(i, 1);
+        splitWarheads(ms);
+        continue;
+      }
       if (ms.top && !ms.dived) {
         // climbing; at the top a sharp turn and straight down at it
         ms.vel.y += dt * 20;
@@ -1729,7 +1769,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
   function fireMissileGun() {
     const e = hovered?.alive && !(hovered.delay > 0) ? hovered : null;
     const point = hasAim ? aimPoint.clone() : pos.clone().add(new THREE.Vector3(Math.cos(tank.group.rotation.y + tank.turret.rotation.y) * 12, 0.5, -Math.sin(tank.group.rotation.y + tank.turret.rotation.y) * 12));
-    launchMissile(e, 0, { point, damage: stats.cannonDamage, blast: stats.splash });
+    launchMissile(e, 0, { point, damage: stats.cannonDamage, blast: stats.splash, split: !!stats.mirv });
   }
   // Esc: pause (and resume)
   function setPaused(on) {
