@@ -3272,6 +3272,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       enemyPointers();
       pickups.bounds = run.mode === 'field' ? level.bounds : null;
       pickups.heightAt = level.heightAt;
+      pickups.magnet = stats.magnet; // (the Magnet part: drops fly in from further)
       pickups.update(dt, t, pos, camera, collect);
       level.update(dt, t, { combat, focus: camTarget, api });
       if (run.mode === 'depot') depotFrame(dt);

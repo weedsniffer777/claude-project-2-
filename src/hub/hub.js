@@ -183,6 +183,17 @@ const CSS = `
   font: 400 12px/1.3 'Pixelify Sans', monospace; color: #f1e9d8; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; white-space: normal; text-align: left; pointer-events: none; }
 .base-brief .rewards > span.got::after { content: '✓'; position: absolute; right: -4px; top: -6px; font: 400 12px/1 'Silkscreen', monospace; color: #111; background: #6be08a; padding: 2px 3px; box-shadow: 0 0 0 2px #000; }
 .base-brief .info .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.base-brief .info .loadout { display: flex; gap: 10px; align-items: center; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
+.base-brief .info .loadout .tk { width: 84px; height: 49px; image-rendering: pixelated; flex: none; }
+.base-brief .info .loadout .lo { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.base-brief .info .loadout .lo b { font: 400 11px/1.1 'Silkscreen', monospace; font-weight: 400; text-transform: uppercase; color: var(--amber); }
+.base-brief .info .loadout .lo small { font-size: 11px; color: #b9b0a0; }
+.base-brief .info .loadout .cells { display: flex; gap: 4px; flex-wrap: wrap; }
+.base-brief .info .loadout .cell { width: 30px; height: 22px; background: #121014; box-shadow: 0 0 0 1px #000, 0 0 0 2px #4a4540; }
+.base-brief .info .loadout .cell img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.base-brief .info .loadout .cell.eq { box-shadow: 0 0 0 1px #000, 0 0 0 2px #5fe6ff; margin-left: 4px; }
+.base-brief .info .loadout .cell.empty { box-shadow: 0 0 0 1px #000, 0 0 0 2px #c42a20; }
+.base-brief .info .loadout .tohangar { flex: none; padding: 8px 10px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; border: 0; cursor: var(--cursor); }
 /* portrait: the map on top, the details under it, all on one screen (the
    details shrink to fit what's left: fitBrief) */
 @media (orientation: portrait) and (max-width: 760px) {
@@ -1441,7 +1452,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
         }).join('')}</div>
         <span class="label">Possible resources</span>
         <div class="rewards res"><span class="res scr"><i></i>Scraps<div class="tip"><div class="fx-head">Scraps</div><div class="fx-how">Currency used for upgrades and purchases.</div></div></span><span class="res tok"><i></i>Tokens<div class="tip"><div class="fx-head">Tokens</div><div class="fx-how">Needed for promoting parts, tanks and drones.</div></div></span></div>
+        <span class="label">Your tank</span>
+        ${loadoutCard()}
         <div class="row"><button type="button" class="go">Play${diff === 'hard' ? ' on Hard' : ''}</button><button type="button" class="back">Back</button></div>`;
+      info.querySelector('.tohangar').addEventListener('click', toHangarNow);
       for (const b of info.querySelectorAll('.dtab:not(.locked)'))
         b.addEventListener('click', () => {
           save.setDifficulty(b.dataset.d);
@@ -1450,6 +1464,27 @@ export function createHub({ renderer, pixel, onDeploy }) {
       info.querySelector('.go').addEventListener('click', () => deploy(z.id));
     }
     info.querySelector('.back').addEventListener('click', closeRoom);
+  }
+
+  // what you're taking into the level: the tank, its parts (empty slots in
+  // red), its equipment; and the way to the hangar to change it
+  function loadoutCard() {
+    const t = save.tank();
+    const list = save.loadout(t).filter((p) => PARTS[p]);
+    const slots = tankDef(t).slots;
+    const eq = save.equipment(t);
+    const ownsGear = save.ownedEquipment().some((e) => EQUIPMENT[e]);
+    const cells = [
+      ...list.map((p) => `<span class="cell"><img alt="${esc(PARTS[p].name)}" title="${esc(PARTS[p].name)}" src="${partIcon(p)}"></span>`),
+      ...Array.from({ length: Math.max(0, slots - list.length) }, () => '<span class="cell empty" title="Empty part slot"></span>'),
+    ].join('');
+    const gear = eq && EQUIPMENT[eq] ? `<span class="cell eq"><img alt="${esc(EQUIPMENT[eq].name)}" title="${esc(EQUIPMENT[eq].name)}" src="${equipmentIcon(eq, 48, 36)}"></span>` : ownsGear ? '<span class="cell eq empty" title="No equipment"></span>' : '';
+    return `<div class="loadout"><img class="tk" alt="" src="${tankPicture(renderer, t, 120, 70)}"><div class="lo"><b>${esc(TANKS[t].name)}</b><small>Lv ${save.tankLevel(t)} · parts ${list.length}/${slots}</small><div class="cells">${cells}${gear}</div></div><button type="button" class="tohangar">Hangar</button></div>`;
+  }
+  function toHangarNow() {
+    news.hidden = true;
+    if (open) closeRoom();
+    clickRoom(ROOMS.find((r) => r.id === 'hangar'));
   }
 
   // ---------------------------------------------------- the fitting screen
@@ -1697,18 +1732,17 @@ export function createHub({ renderer, pixel, onDeploy }) {
     news.innerHTML = `
       <h2 class="warn"></h2>
       ${lines.map(() => '<p></p>').join('')}
-      <div class="row"><button type="button" class="back cont">Continue</button><button type="button" class="go yel">Back</button></div>`;
+      <button type="button" class="go yel tohangar">Go to hangar</button>
+      <div class="row"><button type="button" class="back cont">Continue anyway</button><button type="button" class="back nope">Back</button></div>`;
     news.querySelector('h2').textContent = title;
     news.querySelectorAll('p').forEach((p, i) => (p.textContent = lines[i]));
     news.querySelector('.cont').addEventListener('click', () => {
       news.hidden = true;
       go(id);
     });
-    // Back: off to sort the tank out (the map closes too)
-    news.querySelector('.yel').addEventListener('click', () => {
-      news.hidden = true;
-      if (open) closeRoom();
-    });
+    // the hangar, to sort the tank out; or just back to the map
+    news.querySelector('.tohangar').addEventListener('click', toHangarNow);
+    news.querySelector('.nope').addEventListener('click', () => (news.hidden = true));
   }
   function go(id) {
     fade.classList.remove('off');

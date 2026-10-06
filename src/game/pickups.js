@@ -141,7 +141,7 @@ export class Pickups {
       const dx = tankPos.x - p.pos.x;
       const dz = tankPos.z - p.pos.z;
       const d = Math.hypot(dx, dz);
-      if (!p.homing && p.t > p.hang && d < MAGNET) {
+      if (!p.homing && p.t > p.hang && d < MAGNET * (this.magnet || 1)) {
         p.homing = true;
         p.vel.y = Math.max(p.vel.y, 3);
       }

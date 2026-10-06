@@ -23,6 +23,7 @@ export const BASE_STATS = {
   crushHeavy: false,
   twinMg: false,
   view: 1, // camera view scale (optics)
+  magnet: 1, // x how far off drops start flying in to the tank (Magnet)
   boostSpeed: 1, // x the base boost speed
   boostTime: 1.0,
   boostCooldown: 6,
@@ -709,6 +710,51 @@ export const PARTS = {
       return g;
     },
   },
+  // A crane electromagnet on a post: scrap, repairs and tokens come flying
+  // in from much further off.
+  magnet: {
+    type: 'utility',
+    name: 'Magnet',
+    text: 'Scrap, repair kits and tokens fly to you from much further away.',
+    icon: ['................', '..####....####..', '..#**#....#**#..', '..#--#....#--#..', '..#--#....#--#..', '..#--######--#..', '...#--------#...', '....########....', '................', '................'],
+    apply(s) {
+      s.magnet *= 1.6;
+    },
+    tiers: [
+      { text: 'Pulls from further still.', apply: (s) => (s.magnet *= 1.25) },
+      { text: 'Pulls from further still.', apply: (s) => (s.magnet *= 1.2) },
+    ],
+    // on the turret roof, at the back
+    build(t) {
+      const g = magnetHead();
+      g.position.set(-0.55, 0.5, 0.28);
+      g.scale.setScalar(0.5);
+      t.turret.add(g);
+      return g;
+    },
+    light(t) {
+      const g = magnetHead();
+      g.position.set(-0.55, 0.45, -0.35);
+      g.scale.setScalar(0.42);
+      t.turret.add(g);
+      return g;
+    },
+    missile(t) {
+      const g = magnetHead();
+      g.position.set(-0.3, 1.0, 0.55);
+      g.scale.setScalar(0.45);
+      t.chassis.add(g);
+      return g;
+    },
+    assault(t) {
+      const g = magnetHead();
+      g.position.set(-1.1, 0.77, -0.3);
+      g.scale.setScalar(0.42);
+      t.turret.add(g);
+      return g;
+    },
+    model: () => magnetHead(),
+  },
   // A laser rangefinder: sees further, and lays the gun true, so what the
   // shell (or missile) strikes takes more. Legendary: after every reload the
   // view opens right out for a moment (Ranging).
@@ -914,6 +960,29 @@ function mgMount() {
   put(pivot, box(0.14, 0.2, 0.03, OLIVE, { r: 0.01 }), 0.12, 0.08, 0); // gun shield
   g.userData.pivot = pivot;
   g.userData.muzzle = new THREE.Vector3(0.9, 0.01, 0);
+  return g;
+}
+
+// A crane electromagnet on a short post: a dark steel disc with a hazard-
+// striped rim, the copper coil housing on top, a blue glow under it, its
+// cable down the post.
+function magnetHead() {
+  const g = new THREE.Group();
+  put(g, cyl(0.16, 0.06, DARK, { seg: 10 }), 0, 0.03, 0); // foot
+  put(g, cyl(0.05, 0.36, STEEL, { seg: 8 }), 0, 0.22, 0); // post
+  put(g, box(0.5, 0.05, 0.08, STEEL, { r: 0.01 }), 0.12, 0.42, 0); // the arm out
+  const head = new THREE.Group();
+  head.position.set(0.32, 0.32, 0);
+  g.add(head);
+  put(head, cyl(0.36, 0.13, 0x3a3d42, { seg: 18 }), 0, 0, 0); // the disc
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    put(head, box(0.12, 0.135, 0.05, i % 2 ? 0x1d1f22 : 0xd9b23a), Math.cos(a) * 0.355, 0, Math.sin(a) * 0.355).rotation.y = -a + Math.PI / 2;
+  }
+  put(head, cyl(0.2, 0.1, 0xb06a3a, { seg: 14 }), 0, 0.11, 0); // the coil housing
+  put(head, cyl(0.06, 0.08, DARK, { seg: 8 }), 0, 0.19, 0);
+  put(head, cyl(0.3, 0.02, 0x5fe6ff, { seg: 18, glow: true }), 0, -0.075, 0); // its face, live
+  put(g, cyl(0.02, 0.32, DARK, { seg: 5 }), 0.06, 0.2, 0.06); // the cable
   return g;
 }
 
@@ -1127,6 +1196,7 @@ const STAT_ROWS = [
   ['gmgSplash', 'Grenade blast', (v) => `${v.toFixed(1)} m`, 1],
   ['ramDamage', 'Ram damage without boost', (v) => `${Math.round(v)}`, 1],
   ['view', 'View', pct, 1],
+  ['magnet', 'Pickup reach', pct, 1],
   ['directHit', 'Direct hit damage', pct, 1],
   ['speed', 'Speed', pct, 1],
   ['boostSpeed', 'Boost speed', pct, 1],

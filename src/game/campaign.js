@@ -6,7 +6,7 @@
 export const CAMPAIGN = [
   { n: 1, id: 'avenue', name: 'Ruined city street', page: 0, at: [0.3, 0.88], open: true, steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'era'], first: { easy: { equipment: 'artillery' }, hard: { scraps: 1000, tokens: 3 } } },
   { n: 2, id: 'river', name: 'River crossing', page: 0, at: [0.64, 0.75], steps: ['1', '2', 'Boss'], rewards: ['afterburner', 'twinmg', 'optics'], first: { easy: { tank: 'light' }, hard: { part: 'vulcan', tokens: 5 } } },
-  { n: 3, id: 'highway', name: 'Highway', page: 0, at: [0.44, 0.57], steps: ['1', '2', '3'], rewards: ['he', 'era', 'afterburner'], first: { easy: { equipment: 'atgm' }, hard: { scraps: 2000, tokens: 6 } } },
+  { n: 3, id: 'highway', name: 'Highway', page: 0, at: [0.44, 0.57], steps: ['1', '2', '3'], rewards: ['he', 'magnet', 'afterburner'], first: { easy: { equipment: 'atgm' }, hard: { scraps: 2000, tokens: 6 } } },
   { n: 4, id: 'depot', name: 'Depot', page: 0, at: [0.76, 0.41], steps: ['1', '2', 'Boss'], rewards: ['dozer', 'autoloader', 'he'], first: { easy: { scraps: 1300, tokens: 4 }, hard: { scraps: 2500, tokens: 7 } } },
   { n: 5, id: 'stadium', name: 'Destroyed stadium', page: 0, at: [0.46, 0.18], steps: ['1', 'Boss'], rewards: ['rangefinder', 'twinmg', 'optics'], first: { easy: { tank: 'missile' }, hard: { scraps: 3000, tokens: 8 } } },
   // beyond the city wall: the second page of the map
