@@ -30,6 +30,7 @@ import { partPicture } from '../render/partPictures.js';
 import { fitInside } from '../ui/scale.js';
 import { openSettings } from '../ui/settings.js';
 import { CAMPAIGN, PAGES, clearKey, isOpen } from '../game/campaign.js';
+import { ENDLESS_AFTER, ENDLESS_MAPS, endlessOpen, trackHtml, trackPos, TRACK, TRACK_AT, TRACK_CSS, rewardText } from '../game/endless.js';
 
 const VIEW_FAR = 23; // the whole base in view
 const ROWS = 680; // pixel rows (fixed, so the pixels don't swim as the camera zooms)
@@ -114,6 +115,33 @@ const CSS = `
   display: grid; gap: 12px; pointer-events: auto; }
 .base-crew { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box;
   padding: 16px 18px 18px; display: grid; gap: 14px; pointer-events: auto; }
+.base-endless { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(780px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); overflow-y: auto; box-sizing: border-box; padding: 16px 18px 18px; display: grid; gap: 14px; pointer-events: auto; }
+.base-endless .top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 14px; }
+.base-endless .label { font: 400 11px/1 'Silkscreen', monospace; text-transform: uppercase; color: #b9b0a0; letter-spacing: 0.06em; }
+.base-endless .maps, .base-endless .you { display: grid; gap: 8px; align-content: start; }
+.base-endless .map { display: grid; gap: 4px; padding: 10px 12px; text-align: left; border: 0; cursor: var(--cursor); color: #d8d0c0; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; font: inherit; }
+.base-endless .map.sel { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--amber); }
+.base-endless .map b { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: var(--amber); }
+.base-endless .map small { font-size: 12px; color: #b9b0a0; }
+.base-endless .map .rec { font: 400 10px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #6be08a; }
+.base-endless .loadout { display: flex; gap: 8px; align-items: center; padding: 6px 8px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 3px #4a4540; }
+.base-endless .loadout .tk { width: 84px; height: 49px; image-rendering: pixelated; flex: none; }
+.base-endless .loadout .lo { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.base-endless .loadout .lo b { font: 400 11px/1.1 'Silkscreen', monospace; font-weight: 400; text-transform: uppercase; color: var(--amber); }
+.base-endless .loadout .lo small { font-size: 11px; color: #b9b0a0; }
+.base-endless .loadout .cells { display: flex; gap: 3px; flex-wrap: wrap; }
+.base-endless .loadout .cell { width: 26px; height: 18px; background: #121014; box-shadow: 0 0 0 1px #000, 0 0 0 2px #4a4540; }
+.base-endless .loadout .cell img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+.base-endless .loadout .cell.eq { box-shadow: 0 0 0 1px #000, 0 0 0 2px #5fe6ff; margin-left: 3px; }
+.base-endless .loadout .cell.empty { box-shadow: 0 0 0 1px #000, 0 0 0 2px #c42a20; }
+.base-endless .tohangar { flex: none; padding: 8px 10px; font: 400 10px/1 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; border: 0; cursor: var(--cursor); }
+.base-endless .trackhead { display: flex; justify-content: space-between; align-items: baseline; }
+.base-endless .trackhead b { font: 400 12px/1 'Silkscreen', monospace; font-weight: 400; color: #6be08a; }
+.base-endless .note { font-size: 12px; color: #8f877a; }
+.base-endless .row { display: flex; gap: 10px; }
+@media (max-width: 640px) { .base-endless .top { grid-template-columns: 1fr; } .base-endless .etrack { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.base-tag.locked::after { content: 'Locked'; margin-left: 6px; padding: 1px 4px; font-size: 9px; color: #b9b0a0; background: #2a262c; box-shadow: 0 0 0 2px #000; }
+.base-tag.newroom::after { content: 'New!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 .base-crew .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .base-crew .card { display: grid; gap: 8px; align-content: start; justify-items: center; padding: 12px 10px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .base-crew .frame { position: relative; width: 100%; max-width: 128px; aspect-ratio: 1; background: radial-gradient(circle at 50% 40%, #3a4236, #1f2420 75%); box-shadow: 0 0 0 2px #000; }
@@ -522,7 +550,7 @@ function campaignMap() {
 
 export function createHub({ renderer, pixel, onDeploy }) {
   const style = document.createElement('style');
-  style.textContent = CSS;
+  style.textContent = CSS + TRACK_CSS;
   document.head.append(style);
 
   // ------------------------------------------------------------ scene
@@ -547,6 +575,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
     { id: 'quarters', name: 'Crew', rect: [-8, 4, -17, -6], focus: new THREE.Vector3(-2, 0, -11.5), view: 12, label: new THREE.Vector3(-2, 4.4, -16.8), entry: new THREE.Vector3(1, 0, -7.2) },
     { id: 'briefing', name: 'Levels', rect: [-12, -2, -5, 7], focus: new THREE.Vector3(-7, 0, 1), view: 11, label: new THREE.Vector3(-7, 3.0, -4.6), entry: new THREE.Vector3(-3.2, 0, 1.5) },
     { id: 'hangar', name: 'Hangar', rect: [6, 24, -8, 8], focus: new THREE.Vector3(15, 0.4, 0), view: 8.5, label: new THREE.Vector3(15, 5.8, -7.8), entry: new THREE.Vector3(7.4, 0, 0.5) },
+    // off the hall's front: the ready room for Endless (its own door out)
+    { id: 'endless', name: 'Endless', rect: [-2, 6, 8.4, 15.6], focus: new THREE.Vector3(2, 0, 12), view: 9, label: new THREE.Vector3(2, 3.2, 8.6), entry: new THREE.Vector3(2, 0, 9.6) },
   ];
   const HALL = [-2, 6, -6, 8];
   const floorMeshes = [];
@@ -566,6 +596,8 @@ export function createHub({ renderer, pixel, onDeploy }) {
   floor(ROOMS[1].rect, floorTexture(rand, ...size(ROOMS[1].rect), { base: '#3f4a48', specks: ['#46524f', '#38423f'], seam: '#323b39', tile: 1.5, stains: 0.05 }), ROOMS[1]);
   floor(ROOMS[2].rect, floorTexture(rand, ...size(ROOMS[2].rect), { stains: 0.25 }), ROOMS[2]);
   floor(HALL, floorTexture(rand, ...size(HALL), { base: '#4a4844', tile: 2 }));
+  floor(ROOMS[3].rect, floorTexture(rand, ...size(ROOMS[3].rect), { base: '#33373b', specks: ['#3a3f44', '#2d3135'], seam: '#25292c', tile: 1.2, stains: 0.08 }), ROOMS[3]);
+  floor([1, 3, 8.1, 8.5], floorTexture(rand, 2, 0.4, { base: '#4a4844' })); // the doorway
   floor([-12, -2, -6, -5], floorTexture(rand, 10, 1, {})); // under the broken wall
   const under = new THREE.Mesh(new THREE.PlaneGeometry(120, 90), toon(0x141316));
   under.rotation.x = -Math.PI / 2;
@@ -595,7 +627,13 @@ export function createHub({ renderer, pixel, onDeploy }) {
   wall(-8.2, -17, -8.2, -6, 0.9);
   wall(-12.2, -5, -12.2, 7, 0.9);
   wall(-12, 7.2, -2, 7.2, 0.9);
-  wall(-2, 8.2, 6, 8.2, 0.9);
+  wall(-2, 8.2, 1, 8.2, 0.9); // (a doorway through to the Endless room)
+  wall(3, 8.2, 6, 8.2, 0.9);
+  // the Endless room: low walls toward the camera, a tall one at its back
+  // (east) with the blast door out
+  wall(-2.2, 8.2, -2.2, 15.8, 0.9);
+  wall(-2, 15.8, 6, 15.8, 0.9);
+  wall(6.2, 8.4, 6.2, 15.8);
   wall(6, 8.2, 24, 8.2, 0.9);
   wall(5.8, 5, 5.8, 8, 0.9);
   // the broken wall between quarters and briefing: a ragged top, rubble
@@ -1040,6 +1078,80 @@ export function createHub({ renderer, pixel, onDeploy }) {
     beamX(1, -2, 6, H - 0.2);
     pendant(2, 1, H - 0.35, 1.0, SODIUM, 12);
   }
+  // -------------------------------------------------- the Endless room
+  // A ready room: a pair of terminals and a tall status screen on the back
+  // wall, a rack of shells and ammo crates, a shelf of parts, lockers and a
+  // bench, and the striped blast door out to the arena, a red lamp over it.
+  const endlessFx = { lamp: null, screens: [] };
+  {
+    // the blast door in the back wall, its frame, the stripes, the lamp
+    const dz = 12;
+    B.chunk(0.18, 3.2, 3.6, 0x3e4246, 6.0, 1.6, dz);
+    for (let i = 0; i < 6; i++) put(B.root, box(0.04, 0.32, 3.4, i % 2 ? 0x1d1f22 : 0xd9b23a), 5.9, 0.3 + i * 0.5, dz).rotation.x = 0;
+    for (const s of [-1, 1]) B.chunk(0.3, 3.5, 0.3, 0x8d8b86, 6.0, 1.75, dz + s * 1.95);
+    B.chunk(0.3, 0.3, 4.2, 0x8d8b86, 6.0, 3.45, dz);
+    put(B.root, box(0.06, 0.12, 1.6, 0x2a2e31), 5.86, 1.7, dz); // the seam down the middle
+    endlessFx.lamp = put(B.root, cyl(0.14, 0.18, 0xff3b2f, { seg: 8, glow: true }), 5.9, 3.85, dz);
+    B.keep(endlessFx.lamp);
+    B.emit(new THREE.Vector3(5.4, 3.4, dz), 0xff4a3a, 8, 4);
+    put(B.root, box(0.04, 0.3, 1.4, 0xd9b23a), 5.88, 3.0, dz - 1.2).visible = true; // a stencilled plate
+    // terminals along the back wall either side of the door
+    for (const [z, col] of [[9.4, HOLO], [14.6, 0xffb347]]) {
+      const top = table(5.3, z, 0.8, 1.4, 0.8, 0x3a3e42);
+      put(B.root, box(0.4, 0.62, 0.9, 0x2a2e31, { r: 0.03 }), 5.55, top + 0.31, z);
+      const scr = put(B.root, box(0.02, 0.46, 0.74, col, { glow: true }), 5.34, top + 0.33, z);
+      B.keep(scr);
+      endlessFx.screens.push(scr);
+      B.piece(0.16, 0.03, 0.5, 0x1f2022, 5.05, top + 0.02, z); // keyboard
+      for (let k = 0; k < 5; k++) B.keep(put(B.root, box(0.02, 0.05, 0.06, [0x6be08a, 0xffb347, HOLO][k % 3], { glow: true }), 5.34, top + 0.04, z - 0.3 + k * 0.15));
+    }
+    // a tall status screen on the room's north side: the wave graph
+    {
+      const g = new THREE.Group();
+      put(g, box(1.6, 1.0, 0.1, 0x2a2e31, { r: 0.03 }), 0, 1.7, 0);
+      const scr = put(g, box(1.44, 0.84, 0.02, 0x0d2a30), 0, 1.7, 0.06);
+      for (let k = 0; k < 8; k++) {
+        const h = 0.12 + k * 0.08 + (k % 3) * 0.04;
+        put(g, box(0.1, h, 0.01, HOLO, { glow: true }), -0.56 + k * 0.16, 1.32 + h / 2, 0.08);
+      }
+      endlessFx.screens.push(scr);
+      put(g, box(0.06, 1.2, 0.06, 0x2b2c2e), -0.6, 0.6, 0);
+      put(g, box(0.06, 1.2, 0.06, 0x2b2c2e), 0.6, 0.6, 0);
+      g.position.set(-0.8, 0, 8.9);
+      B.add(g);
+      B.block(-0.8, 8.9, 0.8, 0.15);
+    }
+    // the shell rack: rounds standing in a frame, and ammo crates
+    {
+      const rx = 4.2;
+      const rz = 15.0;
+      B.chunk(1.8, 0.08, 0.5, 0x4a4e52, rx, 0.5, rz);
+      B.chunk(1.8, 0.08, 0.5, 0x4a4e52, rx, 0.05, rz);
+      for (let k = 0; k < 8; k++) {
+        put(B.root, cyl(0.07, 0.5, 0xb08a3e, { seg: 8 }), rx - 0.75 + k * 0.21, 0.35, rz);
+        put(B.root, cyl(0.055, 0.25, 0x4f5a3a, { seg: 8, radiusEnd: 0.03 }), rx - 0.75 + k * 0.21, 0.72, rz);
+      }
+      B.block(rx, rz, 0.95, 0.3);
+      crate(1.6, 0, 15.0, 0.7, 0x4f5a3a);
+      crate(1.6, 0.56, 14.95, 0.55, 0x4f5a3a, 0.3);
+      crate(0.6, 0, 15.05, 0.62, 0x5a5a3a, -0.2);
+      B.block(1.2, 15.0, 0.9, 0.4);
+    }
+    // a shelf of parts against the west, lockers and a bench by the door through
+    shelving(-1.6, 12.4, Math.PI / 2, 2.4, 'boxes', 3);
+    for (let k = 0; k < 3; k++) {
+      B.chunk(0.5, 1.7, 0.45, [0x4d5a52, 0x5a6060, 0x4d5a52][k], -1.65, 0.85, 14.0 + k * 0.52);
+      B.piece(0.02, 0.12, 0.04, 0x2b2c2e, -1.39, 1.1, 14.0 + k * 0.52);
+    }
+    B.block(-1.65, 14.5, 0.3, 0.8);
+    B.chunk(1.6, 0.1, 0.4, 0x5a4636, 1.0, 0.45, 10.6);
+    for (const s of [-1, 1]) B.piece(0.08, 0.42, 0.34, 0x3a3c3f, 1.0 + s * 0.65, 0.21, 10.6);
+    B.block(1.0, 10.6, 0.8, 0.2);
+    papers(5.2, 0.84, 9.0, 2);
+    // a lamp overhead
+    beamX(12, -2, 6, H - 0.2);
+    pendant(2, 12, H - 0.35, 1.0, 0xffd7a0, 12);
+  }
   hangarOverhead.traverse((o) => {
     if (o.isMesh) o.castShadow = true;
   });
@@ -1177,6 +1289,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     <div class="base-menu panel" hidden></div>
     <div class="base-crew panel" hidden></div>
     <div class="base-brief" hidden></div>
+    <div class="base-endless panel" hidden></div>
     <div class="base-news panel" hidden></div>
     <div class="base-promo panel" hidden><span class="t">New tank</span><img alt=""><b>Beat level 2 for a new tank!</b><i></i></div>
     <div class="base-hint panel" ${matchMedia('(pointer: coarse)').matches ? 'hidden' : ''}>Click a room to open it, or walk in · <b>WASD</b> or click the floor to walk</div>
@@ -1186,6 +1299,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const menu = root.querySelector('.base-menu');
   const crewPanel = root.querySelector('.base-crew');
   const brief = root.querySelector('.base-brief');
+  const endlessPanel = root.querySelector('.base-endless');
   const hint = root.querySelector('.base-hint');
   root.querySelector('.base-gear').style.setProperty('--cog', `url(${cogIcon()})`);
   root.querySelector('.base-gear').addEventListener('click', () => openSettings());
@@ -1229,6 +1343,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     hint.hidden = true;
     root.querySelector('.base-gear').hidden = true; // (out of the way of the room's panels)
     if (r.id === 'briefing') return openBriefing();
+    if (r.id === 'endless') return openEndless();
     menu.hidden = false;
     if (r.id === 'hangar') {
       menu.hidden = true;
@@ -1315,7 +1430,9 @@ export function createHub({ renderer, pixel, onDeploy }) {
   const pageOf = (z) => z.page || 0;
   const newest = () => [...CAMPAIGN].reverse().find((z) => isOpen(z, save.cleared())) || CAMPAIGN[0];
   function openBriefing() {
-    selLevel = newest();
+    // (back from the hangar: the level you had picked, as you left it)
+    if (!keepBrief) selLevel = newest();
+    keepBrief = false;
     mapPage = pageOf(selLevel);
     brief.hidden = false;
     brief.innerHTML = `<div class="map"></div><div class="info panel"></div>`;
@@ -1480,10 +1597,74 @@ export function createHub({ renderer, pixel, onDeploy }) {
     const gear = eq && EQUIPMENT[eq] ? `<span class="cell eq"><img alt="${esc(EQUIPMENT[eq].name)}" title="${esc(EQUIPMENT[eq].name)}" src="${equipmentIcon(eq, 48, 36)}"></span>` : ownsGear ? '<span class="cell eq empty" title="No equipment"></span>' : '';
     return `<div class="loadout"><img class="tk" alt="" src="${tankPicture(renderer, t, 120, 70)}"><div class="lo"><b>${esc(TANKS[t].name)}</b><small>Lv ${save.tankLevel(t)} · parts ${list.length}/${slots}</small><div class="cells">${cells}${gear}</div></div><button type="button" class="tohangar">Hangar</button></div>`;
   }
+  // from the briefing or the Endless screen: to the hangar, and its Back
+  // brings you back there (the level picked still picked)
+  let returnTo = null;
+  let keepBrief = false;
   function toHangarNow() {
+    const from = open?.id === 'briefing' || open?.id === 'endless' ? open.id : null;
     news.hidden = true;
     if (open) closeRoom();
     clickRoom(ROOMS.find((r) => r.id === 'hangar'));
+    returnTo = from;
+  }
+  function hangarBack() {
+    const to = returnTo;
+    returnTo = null;
+    closeRoom();
+    if (!to) return;
+    if (to === 'briefing') keepBrief = true;
+    clickRoom(ROOMS.find((r) => r.id === to));
+  }
+
+  // ------------------------------------------------------------ Endless
+  // Locked: the camera goes in, a box says when it opens, and back out.
+  // Open: the map (one for now), the tank you're taking (and the way to
+  // the hangar), the reward track, Play.
+  let endlessMap = ENDLESS_MAPS[0].id;
+  function refreshEndlessTag() {
+    const tag = tags.get('endless');
+    tag.classList.toggle('locked', !endlessOpen());
+    tag.classList.toggle('newroom', endlessOpen() && !save.tips().includes('endless-visited'));
+  }
+  function openEndless() {
+    if (!endlessOpen()) {
+      news.hidden = false;
+      news.innerHTML = `<span class="newtag" style="background:#b9b0a0">Locked</span><h2>Endless</h2><p>Endless mode unlocks after level ${ENDLESS_AFTER.n}!</p><p class="hint">Hold out against waves that never stop, and fill the reward track.</p><div class="row"><button type="button" class="go">OK</button></div>`;
+      news.querySelector('.go').addEventListener('click', () => {
+        news.hidden = true;
+        closeRoom();
+      });
+      return;
+    }
+    save.seeTip('endless-visited');
+    refreshEndlessTag();
+    const e = save.endless();
+    const { tier, k } = trackPos(e.xp);
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+    const lo = tier ? TRACK_AT[tier - 1] : 0;
+    const hi = TRACK_AT[Math.min(tier, TRACK.length - 1)];
+    const next = TRACK[Math.min(tier, TRACK.length - 1)];
+    endlessPanel.hidden = false;
+    endlessPanel.innerHTML = `
+      <h2>Endless</h2>
+      <div class="top">
+        <div class="maps"><span class="label">Map</span>${ENDLESS_MAPS.map((m) => `<button type="button" class="map${m.id === endlessMap ? ' sel' : ''}" data-id="${m.id}"><b>${esc(m.name)}</b><small>${esc(m.text)}</small><span class="rec">Best: ${fmt(e.best.t)} · ${e.best.wave} waves</span></button>`).join('')}</div>
+        <div class="you"><span class="label">Your tank</span>${loadoutCard().replace('class="tohangar"', 'class="tohangar"')}<span class="note">Between waves, drive into the base to repair and change your loadout.</span></div>
+      </div>
+      <div class="trackhead"><span class="label">Reward track · tier ${tier} of ${TRACK.length}</span><b>${tier >= TRACK.length ? 'Complete' : `Next: ${rewardText(next)}`}</b></div>
+      ${trackHtml(e.xp)}
+      <div class="ebar"><i style="width:${(tier >= TRACK.length ? 1 : k) * 100}%"></i><span>${tier >= TRACK.length ? 'Track complete' : `${Math.floor(e.xp - lo)} / ${hi - lo} XP`}</span></div>
+      <span class="note">XP comes from every run: kills, waves cleared and time survived. Leaving early still pays out.</span>
+      <div class="row"><button type="button" class="go">Play</button><button type="button" class="back">Back</button></div>`;
+    for (const b of endlessPanel.querySelectorAll('.map'))
+      b.addEventListener('click', () => {
+        endlessMap = b.dataset.id;
+        openEndless();
+      });
+    endlessPanel.querySelector('.tohangar').addEventListener('click', toHangarNow);
+    endlessPanel.querySelector('.go').addEventListener('click', () => deploy(endlessMap));
+    endlessPanel.querySelector('.back').addEventListener('click', closeRoom);
   }
 
   // ---------------------------------------------------- the fitting screen
@@ -1516,7 +1697,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
         fitHubTank();
         openFitting();
       },
-      buttons: [['Back', () => closeRoom()]],
+      buttons: [['Back', () => hangarBack()]],
       // scraps take parts up a tier on a screen of their own
       upgradeHint: upgradeHint(),
       evolveReady,
@@ -1633,6 +1814,11 @@ export function createHub({ renderer, pixel, onDeploy }) {
     const tanks = all.filter((n) => n.kind === 'tank' && TANKS[n.id]);
     if (tanks.length) freshTanks = tanks.map((i) => i.id);
     newsQueue = [...tanks, ...all.filter((n) => n.kind === 'equipment' && EQUIPMENT[n.id]), ...all.filter((n) => n.kind === 'part' && PARTS[n.id])];
+    // Endless just opened: said once
+    if (endlessOpen() && !save.tips().includes('endless-news')) {
+      save.seeTip('endless-news');
+      newsQueue.push({ kind: 'endless' });
+    }
     nextNews();
   }
   function nextNews() {
@@ -1640,6 +1826,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     if (!n) return void (news.hidden = true);
     if (n.kind === 'tank') showTank(n.id);
     else if (n.kind === 'equipment') showGear(n.id);
+    else if (n.kind === 'endless') showEndlessNews();
     else showPart(n.id);
   }
   function newsButtons(go) {
@@ -1651,6 +1838,16 @@ export function createHub({ renderer, pixel, onDeploy }) {
     news.querySelector('.back').addEventListener('click', () => nextNews());
   }
   const toHangar = () => clickRoom(ROOMS.find((r) => r.id === 'hangar'));
+  function showEndlessNews() {
+    news.hidden = false;
+    news.innerHTML = `
+      <span class="newtag">Endless unlocked!</span>
+      <h2>Endless mode</h2>
+      <p>Waves that never stop, a base to fall back to between them, and a reward track that fills with every run.</p>
+      <p class="hint">Find it in the new room off the hall.</p>
+      <div class="row"><button type="button" class="go">Take a look</button><button type="button" class="back">${newsQueue.length ? 'Next' : 'Later'}</button></div>`;
+    newsButtons(() => clickRoom(ROOMS.find((r) => r.id === 'endless')));
+  }
   function showTank(id) {
     news.hidden = false;
     news.innerHTML = `
@@ -1699,8 +1896,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
     menu.hidden = true;
     crewPanel.hidden = true;
     brief.hidden = true;
+    endlessPanel.hidden = true;
     hint.hidden = false;
     walkTo = null;
+    refreshEndlessTag();
   }
   function clickRoom(r) {
     if (open) return;
@@ -1839,6 +2038,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       fitHubTank();
       tags.get('hangar').classList.toggle('alert', upgradeHint()); // the first time an upgrade's affordable
       refreshPromo();
+      refreshEndlessTag();
       fade.classList.remove('off');
       requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add('off')));
       news.hidden = true;
@@ -1868,6 +2068,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
     refresh() {
       bankEl.textContent = bankTotal();
       refreshPromo();
+      refreshEndlessTag();
       tags.get('hangar').classList.toggle('alert', upgradeHint());
       fitHubTank();
       if (open?.id === 'hangar') openFitting();
@@ -1902,6 +2103,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       matesFrame(dt, t);
       B.update(dt, t, {});
       for (const e of B.emitters) if (e.light) e.light.intensity = e.intensity * e.level;
+      if (endlessFx.lamp) endlessFx.lamp.visible = Math.sin(t * 5) > -0.3; // (the lamp over the blast door)
       for (const h of holo) {
         h.mark.rotation.y = t * 1.5;
         h.mark.position.y = 0.9 + Math.sin(t * 2) * 0.06;
