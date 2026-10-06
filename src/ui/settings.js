@@ -3,7 +3,6 @@
 // bindings; touch has the stick and buttons. Every choice is one of our own
 // dropdowns or toggles, styled like the rest of the game.
 
-import { watchPopups } from './fit.js';
 import { fitInside } from './scale.js';
 
 const KEY = 'scavenger.settings';
@@ -105,6 +104,12 @@ const CSS = `
 .set .bar button { padding: 10px 16px 11px; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .set .bar .done { color: #111; background: var(--go); box-shadow: 0 4px 0 #2f6b40, 0 0 0 2px #000; }
 .set .note { font-size: 12px; color: #8f877a; }
+.set .cols { display: grid; gap: 14px; }
+.set .col { display: grid; gap: 10px; align-content: start; min-width: 0; }
+@media (orientation: landscape) and (max-height: 560px) {
+  .set .box { width: 760px; max-width: none; } /* (laid out at this, then shrunk to fit the screen) */
+  .set .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+}
 @media (max-width: 420px) { .set .ddb { min-width: 120px; } .set .key { min-width: 70px; } }
 `;
 let injected = false;
@@ -121,7 +126,6 @@ export function createSettingsMenu({ touch = () => false } = {}) {
   root.className = 'set';
   root.hidden = true;
   document.body.append(root);
-  watchPopups(root, '.box');
   let onClose = null;
   let waiting = null; // the action whose key is being rebound
   let openDd = null;
@@ -205,27 +209,36 @@ export function createSettingsMenu({ touch = () => false } = {}) {
     h.textContent = 'Settings';
     box.append(h);
 
-    box.append(head('Graphics'));
-    box.append(
+    // two columns side by side on a landscape phone (graphics | controls),
+    // one above the other otherwise
+    const cols = document.createElement('div');
+    cols.className = 'cols';
+    const c1 = document.createElement('div');
+    const c2 = document.createElement('div');
+    c1.className = c2.className = 'col';
+    cols.append(c1, c2);
+    box.append(cols);
+    c1.append(head('Graphics'));
+    c1.append(
       row(
         'Quality',
         dropdown(s.quality, [['auto', 'Auto (best for 60 fps)'], ['0', 'High'], ['1', 'Medium'], ['2', 'Low'], ['3', 'Potato']], (v) => setSetting('quality', v)),
         s.quality === 'auto' ? 'Picks the best look that keeps it smooth' : '',
       ),
     );
-    box.append(row('Frame rate', dropdown(s.fps, [[60, '60 fps'], [30, '30 fps (saves battery)'], [0, 'Unlimited']], (v) => setSetting('fps', +v))));
-    box.append(row('Screen shake', dropdown(s.shake, [['on', 'On'], ['reduced', 'Reduced'], ['off', 'Off']], (v) => setSetting('shake', v))));
+    c1.append(row('Frame rate', dropdown(s.fps, [[60, '60 fps'], [30, '30 fps (saves battery)'], [0, 'Unlimited']], (v) => setSetting('fps', +v))));
+    c1.append(row('Screen shake', dropdown(s.shake, [['on', 'On'], ['reduced', 'Reduced'], ['off', 'Off']], (v) => setSetting('shake', v))));
 
     if (touch()) {
-      box.append(head('Touch controls'));
+      c2.append(head('Touch controls'));
       const aimMode = s.aimAssist ? 'assist' : 'manual';
       const aimHelp = { assist: 'Tap near an enemy to lock onto it (the nearest one within 35° of where you tap); the turret keeps tracking it. Tap open ground to aim there.', manual: 'Full manual: tap or drag on the screen to aim; FIRE shoots there.' };
-      box.append(row('Aiming', dropdown(aimMode, [['assist', 'Aim assist (tap to lock)'], ['manual', 'Full manual']], (v) => setSetting('aimAssist', v === 'assist')), aimHelp[aimMode]));
-      box.append(row('Button size', dropdown(s.buttons, [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], (v) => setSetting('buttons', v))));
-      box.append(row('Layout', dropdown(s.hand, [['right', 'Stick left, fire right'], ['left', 'Stick right, fire left']], (v) => setSetting('hand', v))));
-      box.append(row('Stick sensitivity', dropdown(s.stick, [[0.7, 'Low'], [1, 'Normal'], [1.35, 'High']], (v) => setSetting('stick', +v))));
+      c2.append(row('Aiming', dropdown(aimMode, [['assist', 'Aim assist (tap to lock)'], ['manual', 'Full manual']], (v) => setSetting('aimAssist', v === 'assist')), aimHelp[aimMode]));
+      c2.append(row('Button size', dropdown(s.buttons, [['small', 'Small'], ['normal', 'Normal'], ['large', 'Large']], (v) => setSetting('buttons', v))));
+      c2.append(row('Layout', dropdown(s.hand, [['right', 'Stick left, fire right'], ['left', 'Stick right, fire left']], (v) => setSetting('hand', v))));
+      c2.append(row('Stick sensitivity', dropdown(s.stick, [[0.7, 'Low'], [1, 'Normal'], [1.35, 'High']], (v) => setSetting('stick', +v))));
     } else {
-      box.append(head('Keys'));
+      c2.append(head('Keys'));
       for (const [a, label] of ACTIONS) {
         const k = document.createElement('button');
         k.type = 'button';
@@ -235,12 +248,12 @@ export function createSettingsMenu({ touch = () => false } = {}) {
           waiting = waiting === a ? null : a;
           render();
         };
-        box.append(row(label, k));
+        c2.append(row(label, k));
       }
       const note = document.createElement('div');
       note.className = 'note';
       note.textContent = 'The arrow keys always drive too. Esc pauses. Aim with the mouse; click fires as well.';
-      box.append(note);
+      c2.append(note);
     }
 
     const bar = document.createElement('div');

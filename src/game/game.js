@@ -529,7 +529,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // shack's back door. gift: 'boost' rigs the drums as boosters.
     // offers: the parts this checkpoint can hand out (only ones not found
     // yet are shown, at most count of them; none: a repair stop)
-    depot(shack, { offers, count = 3, gift = null, onLeave }) {
+    // keepEnemies: the machines out there aren't cleared away, they're held
+    // frozen just as they are till the tank comes back out (endless: no
+    // ducking in to lose them); repair: false, no free repair either
+    depot(shack, { offers, count = 3, gift = null, onLeave, keepEnemies = false, repair = true }) {
       if (run.mode === 'depot') return;
       const room = level.depotRoom;
       // parts not found yet first; then ones you own, as improvements
@@ -554,7 +557,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       hud.setSpot(null);
       hud.clearPrompt();
       run.spot = null;
-      run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds, focus: null };
+      run.depot = { shack, room, step: 'enter', offers, gift, onLeave, t: 0, fieldBounds: level.bounds, focus: null, freeze: keepEnemies, noRepair: !repair };
       if (shack.inward) run.auto = shack.door.clone().setY(0).addScaledVector(shack.inward, 3.5); // (a shed turned some other way: straight in)
       else {
         level.bounds = { ...level.bounds, maxX: shack.x0 + 4 };
@@ -562,7 +565,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       }
       setCursor();
       api.transition(() => {
-        enemies.retire(); // whatever was left behind stays behind
+        if (keepEnemies) enemies.clearBolts(); // (held where they are; only the rounds in the air go)
+        else enemies.retire(); // whatever was left behind stays behind
         room.reset();
         room.setOffers(offers);
         level.bounds = room.bounds;
@@ -1894,14 +1898,13 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
               setPaused(false);
               loadLevel(levelDef.id);
             },
-            lost: levelDef.endless ? [] : partCards().map((c) => ({ name: c.name, image: c.image })),
+            lost: [], // (parts found are saved the moment they're found: quitting loses none)
             endless: !!levelDef.endless,
             exit: onExit
               ? () => {
                   setPaused(false);
                   // Endless: leaving ends the run, and it pays out
                   if (levelDef.endless) return void endlessEnd('Run ended');
-                  save.discardRun(); // quitting mid-level: its finds go too
                   onExit();
                 }
               : null,
@@ -2211,7 +2214,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
     // Easy: a repair of up to half the hull, said out loud; Hard: none (and
     // that's said too). It runs on while the screens are up.
     if (st.step !== 'enter' && st.step !== 'in' && st.repairTo == null) {
-      st.repairTo = run.hard ? run.hp : Math.min(stats.maxHp, run.hp + stats.maxHp * REPAIR_SHARE);
+      st.repairTo = run.hard || st.noRepair ? run.hp : Math.min(stats.maxHp, run.hp + stats.maxHp * REPAIR_SHARE);
       st.repaired = st.repairTo - run.hp;
       if (run.hard) hud.prompt('Repairs', 'No repairs in hard mode.', { danger: true, seconds: 3 });
     }
@@ -3307,7 +3310,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null }
       // the machines don't come into a checkpoint: each shack and the
       // ground just before its door are walls to them (not to the tank)
       const keepOut = (level.shacks || []).filter((k) => k.z1 != null).map((k) => k.keepOut || { x: (k.x0 + k.x1) / 2 - 1.5, z: k.door.z, hx: (k.x1 - k.x0) / 2 + 3, hz: (k.z1 - k.z0) / 2 + 0.6, yaw: 0 });
-      enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks: keepOut.length ? blocks.concat(keepOut) : blocks, colliders, heightAt: level.heightAt, navGoal: level.navGoal, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
+      if (!run.depot?.freeze) enemies.update(dt, t, { tankPos: pos, tankBox: tankBox(), tankVel: vel, blocks: keepOut.length ? blocks.concat(keepOut) : blocks, colliders, heightAt: level.heightAt, navGoal: level.navGoal, onTankHit: tankHit, over: run.over, shield: shieldNow(), onShieldHit: shieldHit });
       // the roof MG only takes machines it can see (not through trams and walls)
       const mgTarget = run.over || run.mode !== 'field' ? null : enemies.nearest(pos, stats.mgRange, true);
       const mgPoint = mgTarget ? enemies.aimPoint(mgTarget) : null;

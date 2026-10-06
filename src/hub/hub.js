@@ -283,7 +283,8 @@ const CSS = `
 .base-brief .node .hardtag.tanktag em { background: #6be08a; }
 .base-brief .node .hardtag::after { content: ''; position: absolute; left: 50%; top: 100%; margin-left: -6px; width: 12px; height: 7px; background: #c42a20; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .base-news { position: absolute; z-index: 6; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); padding: 16px 18px 18px; display: grid; gap: 12px; justify-items: center; text-align: center; pointer-events: auto; }
-.base-news h2.warn { color: #ff4a3a; }
+.base-news h2.warn { color: #ff4a3a; white-space: nowrap; font-size: clamp(14px, 3.4vw, 20px); }
+.base-news button.tohangar { justify-self: center; }
 .base button.go.yel { background: #ffc24a; box-shadow: 0 3px 0 #8a5a1c; }
 .base-news .newtag.leg { background: #ffc24a; }
 .base-news .legpic { position: relative; display: block; box-shadow: 0 0 0 2px #000, 0 0 0 4px #ffc24a, 0 0 16px #ffc24a88; background: #1d1b1e; }
@@ -1653,7 +1654,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       <h2>Endless</h2>
       <div class="top">
         <div class="maps"><span class="label">Map</span>${ENDLESS_MAPS.map((m) => `<button type="button" class="map${m.id === endlessMap ? ' sel' : ''}" data-id="${m.id}"><b>${esc(m.name)}</b><small>${esc(m.text)}</small><span class="rec">Best: ${fmt(e.best.t)} · ${e.best.wave} waves</span></button>`).join('')}</div>
-        <div class="you"><span class="label">Your tank</span>${loadoutCard().replace('class="tohangar"', 'class="tohangar"')}<span class="note">Between waves, drive into the base to repair and change your loadout.</span></div>
+        <div class="you"><span class="label">Your tank</span>${loadoutCard().replace('class="tohangar"', 'class="tohangar"')}<span class="note">Drive into the base at any time to change your loadout (no repairs).</span></div>
       </div>
       <div class="trackhead"><span class="label">Reward track · tier ${tier} of ${TRACK.length}</span><b>${tier >= TRACK.length ? 'Complete' : `Next: ${rewardText(next)}`}</b></div>
       ${trackHtml(e.xp)}

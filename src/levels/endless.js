@@ -874,14 +874,6 @@ function buildEndless(scene) {
     S.queue = groups.map((list, i) => ({ at: i * Math.max(2.5, 6 - n * 0.2), list }));
     S.groupT = 0;
   }
-  function openBase(api) {
-    base.openIn();
-    api.arrow(base.door.clone().setY(2.2), 'Base');
-  }
-  function closeBase(api) {
-    base.closeIn();
-    api.arrow(null);
-  }
 
   function start(api) {
     Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: BREAK + 3, queue: [], groupT: 0, inBase: false, shut: 0 });
@@ -890,7 +882,9 @@ function buildEndless(scene) {
     api.giveRockets();
     if (api.tank.ability) api.giveAbility();
     api.objective('Get ready');
-    api.prompt('Endless', 'Hold out! Between waves, drive into the <b>base</b> to repair and swap parts.', { go: true, seconds: 6 });
+    api.prompt('Endless', 'Survive as long as possible!', { go: true, seconds: 4 });
+    S.tip = 4.5; // (then the one other thing to know)
+    base.openIn();
   }
 
   function script(api, dt) {
@@ -901,36 +895,37 @@ function buildEndless(scene) {
     run.endlessT = S.time;
     run.endlessWave = S.wave;
     run.dmgMul = toughness().dmg;
-    // the base's back door shuts again a moment after you've come out
+    if (S.tip > 0 && (S.tip -= dt) <= 0) api.prompt('Base', 'You can return to the <b>base</b> at any time to switch loadouts.', { go: true, seconds: 6 });
+    // The base: open the whole time (shut for a few seconds after you come
+    // out). Inside, the machines out here are held frozen as they are, and
+    // there's no free repair: it's for changing the loadout, not hiding.
     if (S.shut > 0 && (S.shut -= dt) <= 0) base.closeOut();
+    if (S.out > 0 && (S.out -= dt) <= 0) base.openIn();
+    if (!(S.out > 0) && base.inDoor > 0.6 && near(api) < 5) {
+      S.before = S.phase;
+      S.phase = 'inbase';
+      api.depot(base, {
+        offers: [],
+        keepEnemies: true,
+        repair: false,
+        onLeave: () => {
+          S.phase = S.before;
+          S.shut = 1.2;
+          S.out = 4; // (out the same door: not straight back in)
+        },
+      });
+      return;
+    }
     const mm = Math.floor(S.time / 60);
     const ss = String(Math.floor(S.time % 60)).padStart(2, '0');
     if (S.phase === 'intro' || S.phase === 'break') {
       S.left -= dt;
       api.objective(`${S.phase === 'intro' ? 'First wave' : `Wave ${S.wave + 1}`} in ${Math.ceil(Math.max(0, S.left))} s · ${mm}:${ss}`);
       api.waveHud({ wave: S.wave, next: Math.max(0, S.left) });
-      // into the base (open between waves)
-      if (S.out > 0) S.out -= dt;
-      if (S.phase === 'break' && !(S.out > 0) && base.inDoor > 0.6 && near(api) < 5) {
-        closeBase(api);
-        S.phase = 'inbase';
-        api.depot(base, {
-          offers: [],
-          onLeave: () => {
-            S.phase = 'break';
-            S.left = Math.max(S.left, 3);
-            S.shut = 1.2;
-            S.out = 4; // (out the same door: not straight back in)
-          },
-        });
-        return;
-      }
       if (S.left <= 0) {
-        closeBase(api);
         S.wave++;
         S.phase = 'fight';
         buildWave();
-        api.prompt(`Wave ${S.wave}`, S.wave === 1 ? 'Here they come!' : 'Here comes the next wave!', { danger: true, seconds: 3 });
       }
       return;
     }
@@ -948,8 +943,6 @@ function buildEndless(scene) {
         run.endlessWaves = S.wave; // (waves cleared)
         S.phase = 'break';
         S.left = BREAK;
-        openBase(api);
-        api.prompt(`Wave ${S.wave} cleared`, 'The <b>base</b> is open: drive in to repair and change your loadout.', { go: true, seconds: 3 });
       }
     }
   }

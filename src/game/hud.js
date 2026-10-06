@@ -127,7 +127,8 @@ const CSS = `
 .hud.touch .hud-ability .cd { font-size: 20px; }
 /* the touch FIRE button: a chunky yellow pixel button, a shell flying out of it */
 .hud-fire { position: absolute; left: 0; top: 0; width: 88px; height: 88px; margin: -44px 0 0 -44px; pointer-events: none; }
-.hud-fire canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; filter: drop-shadow(0 0 6px #ffc24a88); }
+.hud-fire canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.hud-fire .ring { filter: drop-shadow(0 0 6px #ffc24a88); }
 .hud-fire.down canvas { filter: brightness(0.85); }
 .hud-fire.reloading canvas { filter: saturate(0.35) brightness(0.7); }
 .hud-swap { position: absolute; left: 0; top: 0; width: 66px; height: 42px; margin: -21px 0 0 -33px; pointer-events: none; }
@@ -382,40 +383,49 @@ function drawSwapButton(c) {
 // The touch FIRE button: a round yellow button (a true circle, worked out
 // pixel by pixel, 22 px so it scales by exactly 4 into its 88 px box), a black rim, a lit top edge; on it a reticle, round too:
 // a dark ring, four ticks in toward the middle, a red dot.
-function drawFireButton(c) {
-  // (44px, shown at exactly 2x): a round brass button, lit from the top
-  // left, a dark rim and bevel; on it a two-ring reticle, ticks reaching in
-  // from the outer ring to the inner, a red dot in the middle
-  const g = c.getContext('2d');
-  const N = c.width;
+// The touch fire button, two layers: the button itself drawn chunky (22px,
+// shown at 4x, like the stick: a fat black rim, a bevel, a brass face lit
+// from the top left), and the reticle on it drawn fine (44px, at 2x): two
+// rings, ticks reaching from the outer in to the inner, a red dot.
+function drawFireButton(ring, icon) {
+  {
+    const g = ring.getContext('2d');
+    const N = ring.width;
+    const c = (N - 1) / 2;
+    g.clearRect(0, 0, N, N);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const d = Math.hypot(x - c, y - c);
+        const lit = (x - c + (y - c)) / (2 * c); // -1 top left .. 1 bottom right
+        let col = null;
+        if (d < 11.3) col = '#000';
+        if (d < 10.3) col = lit < -0.15 ? '#ffe29a' : '#a8701c'; // bevel: a lit edge, a dark one
+        if (d < 9.0) col = lit < -0.35 ? '#ffd877' : lit < 0.2 ? '#ffc24a' : '#e9a12e';
+        if (col) {
+          g.fillStyle = col;
+          g.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+  }
+  const g = icon.getContext('2d');
+  const N = icon.width;
   const m = N / 2;
-  const R = m - 0.5;
   g.clearRect(0, 0, N, N);
   const ink = '#1a1410';
+  const outer = 12;
+  const inner = 5.5;
   for (let y = 0; y < N; y++) {
     for (let x = 0; x < N; x++) {
       const px = x + 0.5 - m;
       const py = y + 0.5 - m;
       const d = Math.hypot(px, py);
-      let col = null;
-      if (d <= R) col = ink;
-      if (d <= R - 1.5) col = '#9a6414'; // bevel, dark
-      if (d <= R - 1.5 && (px + py) / Math.max(d, 1e-3) < -0.35) col = '#e0a43a'; // bevel, lit
-      if (d <= R - 3.5) {
-        // the face: a lit top-left, shading to the bottom right
-        const k = (px + py) / (2 * R);
-        col = k < -0.28 ? '#ffd877' : k < 0.12 ? '#ffc24a' : k < 0.36 ? '#f1ad33' : '#e39c26';
-      }
-      // the rings
-      const outer = R * 0.66;
-      const inner = R * 0.3;
-      if (d <= R - 3.5 && Math.abs(d - outer) < 1.0) col = ink;
-      if (Math.abs(d - inner) < 0.8) col = ink;
-      // ticks: from just outside the outer ring in to the inner one
       const ax = Math.abs(px);
       const ay = Math.abs(py);
+      let col = null;
+      if (Math.abs(d - outer) < 1.0) col = ink;
+      if (Math.abs(d - inner) < 0.8) col = ink;
       if ((ax < 1 && ay > inner + 2 && ay < outer + 4) || (ay < 1 && ax > inner + 2 && ax < outer + 4)) col = ink;
-      // the dot
       if (d < 1.6) col = '#c8261c';
       if (col) {
         g.fillStyle = col;
@@ -546,7 +556,7 @@ export function createHud() {
       <div class="hud-boss panel" hidden><div class="row px"><span class="name">Heavy enemy</span><span class="val"></span></div><div class="bar"><i></i></div></div>
       <div class="hud-prompt panel" hidden><span class="px tag"></span><span class="text"></span></div>
     </div>
-    <div class="hud-fire" hidden><canvas width="44" height="44"></canvas></div>
+    <div class="hud-fire" hidden><canvas class="ring" width="22" height="22"></canvas><canvas class="icon" width="44" height="44"></canvas></div>
     <div class="hud-swap" hidden><canvas width="22" height="14"></canvas></div>
     <button type="button" class="hud-pausebtn" hidden aria-label="Pause"><i></i><i></i></button>
     <div class="hud-ability one" hidden><canvas width="32" height="32"></canvas><span class="cd"></span><kbd class="key">Shift</kbd></div>
@@ -686,7 +696,7 @@ export function createHud() {
     const k = bscale();
     return { x: f.x, y: f.y - 44 * k - 12 - 21 * k };
   };
-  drawFireButton(fireEl.querySelector('canvas'));
+  drawFireButton(fireEl.querySelector('.ring'), fireEl.querySelector('.icon'));
   const pauseBtn = $('.hud-pausebtn');
   let onPauseBtn = null;
   pauseBtn.addEventListener('pointerdown', (e) => e.stopPropagation());

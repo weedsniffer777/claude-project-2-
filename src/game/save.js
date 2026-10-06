@@ -24,12 +24,11 @@ const K = {
   crew: 'scavenger.crew',
   endless: 'scavenger.endless',
 };
-// A run's part progress (parts found, their levels and stars, what each
-// level has given, the loadouts) is held in memory while the level's being
-// played, and only written when the level properly ends (won or lost):
-// restarting, quitting from the pause menu, or closing the game drops it.
-const STAGED = [K.owned, K.partLevels, K.stars, K.levelFinds, K.tiers];
-const staged = (key) => STAGED.includes(key) || key.startsWith(K.loadout);
+// Everything is written the moment it changes (parts found, their levels
+// and stars, the loadouts, equipment): a reload, a quit or a crash never
+// loses any of it. (Runs used to be held in memory till the level ended,
+// and quitting or closing the game mid-level lost the loadout with them.)
+const staged = () => false;
 let stage = null; // key -> value, while a run's open
 function read(key, fallback) {
   if (stage && staged(key) && key in stage) return structuredClone(stage[key]);
@@ -53,6 +52,7 @@ function write(key, value) {
 }
 
 export const save = {
+  // (kept for the callers: with nothing held back any more these do nothing)
   // a run's part progress: held (beginRun), written (commitRun: the level
   // ended properly) or dropped (discardRun)
   beginRun() {
