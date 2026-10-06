@@ -726,18 +726,21 @@ export const PARTS = {
       { text: 'Sees further, direct hits harder.', apply: () => {} },
       { text: '', perk: 'Ranging', perkText: 'Every 5 s the 2 farthest enemies in sight are marked with a reticle: +30% damage to them for 5 s.', apply: (s) => (s.spotter = 2) },
     ],
+    // on the mantlet, over the gun (it rides up and down with it), like the
+    // laser rangefinders bolted over the guns of upgraded T-55s
     build(t) {
       const g = rangefinderHead();
-      g.position.set(-0.5, 0.48, -0.05);
-      g.scale.setScalar(0.62);
-      t.turret.add(g);
+      if (t.gunPivot) g.position.set(0.12, 0.2, 0);
+      else g.position.set(-0.5, 0.48, -0.05);
+      g.scale.setScalar(0.55);
+      (t.gunPivot || t.turret).add(g);
       return g;
     },
     light(t) {
       const g = rangefinderHead();
-      g.position.set(-0.25, 0.47, 0.42);
-      g.scale.setScalar(0.45);
-      t.turret.add(g);
+      g.position.set(0.05, 0.16, 0);
+      g.scale.setScalar(0.42);
+      (t.gunPivot || t.turret).add(g);
       return g;
     },
     missile(t) {

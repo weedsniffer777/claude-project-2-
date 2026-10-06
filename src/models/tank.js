@@ -1005,6 +1005,7 @@ export function createTank() {
     turret,
     mgMount: mgSlot,
     mgGun: mgPivot, // (the roof MG itself: a part can fit things to it)
+    gunPivot, // (the Rangefinder sits on the mantlet, over the gun)
     slotGroups,
     setSlotVisible,
     fire,

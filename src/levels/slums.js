@@ -122,9 +122,39 @@ function groundTexture(rand) {
     const hw = 1.9 - Math.abs(Math.sin(z * 1.7)) * 0.3;
     g.fillRect(X(RAIL_X - hw + rand() * hw * 2), Z(z), 1 + ((rand() * 2) | 0), 1 + ((rand() * 2) | 0));
   }
+  // A band of road down x0..x1 between zn and zs, its edges wandering in
+  // and out (never ruler-straight), then frayed into the dirt: clods of the
+  // road's mud out over the edge, the dirt's colour in over it
+  const band = (x0, x1, zn, zs, color, flecks, dirt) => {
+    const seed = rand() * 10;
+    const edge = (x, k) => Math.sin(x / 7.3 + seed + k) * 0.38 + Math.sin(x / 2.6 + seed * 3 + k * 2) * 0.16 + Math.sin(x / 19 + seed * 2 + k) * 0.3;
+    g.beginPath();
+    g.moveTo(X(x0), Z(zn + edge(x0, 0)));
+    for (let x = x0; x <= x1; x += 0.4) g.lineTo(X(x), Z(zn + edge(x, 0)));
+    for (let x = x1; x >= x0; x -= 0.4) g.lineTo(X(x), Z(zs + edge(x, 5)));
+    g.closePath();
+    g.save();
+    g.clip();
+    rect(x0, zn - 1.5, x1, zs + 1.5, color);
+    speckle(g, X(x1) - X(x0), Z(zs + 1.5) - Z(zn - 1.5), flecks, (X(x1) - X(x0)) * (Z(zs + 1.5) - Z(zn - 1.5)) * 0.1, rand, Z(zn - 1.5), X(x0));
+    g.restore();
+    for (const [z, k, out] of [[zn, 0, -1], [zs, 5, 1]]) {
+      for (let x = x0; x < x1; x += 0.35 + rand() * 0.5) {
+        const e = z + edge(x, k);
+        g.globalAlpha = 0.5 + rand() * 0.4;
+        g.fillStyle = rand() < 0.55 ? color : flecks[(rand() * flecks.length) | 0];
+        blob(g, X(x), Z(e + out * rand() * 0.45), (0.2 + rand() * 0.5) * GPX, (0.12 + rand() * 0.25) * GPX, rand, 7);
+        if (rand() < 0.5) {
+          g.fillStyle = dirt[(rand() * dirt.length) | 0];
+          blob(g, X(x + rand()), Z(e - out * rand() * 0.35), (0.15 + rand() * 0.35) * GPX, (0.1 + rand() * 0.2) * GPX, rand, 7);
+        }
+      }
+      g.globalAlpha = 1;
+    }
+  };
+  const DIRT = ['#6e5f4c', '#655744', '#77684f'];
   // the road: darker wet mud, ruts down it (tyre and track), puddles
-  rect(MAP.x0, ROAD.n, DUMP_X, ROAD.s, '#5a4c3c');
-  speckle(g, X(DUMP_X) - X(MAP.x0), Z(ROAD.s) - Z(ROAD.n), ['#4e4234', '#62533f', '#544636'], (X(DUMP_X) - X(MAP.x0)) * (Z(ROAD.s) - Z(ROAD.n)) * 0.1, rand, Z(ROAD.n), X(MAP.x0));
+  band(MAP.x0, DUMP_X + 2, ROAD.n, ROAD.s, '#5a4c3c', ['#4e4234', '#62533f', '#544636'], DIRT);
   for (const z0 of [-3.4, -1.6, 0.8, 2.6]) {
     g.fillStyle = 'rgba(40,32,24,0.55)';
     for (let x = MAP.x0; x < MAP.x1; x += 0.5) g.fillRect(X(x), Z(z0 + Math.sin(x / 11 + z0) * 0.5), 0.5 * GPX, 0.35 * GPX);
@@ -146,11 +176,7 @@ function groundTexture(rand) {
     g.fillRect(X(DUMP_X + rand() * (MAP.x1 - DUMP_X)), Z(MAP.z0 + rand() * (MAP.z1 - MAP.z0)), 1 + ((rand() * 2) | 0), 1);
   }
   // the track on out across the dump
-  rect(DUMP_X, -3.2, MAP.x1, 3.2, '#56503f');
-  for (let i = 0; i < 1600; i++) {
-    g.fillStyle = ['#4a4436', '#625a48', '#6c6a66'][(rand() * 3) | 0];
-    g.fillRect(X(DUMP_X + rand() * (MAP.x1 - DUMP_X)), Z(-3.2 + rand() * 6.4), 2, 1);
-  }
+  band(DUMP_X - 2, MAP.x1, -3.2, 3.2, '#56503f', ['#4a4436', '#625a48', '#6c6a66'], ['#5f584c', '#6a6254', '#55504a']);
   // litter everywhere: scraps of paper, plastic, cans
   for (let i = 0; i < 5000; i++) {
     g.fillStyle = ['#d0d3c8', '#8a8f96', '#3a5a8a', '#b03a3a', '#e0d8b0'][(rand() * 5) | 0];
