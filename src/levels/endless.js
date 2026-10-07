@@ -814,7 +814,19 @@ function buildEndless(scene) {
     return { hp: 0.7 + 0.6 * k + 0.3 * late, dmg: 0.75 + 0.45 * k + 0.2 * late };
   };
   // somewhere in from an edge, well away from the tank, on open ground
+  // Where the next one comes from: on the level the tank's on. Up on the
+  // highway (or the ramp): along the deck, out of view either side of it.
+  // On the ground: round the field's edges, never up on the deck.
   const edgeSpot = (api) => {
+    const t = api.tankPos;
+    if (heightAt(t.x, t.z) > 1 || rampAt(t.x, t.z) != null) {
+      for (let i = 0; i < 40; i++) {
+        const x = THREE.MathUtils.clamp(t.x + (rand() < 0.5 ? -1 : 1) * (24 + rand() * 18), ARENA.minX + 4, ARENA.maxX - 4);
+        const z = DECKZ.n + 2 + rand() * (DECKZ.s - DECKZ.n - 4);
+        if (Math.hypot(x - t.x, z - t.z) < 20 || heightAt(x, z) < DECK - 0.5) continue;
+        return [x, z];
+      }
+    }
     for (let i = 0; i < 40; i++) {
       const side = (rand() * 4) | 0;
       const along = rand();
@@ -823,12 +835,13 @@ function buildEndless(scene) {
       const z = side === 2 ? FIELD.minZ + inset : side === 3 ? FIELD.maxZ - inset : FIELD.minZ + 4 + along * (FIELD.maxZ - FIELD.minZ - 8);
       if (Math.hypot(x - api.tankPos.x, z - api.tankPos.z) < 22) continue;
       if (x > BASE.x0 - 10 && x < BASE.x1 + 10 && z < AVE.wn + 4) continue; // (not by the base)
+      if (heightAt(x, z) > 0.3 || rampAt(x, z) != null) continue; // (ground only: not up on the deck)
       const q = new THREE.Vector3(x, 0, z);
       pushOut(q, () => ({ x: q.x, z: q.z, hx: 0.9, hz: 0.7, yaw: 0 }), blocks, 2);
       if (Math.hypot(q.x - x, q.z - z) > 0.2) continue;
       return [x, z];
     }
-    return [FIELD.minX + 3, FIELD.minZ + 3];
+    return [FIELD.minX + 3, FIELD.maxZ - 3];
   };
   // ------------------------------------------------------- the waves' mix
   // One formula, wave n in, the list out. Fodder (robot dogs) swells over
@@ -928,7 +941,7 @@ function buildEndless(scene) {
   }
 
   function start(api) {
-    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: 7, queue: [], groupT: 0, inBase: false, shut: 0 });
+    Object.assign(S, { t: 0, time: 0, wave: 0, phase: 'intro', left: 7, queue: [], groupT: 0, inBase: false, shut: 0, out: 0, doorOpen: false });
     api.enableGun();
     api.revealScraps(false);
     api.giveRockets();
@@ -936,7 +949,6 @@ function buildEndless(scene) {
     api.objective('Get ready');
     api.prompt('Endless', 'Survive as long as possible!', { go: true, seconds: 1.8 });
     S.tip = 1.9; // (then the one other thing to know; the countdown waits till both are gone)
-    base.openIn();
   }
 
   function script(api, dt) {
@@ -952,7 +964,15 @@ function buildEndless(scene) {
     // out). Inside, the machines out here are held frozen as they are, and
     // there's no free repair: it's for changing the loadout, not hiding.
     if (S.shut > 0 && (S.shut -= dt) <= 0) base.closeOut();
-    if (S.out > 0 && (S.out -= dt) <= 0) base.openIn();
+    if (S.out > 0) S.out -= dt;
+    // the door stays shut, and opens as the tank comes up to it (not
+    // straight after coming out)
+    const want = !(S.out > 0) && !(S.shut > 0) && near(api) < 11;
+    if (want !== !!S.doorOpen) {
+      S.doorOpen = want;
+      if (want) base.openIn();
+      else base.closeIn();
+    }
     if (!(S.out > 0) && base.inDoor > 0.6 && near(api) < 5) {
       S.before = S.phase;
       S.phase = 'inbase';
