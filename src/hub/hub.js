@@ -161,6 +161,7 @@ html.cg .base-hint { display: none !important; }
 .base-crew .fx i { font-style: normal; color: #6be08a; font-variant-numeric: tabular-nums; }
 .base-crew button.train { width: 100%; padding: 8px 6px 9px; border: 0; cursor: var(--cursor); font: 400 11px/1.2 'Silkscreen', monospace; text-transform: uppercase; color: #111; background: #6be08a; box-shadow: 0 3px 0 #2f6b40; }
 .base-crew button.train.promote { background: #f2d23a; box-shadow: 0 3px 0 #8a7420; }
+.base-crew button.train .short { color: #ff4a3a; } /* (not enough of this one) */
 .base-crew button.train:disabled { background: #3a3638; color: #8a8278; box-shadow: none; cursor: default; }
 @media (max-width: 520px) { .base-crew .cards { gap: 8px; } .base-crew .card { padding: 8px 6px; } .base-crew .fx div { font-size: 11px; } }
 .base h2 { margin: 0; font: 400 20px/1.1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); }
@@ -1390,7 +1391,10 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const max = lvl >= CREW_MAX;
       const c = crewCost(lvl);
       const can = !max && save.bank() >= c.scraps && save.tokens() >= c.tokens;
-      const label = max ? 'Max' : `${promotesAt(lvl) ? 'Promote' : 'Train'} · ${c.scraps}${c.tokens ? ` + ${c.tokens} tokens` : ''}`;
+      // (a currency you're short of shows red)
+      const sc = `<span class="${save.bank() < c.scraps ? 'short' : ''}">${c.scraps}</span>`;
+      const tk = c.tokens ? ` + <span class="${save.tokens() < c.tokens ? 'short' : ''}">${c.tokens} tokens</span>` : '';
+      const label = max ? 'Max' : `${promotesAt(lvl) ? 'Promote' : 'Train'} · ${sc}${tk}`;
       return `<div class="card" data-id="${id}"><div class="frame"><img class="pic" alt=""><span class="ri"></span></div><b>${CREW[id].name}</b>
         <div class="lvl">Level ${lvl} / ${CREW_MAX}</div>
         <div class="fx">${crewBonuses(id).map((b) => `<div><span>${b.label}</span><i>${pct(b)}</i></div>`).join('')}</div>

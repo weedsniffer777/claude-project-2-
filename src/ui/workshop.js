@@ -95,6 +95,7 @@ const CSS = `
 .ws .go .cost { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 13px; background: #111; color: var(--amber); }
 .ws .go .cost i { width: 8px; height: 12px; background: var(--amber); clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .ws .go .cost.tk { color: #d9a8ff; }
+.ws .go .cost.short { color: #ff4a3a; box-shadow: inset 0 0 0 2px #ff4a3a; } /* (not enough of this one) */
 .ws .go .cost.tk i { width: 16px; height: 16px; clip-path: none; background: url(${tokenIconURL()}) center / contain no-repeat; image-rendering: pixelated; }
 .ws .go:hover:not(:disabled) { filter: brightness(1.12); transform: translateY(-1px); }
 .ws .go:disabled { color: #8f877a; background: #2a2628; box-shadow: 0 0 0 2px #000, 0 0 0 4px #4a4446; cursor: var(--cursor); animation: none; }
@@ -276,11 +277,9 @@ export function createWorkshop({ renderer, cursor }) {
     const toTier = n?.evolve ? TIERS[tier + 1] : null;
     const btn = max
       ? 'Fully upgraded'
-      : shortS || shortT
-        ? `Need ${[shortS && `${shortS} more scraps`, shortT && `${shortT} more tokens`].filter(Boolean).join(' and ')}`
-        : n.evolve
-          ? `Evolve to ${toTier.name}<span class="cost"><i></i>${n.scraps}</span><span class="cost tk"><i></i>${n.tokens}</span>`
-          : `Level up<span class="cost"><i></i>${n.scraps}</span>`;
+      : n.evolve
+        ? `Evolve to ${toTier.name}<span class="cost${shortS ? ' short' : ''}"><i></i>${n.scraps}</span><span class="cost tk${shortT ? ' short' : ''}"><i></i>${n.tokens}</span>`
+        : `Level up<span class="cost${shortS ? ' short' : ''}"><i></i>${n.scraps}</span>`; // (a currency you're short of shows red)
     const step = max
       ? ''
       : n.evolve
@@ -414,11 +413,9 @@ export function createWorkshop({ renderer, cursor }) {
       <button type="button" class="go${max ? ' maxed' : promo ? ' ev' : ''}" ${!max && (short || shortT) ? 'disabled' : ''}>${
         max
           ? 'Max level'
-          : short || shortT
-            ? `Need ${[short && `${short} more scraps`, shortT && `${shortT} more tokens`].filter(Boolean).join(' and ')}`
-            : promo
-              ? `Promote to Lv ${lvl + 1}<span class="cost"><i></i>${cost}</span><span class="cost tk"><i></i>${tokens}</span>`
-              : `Level up<span class="cost"><i></i>${cost}</span>`
+          : promo
+            ? `Promote to Lv ${lvl + 1}<span class="cost${short ? ' short' : ''}"><i></i>${cost}</span><span class="cost tk${shortT ? ' short' : ''}"><i></i>${tokens}</span>`
+            : `Level up<span class="cost${short ? ' short' : ''}"><i></i>${cost}</span>`
       }</button>`;
     d.querySelector('h2').textContent = TANKS[id].name;
     d.querySelector('.go').addEventListener('click', () => {
