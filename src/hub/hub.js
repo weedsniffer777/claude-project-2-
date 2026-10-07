@@ -285,6 +285,9 @@ html.cg .base-hint { display: none !important; }
 .base-brief .node .hardtag.equiptag { background: #1f7a8c; animation-duration: 1.3s; }
 .base-brief .node .hardtag.equiptag::after { background: #1f7a8c; }
 .base-brief .node .hardtag.equiptag small { color: #c8f6ff; }
+.base-brief .node .hardtag.endtag { display: grid; gap: 3px; justify-items: center; padding: 5px 8px 6px; color: #111; background: #ffb347; animation-duration: 1.25s; }
+.base-brief .node .hardtag.endtag::after { background: #ffb347; }
+.base-brief .node .hardtag.endtag b { font-weight: 400; font-size: 11px; }
 .base-brief .node .hardtag .rw.eq { width: 64px; height: 48px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #5fe6ff, 0 0 10px #5fe6ff99; }
 .base-brief .node .hardtag .rw.tk { width: 84px; height: 49px; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6be08a, 0 0 10px #6be08a99; }
 .base-brief .node .hardtag.tanktag em { background: #6be08a; }
@@ -1471,7 +1474,7 @@ export function createHub({ renderer, pixel, onDeploy }) {
       const label = dir > 0 ? 'Next area' : 'Previous area';
       return `<button type="button" class="pageturn ${dir > 0 ? 'up' : 'down'}${glow ? ' glow' : ''}" data-to="${to}"><i></i><span>${label}</span>${glow ? '<em>New</em>' : ''}</button>`;
     };
-    map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : newEquip(z) ? equipTag(z) : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;
+    map.innerHTML = `${nodes.map((z) => `<button type="button" class="node ${isOpen(z, save.cleared()) ? 'open' : 'locked'}${allDone(z) ? ' alldone' : ''}" data-n="${z.n}" style="left:${z.at[0] * 100}%;top:${z.at[1] * 100}%">${z.n}${isOpen(z, save.cleared()) ? `<span class="stars">${stars(z)}</span>` : ''}${hardNext(z) ? hardTag(z) : newTank(z) ? tankTag(z) : newEquip(z) ? equipTag(z) : newEndless(z) ? endlessTag() : ''}</button>`).join('')}${turn(1)}${turn(-1)}`;
     map.prepend(mapCanvases[mapPage]);
     for (const b of map.querySelectorAll('.node')) b.addEventListener('click', () => showLevel(CAMPAIGN[b.dataset.n - 1], true));
     for (const b of map.querySelectorAll('.pageturn'))
@@ -1496,6 +1499,9 @@ export function createHub({ renderer, pixel, onDeploy }) {
     const id = z.first.easy.equipment;
     return `<span class="hardtag rich equiptag">New equipment<small>First clear:</small><span class="rw eq"><img alt="" src="${equipmentIcon(id)}"><div class="tip"><div class="fx-head">${esc(EQUIPMENT[id].name)}</div>${equipmentHtml(id)}</div></span><em>${esc(EQUIPMENT[id].name)}</em></span>`;
   };
+  // ... or, the level that opens Endless (till it's open): an amber box saying so
+  const newEndless = (z) => z.n === ENDLESS_AFTER.n && !endlessOpen();
+  const endlessTag = () => '<span class="hardtag endtag">Unlocks<b>Endless mode!</b></span>';
   const hardTag = (z) => {
     const id = z.first?.hard?.part;
     if (!id || !PARTS[id]) return '<span class="hardtag">Hard mode</span>';
