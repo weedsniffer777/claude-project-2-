@@ -2132,7 +2132,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       const c = hud.stickCenter();
       const f = hud.fireCenter();
       const bs = { small: 0.82, normal: 1, large: 1.18 }[settings().buttons] || 1;
-      if (run.gun && fireTouch === null && Math.hypot(e.clientX - f.x, e.clientY - f.y) < 50 * bs) {
+      if (run.gun && fireTouch === null && Math.hypot(e.clientX - f.x, e.clientY - f.y) < 58 * bs) // (a little past the button's edge) {
         fireTouch = e.pointerId;
         if (run.arty > 0) return; // (calling in a strike: the spot's tapped on the ground)
         if (run.aiming > 0) firePierce();

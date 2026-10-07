@@ -691,7 +691,7 @@ export function createHud() {
   const mirror = (p) => (settings().hand === 'left' ? { x: window.innerWidth - p.x, y: p.y } : p);
   const fireCenter = () => {
     const k = bscale() * (Math.min(window.innerWidth, window.innerHeight) <= 420 ? 0.9 : 1);
-    return mirror({ x: window.innerWidth - 20 - 44 * k, y: window.innerHeight - 22 - 44 * k });
+    return mirror({ x: window.innerWidth - 44 - 44 * k, y: window.innerHeight - 40 - 44 * k });
   };
   const lineAt = (i) => {
     const f = mirror(fireCenter()); // (worked out right-handed, then mirrored)
