@@ -14,7 +14,12 @@ function queue() {
     for (const f of live) f();
   });
 }
-if (typeof window !== 'undefined') window.addEventListener('resize', queue);
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', queue);
+  // (a web font landing late reflows the text: fit again)
+  document.fonts?.addEventListener?.('loadingdone', queue);
+  document.fonts?.ready?.then(queue);
+}
 function watch(root, selector, fitOne) {
   const run = () => [...(root.matches(selector) ? [root] : []), ...root.querySelectorAll(selector)].forEach((el) => !el.hidden && el.isConnected && fitOne(el));
   live.add(run);

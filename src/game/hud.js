@@ -139,6 +139,9 @@ const CSS = `
 .hud-pausebtn { position: absolute; right: calc(72px + env(safe-area-inset-right, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); width: 40px; height: 40px; display: flex; gap: 6px; align-items: center; justify-content: center; border: 0; padding: 0; pointer-events: auto;
   background: rgba(12, 11, 13, 0.85); box-shadow: 0 0 0 2px #000, 0 0 0 4px #f1e9d8; }
 .hud-pausebtn i { width: 6px; height: 16px; background: #f1e9d8; }
+html.cg .hud-pausebtn { right: calc(12px + env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); } /* (the very corner: no DEV button there) */
+html.cg .hud.touch .hud-right { top: calc(66px + env(safe-area-inset-top, 0px)); } /* (clear below it) */
+html.cg .hud.touch .hud-passives { top: calc(128px + env(safe-area-inset-top, 0px)); }
 .hud.touch .hud-right { top: calc(56px + env(safe-area-inset-top, 0px)); }
 }
 .hud:not(.touch) .hud-ability canvas { width: 84px; height: 84px; }
@@ -536,6 +539,9 @@ function inject() {
   }
   document.head.append(link);
   fixPixelifyH(link);
+  // (asked for now, not when a screen first shows text in them: a late swap
+  // would grow the text after that screen had been fitted)
+  for (const f of ["400 16px 'Pixelify Sans'", "600 16px 'Pixelify Sans'", "400 16px 'Silkscreen'"]) document.fonts?.load(f).catch(() => {});
   const style = document.createElement('style');
   // (no ligatures: Pixelify Sans joins an F and an i into something like an A)
   style.textContent = `* { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'clig' 0; }\n` + CSS + EFFECT_CSS + TRACK_CSS;

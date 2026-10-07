@@ -32,6 +32,8 @@ canvas { touch-action: none; }`;
 
 // (the CrazyGames build takes no dev switches from the address)
 const params = CG ? new URLSearchParams() : new URLSearchParams(location.search);
+// (the release build: no DEV button in the corner, so the corner's free)
+document.documentElement.classList.toggle('cg', CG);
 if (params.has('shot')) document.body.classList.add('dk-shot');
 
 const { renderer, pixel } = createRenderer({ pixelHeight: 540 }) // zoomed-out game camera: more pixels keep the tank's detail;

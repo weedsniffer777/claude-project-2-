@@ -98,6 +98,10 @@ const CSS = `
 .base-promo img { width: 120px; height: 70px; image-rendering: pixelated; }
 .base-promo b { max-width: 150px; font: 400 10px/1.15 'Silkscreen', monospace; text-transform: uppercase; font-weight: 400; color: #f1e9d8; text-align: center; }
 .base-promo i { position: absolute; left: 50%; top: 100%; margin-left: -7px; width: 14px; height: 9px; background: #6be08a; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+/* (phones: about half the size, its contents smaller; it still hangs over its label) */
+@media (pointer: coarse) { .base-promo { padding: 4px 6px 5px; gap: 2px; } .base-promo .t { font-size: 7px; padding: 2px 4px; } .base-promo img { width: 64px; height: 37px; } .base-promo b { max-width: 84px; font-size: 7px; } }
+html.cg .base-gear { top: calc(14px + env(safe-area-inset-top, 0px)); } /* (level with the scraps: no DEV button above it) */
+html.cg .base-hint { display: none !important; }
 @keyframes basePromo { 0%, 100% { transform: translate(-50%, calc(-100% - 22px)); } 50% { transform: translate(-50%, calc(-100% - 27px)); } }
 .base-tag.alert::after { content: 'Upgrade!'; margin-left: 8px; padding: 1px 4px; color: #111; background: #6be08a; box-shadow: 0 0 0 2px #000; animation: baseAlert 0.9s steps(2) infinite; }
 @keyframes baseAlert { 50% { background: #b6ffc4; } }
