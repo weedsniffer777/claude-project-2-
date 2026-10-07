@@ -14,7 +14,7 @@ export const CREW = {
   commander: {
     name: 'Commander',
     bonuses: [
-      { label: 'Hull', max: 0.25, apply: (s, f) => (s.maxHp = Math.round(s.maxHp * (1 + f))) },
+      { label: 'HP', max: 0.25, apply: (s, f) => (s.maxHp = Math.round(s.maxHp * (1 + f))) },
       { label: 'Cooldowns', max: 0.2, minus: true, apply: (s, f) => (s.cooldownMul *= 1 - f) },
     ],
   },
@@ -22,7 +22,7 @@ export const CREW = {
     name: 'Driver',
     bonuses: [
       { label: 'Speed', max: 0.2, apply: (s, f) => (s.speed *= 1 + f) },
-      { label: 'Turning', max: 0.3, apply: (s, f) => (s.turn *= 1 + f) },
+      { label: 'Turning speed', max: 0.3, apply: (s, f) => (s.turn *= 1 + f) },
     ],
   },
   gunner: {

@@ -375,11 +375,11 @@ export function createWorkshop({ renderer, cursor }) {
     }
   }
   const TANK_ROWS = [
-    ['maxHp', 'Hull', (v) => `${Math.round(v)}`],
+    ['maxHp', 'HP', (v) => `${Math.round(v)}`],
     ['cannonDamage', 'Shell damage', (v) => `${Math.round(v)}`],
     ['mgDamage', 'MG damage', (v) => `${+v.toFixed(1)}`],
     ['speed', 'Speed', (v) => `${Math.round(v * 100)}%`],
-    ['breakShield', 'Ability damage cut', (v) => `${Math.round(v * 100)}%`],
+    ['abilityDamage', 'Ability damage', (v) => `${Math.round(v)}`],
   ];
   function renderTank() {
     const d = $('.detail');

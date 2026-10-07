@@ -21,7 +21,7 @@ const CSS = `
 .cel-aura { position: absolute; inset: -18px; z-index: -1; background: radial-gradient(circle, var(--c) 0%, transparent 70%); opacity: 0; }
 .cel-nm { font: 400 14px/1.1 'Silkscreen', monospace; color: #f1e9d8; text-transform: uppercase; }
 .cel-tier { display: flex; align-items: center; gap: 6px; font: 400 11px/1 'Silkscreen', monospace; color: var(--c); text-transform: uppercase; }
-.cel-tier canvas { width: 22px; height: 22px; image-rendering: pixelated; }
+.cel-tier canvas { width: 22px; height: auto; max-height: 34px; image-rendering: pixelated; }
 .cel-lines { display: grid; gap: 7px; justify-items: center; min-height: 10px; }
 .cel-line { display: flex; gap: 10px; align-items: baseline; padding: 5px 10px; background: #121014; box-shadow: 0 0 0 2px #000, 0 0 0 4px #3a3540; font: 400 14px/1.2 'Pixelify Sans', monospace; color: #d8d0c0; white-space: nowrap; }
 .cel-line b { font: 400 13px/1 'Silkscreen', monospace; color: #6be08a; }

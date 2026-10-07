@@ -1112,6 +1112,8 @@ export function applyTankLevel(s, lvl) {
   s.mgDamage *= 1 + 0.01 * k;
   s.speed *= 1 + 0.003 * k;
   s.breakShield = 0.25 + (0.25 * k) / (TANK_MAX - 1); // the ability gets better with the tank
+  s.abilityPower = 1 + 0.012 * k; // (and hits harder: every tank's ability, the Piercing shot too)
+  s.pierceDamage *= s.abilityPower;
   if (s.salvoZoom) s.salvoZoom = 1.25 + (0.25 * k) / (TANK_MAX - 1); // the missile tank's salvo sees further: +25% to +50%
 }
 
@@ -1145,11 +1147,29 @@ function applyPart(s, id, lvl) {
 
 // levels: { partId: level } to use instead of the saved ones; tankLevel
 // likewise (null: the saved one)
+// what the tank's ability hits for, as one number (the upgrade screen's row)
+const RAM_DAMAGE = 80; // (game.js's boosted ram)
+function abilityDamage(s, tank) {
+  const p = s.abilityPower || 1;
+  switch (tankDef(tank).ability) {
+    case 'pierce':
+      return s.pierceDamage;
+    case 'salvo':
+      return s.cannonDamage * 1.81 * p; // each missile
+    case 'hunter':
+      return s.cannonDamage * s.hunterDamage * p; // each shot
+    case 'breakthrough':
+      return RAM_DAMAGE * 0.8 * p; // each ram while it charges
+    default:
+      return 0;
+  }
+}
 export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null, noCrew = false) {
   const s = { ...BASE_STATS, ...tankDef(tank).stats };
   applyTankLevel(s, tankLevel ?? save.tankLevel(tank));
   for (const id of parts) applyPart(s, id, levels?.[id] ?? levelOf(id));
   if (!noCrew) applyCrew(s);
+  s.abilityDamage = abilityDamage(s, tank);
   // the light tank's affinity for spotting: one more mark
   return s;
 }
@@ -1160,7 +1180,7 @@ export function statsFor(parts, tank = 'battle', levels = null, tankLevel = null
 const pct = (v) => `${Math.round(v * 100)}%`;
 const secs = (v) => `${+v.toFixed(2)} s`;
 const STAT_ROWS = [
-  ['maxHp', 'Hull', (v) => `${Math.round(v)}`, 1],
+  ['maxHp', 'HP', (v) => `${Math.round(v)}`, 1],
   ['armor', 'Damage taken', pct, -1],
   ['cannonDamage', 'Shell damage', (v) => `${Math.round(v)}`, 1],
   ['splash', 'Blast radius', (v) => `${v.toFixed(1)} m`, 1],

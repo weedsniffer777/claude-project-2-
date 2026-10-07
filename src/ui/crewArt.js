@@ -11,10 +11,10 @@ const LAYOUT = [
 export function rankIcon(rank) {
   const c = document.createElement('canvas');
   c.width = 32;
-  c.height = 36;
+  c.height = 48; // (room above for the top chevron's point, below for the rocker)
   const g = c.getContext('2d');
   const { chev, rocker } = LAYOUT[rank];
-  const y0 = 6 + (3 - chev) * 3 + (rocker ? 0 : 4);
+  const y0 = 10 + (3 - chev) * 3 + (rocker ? 0 : 4);
   const stroke = (draw) => {
     for (const [col, w] of [['#2f4a1e', 7], ['#f2d23a', 4]]) {
       g.strokeStyle = col;

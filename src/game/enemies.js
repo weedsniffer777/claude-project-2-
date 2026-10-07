@@ -2,6 +2,8 @@
 // at rifle range, strafe and fire bursts. The roof MG and cannon splash kill
 // them; their wrecks stay where they fall.
 import { sfx } from '../audio.js';
+
+const MAX_WRECKS = 24; // dead machines left lying around at most
 import * as THREE from 'three';
 import { createDog } from '../models/dog.js';
 import { createWalker } from '../models/walker.js';
@@ -772,6 +774,20 @@ export class Enemies {
     // the run's over (won, or the tank's gone up): nobody fires any more
     if (ctx.over) for (const e of this.list) Object.assign(e, { windup: 0, burstLeft: 0, charge: 0, fireTimer: Math.max(e.fireTimer || 0, 1) });
     this.updateBolts(dt, ctx);
+    // wrecks don't pile up for ever (a long Endless run): past a couple of
+    // dozen, the oldest go from the scene and the list
+    let dead = 0;
+    for (const e of this.list) if (!e.alive) dead++;
+    if (dead > MAX_WRECKS) {
+      let drop = dead - MAX_WRECKS;
+      this.list = this.list.filter((e) => {
+        if (drop <= 0 || e.alive) return true;
+        drop--;
+        e.model.group.removeFromParent();
+        e.markMesh?.removeFromParent();
+        return false;
+      });
+    }
     for (const e of this.list) {
       if (e.delay > 0) {
         e.delay -= dt;
@@ -1477,6 +1493,9 @@ export class Enemies {
         e.dashGone = 0;
         e.dashHit = false;
         this.combat.shake = Math.max(this.combat.shake, 0.3);
+        // our boost's sound: the bang as it lights and the rockets' roar, deeper, fading with distance
+        sfx.at('boom', e.pos, { gain: 0.7, rate: 0.9, reach: 80 });
+        sfx.at('rocket', e.pos, { gain: 0.6, rate: 0.85, reach: 80 });
       }
       this.mechExhaust(e, dt, 0.25 + 0.5 * (e.st / S.dashPlant)); // (spooling up)
       return own({ open: true, dash: e.st > S.dashPlant - 0.3 });

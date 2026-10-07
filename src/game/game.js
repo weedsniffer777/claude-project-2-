@@ -202,6 +202,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     const loadout = save.loadout(tankId).filter((id) => PARTS[id]).slice(0, def.slots);
     fitParts(loadout);
     Object.assign(run, {
+      endlessDone: false, // (a new run: Endless can end again, by death or End run)
       bossSlow: 0, // a boss down: slow motion (bossFinale)
       finaleCam: null,
       camShot: null, // api.cameraTo
@@ -1357,7 +1358,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       targets.push({ point: p });
     }
     run.abilityCd = stats.salvoCooldown;
-    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 1.81, blast: stats.splash * 1.15 }; // (the salvo keeps its punch: the single missiles are the weaker ones)
+    run.sal = { salvo: true, targets, t: 0.7, fired: 0, gap: 0, damage: stats.cannonDamage * 1.81 * (stats.abilityPower || 1), blast: stats.splash * 1.15 }; // (the salvo keeps its punch: the single missiles are the weaker ones)
   }
   // e: the machine it homes on (or null: o.point, a spot); o: { damage,
   // blast, top (climb, then dive straight down on it) } (default the
@@ -1971,6 +1972,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     if (on && (run.over || run.fading)) return;
     run.paused = on;
     keys.clear();
+    // the cursor back on the game view before the menu appears over it: a
+    // browser only rechecks the cursor under a still mouse when the element
+    // it's on changes its own, so this way it shows without a nudge
+    setCursor();
     hud.showPause(
       on
         ? {
@@ -2040,6 +2045,33 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     keys.delete(act ? `act:${act}` : e.code);
     if (act === 'fire') trigger = false;
   };
+  // where a ray first dips under the level's surface (heightAt), short of
+  // maxD; only when that surface is raised there (else the ground meshes
+  // already answer it)
+  const marchP = new THREE.Vector3();
+  function surfaceHit(ray, maxD) {
+    let prev = 0;
+    for (let d = 1; d < maxD; d += 0.6) {
+      ray.at(d, marchP);
+      if (marchP.y > level.heightAt(marchP.x, marchP.z)) {
+        prev = d;
+        continue;
+      }
+      // narrow it down between the last point above and this one below
+      let lo = prev;
+      let hi = d;
+      for (let i = 0; i < 8; i++) {
+        const mid = (lo + hi) / 2;
+        ray.at(mid, marchP);
+        if (marchP.y > level.heightAt(marchP.x, marchP.z)) lo = mid;
+        else hi = mid;
+      }
+      ray.at(hi, marchP);
+      const h = level.heightAt(marchP.x, marchP.z);
+      return h > 0.3 ? marchP.clone().setY(h) : null;
+    }
+    return null;
+  }
   function aimAt(x, y) {
     const r = canvas.getBoundingClientRect();
     pointer = [((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1];
@@ -2703,7 +2735,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     combat.glow.spike(from, m.direction, 0xfff6d6, 2.6, 0.35, 0.1);
     combat.glow.light(from, 0xffc070, 60, 0.18);
     for (let i = 0; i < 6; i++) combat.puffs.spawn(from.clone(), new THREE.Vector3((Math.random() - 0.5) * 2, 0.4 + Math.random() * 0.6, (Math.random() - 0.5) * 2).addScaledVector(m.direction, 2), { color: 0xd8d6cc, s0: 0.15, s1: 0.45, life: 0.5, drag: 4, lift: 0.5, fadeAt: 0.3 });
-    const dmg = Math.round(stats.cannonDamage * stats.hunterDamage);
+    const dmg = Math.round(stats.cannonDamage * stats.hunterDamage * (stats.abilityPower || 1));
     const killed = enemies.damage(e, dmg, from.clone());
     hud.damage(at.clone().setY(at.y + 0.6), dmg, 'big');
     if (killed) hud.damage(at.clone().setY(at.y + 1.3), 0, 'kill');
@@ -3238,7 +3270,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
       // rocket ram and dozer blade: machines in the way take a beating
       if (run.mode === 'field' && !run.over) {
         enemies.nudge(tankBox(), vel); // and anything it drives into is shoved aside
-        const ramDmg = (boosting ? RAM_DAMAGE : Math.abs(speed) > 3 ? stats.ramDamage : 0) * (run.brk > 0 ? 0.8 : 1); // (Breakthrough's charge a little softer)
+        const ramDmg = (boosting ? RAM_DAMAGE : Math.abs(speed) > 3 ? stats.ramDamage : 0) * (run.brk > 0 ? 0.8 * (stats.abilityPower || 1) : 1); // (Breakthrough's charge a little softer; harder with the tank's level)
         if (ramDmg > 0) {
           // Breakthrough ploughs them on ahead of the tank, knocked senseless;
           // a boost or the blade throws them aside
@@ -3367,7 +3399,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
         raycaster.setFromCamera(ndc, camera);
         const hits = raycaster.intersectObjects(targets, false);
         hovered = null;
-        if (hits.length) {
+        // raised ground (a ramp, a deck, a sidewalk) isn't in the colliders:
+        // the ray stops where it first meets the level's own surface, if
+        // that's nearer than anything it hit
+        const raised = level.heightAt ? surfaceHit(raycaster.ray, hits[0]?.distance ?? 400) : null;
+        if (raised) {
+          aimPoint.copy(raised);
+          hasAim = true;
+        } else if (hits.length) {
           let pick = hits[0];
           // the pointer's on an enemy behind something only the camera's
           // view puts in the way (a low wall, a wreck): if the gun has a

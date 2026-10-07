@@ -120,16 +120,19 @@ export const sfx = {
     if (!ctx || !buffers[name] || ctx.state !== 'running' || gain < 0.01) return;
     const now = ctx.currentTime;
     if (now - (lastAt[name] ?? -1) < (GAP[name] || 0)) return;
-    if ((ringing[name] || 0) >= (VOICES[name] || 8)) return;
+    // (voices counted by when they're due to end, not by their ended
+    // events: a context the browser suspended mid-sound may never send those,
+    // and a stuck count would silence that sound for good)
+    const live = (ringing[name] = (ringing[name] || []).filter((end) => end > now));
+    if (live.length >= (VOICES[name] || 8)) return;
     lastAt[name] = now;
-    ringing[name] = (ringing[name] || 0) + 1;
+    live.push(now + buffers[name].duration / rate);
     const src = ctx.createBufferSource();
     src.buffer = buffers[name];
     src.playbackRate.value = rate;
     const g = ctx.createGain();
     g.gain.value = gain;
     src.connect(g).connect(master);
-    src.onended = () => ringing[name]--;
     src.start();
   },
   // a one-shot out in the world: quieter the further it is from the tank
@@ -156,12 +159,19 @@ export const sfx = {
     }
     if (l.src && Math.abs(rate - l.rate) > 0.01) {
       l.rate = rate;
-      l.src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.1);
+      const r = l.src.playbackRate;
+      (r.cancelAndHoldAtTime || r.cancelScheduledValues).call(r, ctx.currentTime); // (no pile of old ramps)
+      r.setTargetAtTime(rate, ctx.currentTime, 0.1);
     }
   },
   // every frame: the overall level
   update() {
     if (!master) return;
+    // back after a long gap (a stall, a sleep, a hidden tab): put every
+    // level straight where it should be, nothing left scheduled
+    const t = performance.now();
+    if (t - (lastUpdate || t) > 1000) resync();
+    lastUpdate = t;
     const muted = document.hidden || platform.inAd || platform.muted;
     const v = muted ? 0 : settings().volume ?? 0.75;
     if (Math.abs(v - (master.v ?? -1)) > 0.001) {
@@ -170,6 +180,30 @@ export const sfx = {
     }
   },
 };
+
+let lastUpdate = 0;
+function resync() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  for (const l of Object.values(loops)) {
+    l.gain.gain.cancelScheduledValues(now);
+    l.gain.gain.setValueAtTime(l.target, now);
+    if (l.src) {
+      l.src.playbackRate.cancelScheduledValues(now);
+      l.src.playbackRate.setValueAtTime(l.rate, now);
+    }
+  }
+  master.gain.cancelScheduledValues(now);
+  master.gain.setValueAtTime(master.v ?? 0, now);
+  for (const k of Object.keys(ringing)) ringing[k] = [];
+}
+// a hidden tab: the whole audio graph sleeps (not just muted, so nothing
+// keeps ticking); back: woken, everything put straight
+document.addEventListener('visibilitychange', () => {
+  if (!ctx) return;
+  if (document.hidden) ctx.suspend().catch(() => {});
+  else ctx.resume().then(resync, () => {});
+});
 
 // a beep at the new level, so you hear what you picked
 onSettings((k) => k === 'volume' && sfx.play('beep2', { gain: 0.5 }));

@@ -1133,7 +1133,8 @@ export function createHud() {
         el.querySelector('[data-act="resume"]').focus();
       };
       el.querySelector('[data-act="exit"]').hidden = !acts.exit;
-      el.querySelector('[data-act="exit"]').textContent = acts.endless ? 'End run' : 'Exit';
+      el.querySelector('[data-act="exit"]').textContent = acts.endless ? 'End run early' : 'Exit';
+      el.querySelector('[data-act="restart"]').hidden = !!acts.endless; // (Endless: no restart, end it instead)
       // (Endless: leaving ends the run, and keeps what it earned)
       el.querySelector('.ask h2').textContent = acts.endless ? 'End the run?' : 'Exit level?';
       el.querySelector('.ask > p').textContent = acts.endless ? "You keep this run's scraps and XP." : "This run's scraps will be lost!";

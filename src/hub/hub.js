@@ -153,7 +153,7 @@ html.cg .base-hint { display: none !important; }
 .base-crew .card { display: grid; gap: 8px; align-content: start; justify-items: center; padding: 12px 10px; background: #1d1b1e; box-shadow: 0 0 0 2px #000, 0 0 0 4px #6d655a; }
 .base-crew .frame { position: relative; width: 100%; max-width: 128px; aspect-ratio: 1; background: radial-gradient(circle at 50% 40%, #3a4236, #1f2420 75%); box-shadow: 0 0 0 2px #000; }
 .base-crew .frame .pic { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-.base-crew .frame canvas { position: absolute; left: 4px; top: 4px; width: 28px; height: 32px; inset: 4px auto auto 4px; }
+.base-crew .frame canvas { position: absolute; left: 4px; top: 2px; width: 28px; height: 42px; inset: 4px auto auto 4px; }
 .base-crew .card b { font: 400 14px/1 'Silkscreen', monospace; text-transform: uppercase; color: var(--amber); font-weight: 400; }
 .base-crew .lvl { font: 400 11px/1 'Silkscreen', monospace; color: #b9b0a0; }
 .base-crew .fx { display: grid; gap: 4px; width: 100%; }
