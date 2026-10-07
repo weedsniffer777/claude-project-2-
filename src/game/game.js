@@ -820,10 +820,12 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     // splash round it does a fraction to anything else close by
     // (and whatever a shell strikes takes its full hit, more with a Rangefinder)
     const struck = !shell ? mesh?.userData?.enemy : null;
-    const direct = struck && (stats.apRounds || stats.directHit > 1) ? struck : null;
+    // (any round that strikes a machine hits it in full, wherever on it: a
+    // big one's centre can be further off than a small round's splash)
+    const direct = struck || null;
     const hits = [];
     if (direct?.alive) {
-      const dmg = stats.cannonDamage * stats.directHit;
+      const dmg = stats.cannonDamage * Math.max(1, stats.directHit);
       hits.push({ e: direct, amount: Math.round(dmg), killed: enemies.damage(direct, dmg, at) });
     }
     const amount = shell ? shell.damage : stats.apRounds ? stats.cannonDamage * 0.4 : stats.cannonDamage;
@@ -1847,8 +1849,10 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
           const rx = e.pos.x - from.x;
           const rz = e.pos.z - from.z;
           const along = rx * dir.x + rz * dir.z;
-          if (along < a0 - 0.6 || along > a1 + 0.6) continue;
-          if (Math.abs(rx * dir.z - rz * dir.x) > PIERCE_HALF * e.stats.scale + 0.3) continue;
+          // (its real footprint: the mech is far wider than its scale says)
+          const size = e.stats.box ? Math.max(e.stats.box.hx, e.stats.box.hz) * 0.8 : 0;
+          if (along < a0 - 0.6 - size || along > a1 + 0.6 + size) continue;
+          if (Math.abs(rx * dir.z - rz * dir.x) > Math.max(PIERCE_HALF * e.stats.scale + 0.3, PIERCE_HALF + size)) continue;
           hit.add(e);
           const dmg = stats.pierceDamage;
           const killed = enemies.damage(e, dmg, from.clone());

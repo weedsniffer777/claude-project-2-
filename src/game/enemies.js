@@ -759,7 +759,9 @@ export class Enemies {
     const hits = [];
     for (const e of this.list) {
       if (!e.alive || e.delay > 0 || e === skip) continue;
-      const d = Math.hypot(e.pos.x - at.x, e.pos.z - at.z);
+      // (from its edge, not its centre: a big machine's hull is far from its middle)
+      const size = e.stats.box ? Math.max(e.stats.box.hx, e.stats.box.hz) * 0.8 : 0.4;
+      const d = Math.max(0, Math.hypot(e.pos.x - at.x, e.pos.z - at.z) - size);
       if (d >= radius) continue;
       const dmg = Math.round(amount * (d < radius * 0.5 ? 1 : 0.6));
       hits.push({ e, amount: dmg, killed: this.damage(e, dmg, at) });
