@@ -19,10 +19,10 @@ function apply() {
 
 const CSS = `
 html { font-variant-emoji: text; } /* (arrows and stars stay pixel-font glyphs, never emoji) */
-html.ui-scaled .fit, html.ui-scaled .ws, html.ui-scaled .base-brief { zoom: var(--ui); width: calc(100vw / var(--ui)); height: calc(100dvh / var(--ui)); right: auto; bottom: auto; }
+html.ui-scaled .fit, html.ui-scaled .ws, html.ui-scaled .base-brief { transform: scale(var(--ui)); transform-origin: 0 0; width: calc(100vw / var(--ui)); height: calc(100vh / var(--ui)); right: auto; bottom: auto; } /* (the fitter sets the exact size and scale; this is the first frame) */
 html.ui-scaled .base-news, html.ui-scaled .base-menu { zoom: var(--ui); }
 html.ui-scaled .base-brief .map { height: min(calc(78vh / var(--ui)), 680px); }
-html.ui-scaled .ws .list { max-height: calc(66vh / var(--ui)); }
+html.ui-scaled .ws .list { max-height: none; } /* (the grid row sizes it: the layer is exactly the screen) */
 html.ui-scaled .fit .pop { max-height: calc(60vh / var(--ui)); }
 `;
 if (typeof document !== 'undefined') {

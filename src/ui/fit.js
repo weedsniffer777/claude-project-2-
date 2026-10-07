@@ -1,3 +1,4 @@
+import { uiZoom } from './scale.js';
 // Everything fits the screen, whatever its size: windows and popups are
 // zoomed down (never up) until the whole of them shows, whenever one opens,
 // its content changes or the screen does. (zoom rather than a transform: it
@@ -49,47 +50,42 @@ export function watchPopups(root, selector, { margin = 10, min = 0.45 } = {}) {
   });
 }
 
-// windows: full-screen layers whose panels must all show; zoomed out
-// (and sized back to exactly the screen) till the panels fit. (Sized by
-// measuring, not with viewport units: those don't come out right inside a
-// zoomed element.)
+// windows: full-screen layers whose panels must all show. Shrunk with a
+// scale transform (not CSS zoom: browsers disagree on how zoomed sizes are
+// reported, Safari above all, and a fitter that trusts the wrong numbers
+// squashes the screen into a corner). Measured at true size first, then
+// scaled by the small-screen factor or whatever more it takes to fit, and
+// laid out that much bigger so it still covers exactly the screen.
+// el.dataset.scale holds the factor (screen px = layer px x scale).
 export function watchScreens(root, selector, { margin = 6, min = 0.4 } = {}) {
   return watch(root, selector, (el) => {
-    for (const p of ['zoom', 'width', 'height', 'right', 'bottom']) el.style[p] = '';
+    for (const p of ['transform', 'transformOrigin', 'width', 'height', 'right', 'bottom', 'zoom']) el.style[p] = '';
     if (getComputedStyle(el).display === 'none') return;
-    let z = baseZoom(el);
     const W = window.innerWidth;
     const H = window.innerHeight;
-    for (let pass = 0; pass < 5; pass++) {
-      // the layer itself: exactly the screen
-      const r = el.getBoundingClientRect();
-      if (Math.abs(r.height - H) > 1 || Math.abs(r.width - W) > 1) {
-        const cs = getComputedStyle(el);
-        el.style.height = `${(parseFloat(cs.height) * H) / r.height}px`;
-        el.style.width = `${(parseFloat(cs.width) * W) / r.width}px`;
-        el.style.right = el.style.bottom = 'auto';
-        continue;
-      }
-      // the panels' extent on screen
-      let top = Infinity;
-      let bottom = -Infinity;
-      let left = Infinity;
-      let right = -Infinity;
-      for (const c of el.children) {
-        if (c.hidden || getComputedStyle(c).position === 'fixed') continue;
-        const b = c.getBoundingClientRect();
-        if (!b.width || !b.height) continue;
-        top = Math.min(top, b.top);
-        bottom = Math.max(bottom, b.bottom);
-        left = Math.min(left, b.left);
-        right = Math.max(right, b.right);
-      }
-      if (top === Infinity) return;
-      if (top >= margin - 1 && bottom <= H - margin + 1 && left >= margin - 1 && right <= W - margin + 1) return;
-      if (z <= min) return;
-      const k = Math.min(1, (H - margin * 2) / (bottom - top), (W - margin * 2) / (right - left)) * 0.97;
-      z = Math.max(min, z * k);
-      el.style.zoom = String(z);
+    // true size: no scaling, exactly the screen
+    // (border-box: its padding inside that size, not added on)
+    Object.assign(el.style, { transform: 'none', zoom: '1', boxSizing: 'border-box', width: `${W}px`, height: `${H}px`, right: 'auto', bottom: 'auto' });
+    let top = Infinity;
+    let bottom = -Infinity;
+    let left = Infinity;
+    let right = -Infinity;
+    for (const c of el.children) {
+      if (c.hidden || getComputedStyle(c).position === 'fixed') continue;
+      const b = c.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      top = Math.min(top, b.top);
+      bottom = Math.max(bottom, b.bottom);
+      left = Math.min(left, b.left);
+      right = Math.max(right, b.right);
     }
+    let z = uiZoom();
+    if (top !== Infinity) {
+      const k = Math.min((H - margin * 2) / (bottom - top), (W - margin * 2) / (right - left));
+      if (k < 1) z = Math.min(z, k * 0.97);
+    }
+    z = Math.max(min, Math.min(1, z));
+    el.dataset.scale = String(z);
+    Object.assign(el.style, { transform: z < 0.999 ? `scale(${z})` : 'none', transformOrigin: '0 0', width: `${W / z}px`, height: `${H / z}px` });
   });
 }

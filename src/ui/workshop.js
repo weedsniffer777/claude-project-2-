@@ -147,7 +147,7 @@ export function createWorkshop({ renderer, cursor }) {
   root.hidden = true;
   root.style.setProperty('--cursor', cursor);
   // (its zoom on screen: the small-screen zoom, and any more to fit it)
-  const zoomOf = () => parseFloat(getComputedStyle(root).zoom) || 1;
+  const zoomOf = () => +root.dataset.scale || 1; // (its scale on screen, set by the fitter)
   watchScreens(root, '.ws');
   root.innerHTML = `
     <div class="top"><h1>Upgrades</h1><div class="bank pnl sc"><i></i>Scraps <b>0</b></div><div class="bank pnl tk"><i></i>Tokens <b>0</b></div><button type="button" class="back">Back</button></div>

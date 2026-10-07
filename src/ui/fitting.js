@@ -270,7 +270,7 @@ export function createFitting({ renderer, cursor }) {
   root.hidden = true;
   root.style.setProperty('--cursor', cursor);
   // (its zoom on screen: the small-screen zoom, and any more to fit it)
-  const zoomOf = () => parseFloat(getComputedStyle(root).zoom) || 1;
+  const zoomOf = () => +root.dataset.scale || 1; // (its scale on screen, set by the fitter)
   watchScreens(root, '.fit');
   root.innerHTML = `
     <svg></svg>
