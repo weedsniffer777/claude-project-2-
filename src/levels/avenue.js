@@ -1602,7 +1602,7 @@ function buildAvenue(scene) {
       // Every tip shows once, the first time it comes up, and never again
       // (Replay tutorial in the quarters brings them back). What they
       // introduce is there from the start once you've seen them.
-      if (api.seen('fire')) api.enableGun();
+      api.enableGun(); // (the gun works from the start; the fire lesson only counts shots from when it begins)
       if (api.seen('scraps')) api.revealScraps(false);
       if (api.seen('boost')) api.giveRockets();
       // the battle tank's Piercing shot comes online at the boss the first
