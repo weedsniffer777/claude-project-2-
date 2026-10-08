@@ -261,6 +261,8 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     hud.showPause(null);
     hud.showContinue(null);
     hud.showPicker(null);
+    gate?.remove();
+    gate = null;
     fitting.hide();
     trigger = false;
     speed = 0;
@@ -285,7 +287,34 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     else if (touch) hud.prompt('Controls', 'Stick drives · <b>FIRE</b> shoots (it aims for you) · drag on the screen to aim', { seconds: 8 });
     else hud.prompt('Controls', '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · pointer aims · click or <kbd>Space</kbd> fires', { seconds: 8 });
     if (canvas.isConnected && hud.root.isConnected) canvas.style.cursor = 'none';
+    // desktop, the very first tutorial play: a dark "click to start" card.
+    // The portal wants a click on the game before it hands over the pointer
+    // and the keys, and the world holds still until it comes
+    if (level.start && !touch && !api.seen('click-start')) showStartGate();
     return levelDef.id;
+  }
+
+  let gate = null;
+  function showStartGate() {
+    gate?.remove();
+    const el = document.createElement('div');
+    el.style.cssText = "position:fixed;inset:0;z-index:30;display:grid;place-items:center;align-content:center;gap:14px;background:rgba(7,6,9,0.82);color:#f1e9d8;font:400 28px/1.2 'Silkscreen',monospace;text-transform:uppercase;text-align:center;cursor:pointer;pointer-events:auto;user-select:none";
+    el.innerHTML = '<div style="color:#ffb347;font-size:34px">Tank Fighter</div><div>Click anywhere to start</div>';
+    gate = el;
+    run.paused = true;
+    const go = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      el.remove();
+      gate = null;
+      run.paused = false;
+      save.seeTip('click-start');
+      setCursor();
+      canvas.focus?.();
+    };
+    el.addEventListener('pointerdown', (e) => e.stopPropagation());
+    el.addEventListener('click', go);
+    (hud.root.isConnected ? hud.root.parentElement : document.body).appendChild(el);
   }
 
   // Put a loadout on the tank: its part models, and the stats they give.
@@ -2006,6 +2035,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   }
   // keys: whatever Settings has them bound to (the arrows always drive too)
   const onKeyDown = (e) => {
+    if (gate) return; // (the click-to-start card is up: nothing else yet)
     if (e.code === 'Escape') {
       const devMenu = document.querySelector('.dk-menu');
       if (!devMenu || devMenu.hidden) setPaused(!run.paused); // (Esc closes the dev kit first)
