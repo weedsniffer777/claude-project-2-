@@ -295,13 +295,14 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
   }
 
   let gate = null;
+  let gateFrames = 0;
   function showStartGate() {
     gate?.remove();
     const el = document.createElement('div');
     el.style.cssText = "position:fixed;inset:0;z-index:30;display:grid;place-items:center;align-content:center;gap:14px;background:rgba(7,6,9,0.82);color:#f1e9d8;font:400 28px/1.2 'Silkscreen',monospace;text-transform:uppercase;text-align:center;cursor:pointer;pointer-events:auto;user-select:none";
-    el.innerHTML = '<div style="color:#ffb347;font-size:34px">Tank Fighter</div><div>Click anywhere to start</div>';
+    el.innerHTML = '<style>@keyframes gatepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.35;transform:scale(1.05)}}</style><div style="animation:gatepulse 1.4s ease-in-out infinite">Click anywhere to start</div>';
     gate = el;
-    run.paused = true;
+    gateFrames = 0; // (the world holds still only once a few frames have set the camera on the tank)
     const go = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -3095,6 +3096,7 @@ export function createGame({ renderer, pixel, level: startLevel, onExit = null, 
     frame(realDt, t) {
       if (debug?.timeScale) realDt *= debug.timeScale; // tests only
       engineSounds(realDt);
+      if (gate && !run.paused && ++gateFrames > 3) run.paused = true;
       if (run.paused) {
         // the world holds still under the menu
         pixel.render(scene, camera);
