@@ -687,9 +687,11 @@ export function createTank() {
     const H = 0.25; // half size of the frame
     for (const sy of [-1, 1]) put(gunSlot, box(0.07, 0.055, H * 2 + 0.055, C.oliveDark, { r: 0.012 }), fx, GUN_Y + sy * H, 0);
     for (const sz of [-1, 1]) put(gunSlot, box(0.07, H * 2, 0.055, C.oliveDark, { r: 0.012 }), fx, GUN_Y, sz * H);
-    const boot = put(gunSlot, cyl(H * Math.SQRT2 - 0.02, 0.3, C.canvas, { axis: 'x', seg: 4, radiusEnd: 0.16 }), fx + 0.16, GUN_Y, 0);
+    // the boot and its strap ride on the gun, so they follow it up and down
+    // instead of staying behind as a dark hole when the barrel elevates
+    const boot = put(gunPivot, cyl(H * Math.SQRT2 - 0.02, 0.3, C.canvas, { axis: 'x', seg: 4, radiusEnd: 0.16 }), fx + 0.16 - GUN_BASE_X, 0, 0);
     boot.rotation.x = Math.PI / 4; // square, aligned with the frame
-    put(gunSlot, cyl(0.15, 0.04, C.dark, { axis: 'x', seg: 12 }), fx + 0.3, GUN_Y, 0); // boot strap
+    put(gunPivot, cyl(0.15, 0.04, C.dark, { axis: 'x', seg: 12 }), fx + 0.3 - GUN_BASE_X, 0, 0); // boot strap
     gunFlash = new THREE.Group();
     put(gunFlash, box(0.34, 0.34, 0.34, 0xffb43a, { glow: true, r: 0.05 }), 0, 0, 0);
     put(gunFlash, box(0.2, 0.2, 0.2, 0xfff6c8, { glow: true, r: 0.04 }), 0.12, 0, 0);
